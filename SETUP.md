@@ -24,7 +24,7 @@ In Supabase:
    - Site URL: your app address, e.g. `https://shiftready.staffselectionuk.com` (use the Vercel address from step 4 for now, then update it).
    - Redirect URLs: add the same address followed by `/**`.
 3. **Authentication → Multi-Factor**: make sure **TOTP (authenticator app)** is enabled.
-4. **Authentication → Emails → Templates**:
+4. Optional: **Authentication → Emails → Templates**. ShiftReady works with Supabase's default invite and reset emails, so you can skip this. If you prefer, you can reword them and use these links:
    - **Invite user**: replace the link in the message with
      `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite`
      A simple body: `You've been invited to ShiftReady by Staff Selection UK. <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite">Set your password</a>`

@@ -75,7 +75,7 @@ export function LoginForm({ startAt2fa, accessError }: { startAt2fa: boolean; ac
   async function forgot() {
     setErr('');
     if (!email) return setErr('Type your work email above first, then press Forgotten password.');
-    await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/auth/set-password` });
+    await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/auth/confirm` });
     setStep('reset-sent');
   }
 
