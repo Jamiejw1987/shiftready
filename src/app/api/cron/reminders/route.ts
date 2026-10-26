@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { sendToTemp } from '@/lib/sms';
+import { sendSms, sendToTemp } from '@/lib/sms';
 import { reminderText, reminderWa } from '@/lib/texts';
 import { hhmm } from '@/lib/format';
 
@@ -24,5 +24,17 @@ export async function GET(req: NextRequest) {
       sent++;
     }
   }
-  return NextResponse.json({ ok: true, date: tomorrow, reminders: sent });
+
+  // Right to work: anyone whose time-limited permission has ended goes on hold, so they can't be offered or accept shifts.
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+  const { data: expired } = await db.from('temps').select('id,first_name,last_name,added_by').lt('rtw_expires', today).eq('status', 'active');
+  for (const t of expired ?? []) {
+    await db.from('temps').update({ status: 'hold' }).eq('id', t.id);
+    await db.from('audit_log').insert({ actor: null, action: 'temp.rtw_expired', detail: `${t.first_name} ${t.last_name} put on hold: right to work expired` });
+    if (t.added_by) {
+      const { data: c } = await db.from('profiles').select('mobile').eq('id', t.added_by).maybeSingle();
+      if (c?.mobile) await sendSms({ db, to: c.mobile, kind: 'system', body: `ShiftReady: ${t.first_name} ${t.last_name}'s right to work has expired, so they're on hold. Ask them for a new share code and record a new check.` });
+    }
+  }
+  return NextResponse.json({ ok: true, date: tomorrow, reminders: sent, rtwExpired: expired?.length ?? 0 });
 }

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { respond } from './actions';
 
 type Props = {
-  token: string; firstName: string; tempActive: boolean; offerStatus: string; standbyPos: number;
+  token: string; firstName: string; tempActive: boolean; bankUrl: string | null; offerStatus: string; standbyPos: number;
   shiftState: 'open' | 'full' | 'cancelled' | 'past'; placesLeft: number;
   shift: { client: string; site: string; when: string; whenShort: string; hours: number; pay: number; role: string; duties: string[]; ppe: string[]; miles: number | null };
 };
@@ -43,7 +43,8 @@ export function OfferPanel(p: Props) {
   if (p.shiftState === 'cancelled') return <State badge="✕" kind="mute" title="Shift cancelled" text={`Sorry, the ${s.client} shift on ${s.whenShort} was cancelled. You don't need to attend.`} />;
   if (p.offerStatus === 'noshow') return <State badge="!" kind="mute" title="Marked as no-show" text="Your consultant recorded you as not attending this shift. Call the office if this is wrong." />;
   if (p.offerStatus === 'accepted')
-    return <State badge="✓" kind="ok" title="Shift confirmed" text={`${s.client}, ${s.when}. Arrive 10 minutes early at ${s.site}. We'll text you a reminder the day before.`} />;
+    return <State badge="✓" kind="ok" title="Shift confirmed" text={`${s.client}, ${s.when}. Arrive 10 minutes early at ${s.site}. We'll text you a reminder the day before.`}>
+      {p.bankUrl && <><p style={{ color: 'var(--ink)', fontWeight: 600 }}>Before your first shift, add your bank details so we can pay you.</p><a className="btn blue" href={p.bankUrl}>Add bank details</a></>}</State>;
   if (p.shiftState === 'past') return <State badge="–" kind="mute" title="This shift has passed" text="Keep an eye on your texts for new shifts." />;
   if (!p.tempActive) return <State badge="!" kind="mute" title="Can’t accept right now" text="Your profile isn’t active for shift offers. Please call the office." />;
   if (p.offerStatus === 'declined')

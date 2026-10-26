@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 // Pages anyone can open: sign-in, invite/reset links, temps' private links, Twilio and cron endpoints.
-const PUBLIC = [/^\/login/, /^\/auth\//, /^\/o\//, /^\/s\//, /^\/api\/sms\//, /^\/api\/cron\//];
+const PUBLIC = [/^\/login/, /^\/auth\//, /^\/o\//, /^\/s\//, /^\/r\//, /^\/b\//, /^\/api\/sms\//, /^\/api\/cron\//];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });

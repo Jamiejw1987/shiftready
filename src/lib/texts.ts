@@ -42,8 +42,8 @@ export const noShowText = (first: string, client: string, when: string) =>
 export const REPLY_ATTENDED = "Thanks, we've passed this to your consultant to check with the client. We'll be in touch. - Staff Selection";
 
 // Replies to a temp's YES / NO / STANDBY / button tap
-export const replyAccepted = (client: string, when: string, site: string) =>
-  `You're booked: ${client}, ${when}, ${site}. Please arrive 10 minutes early. We'll remind you the day before. - Staff Selection`;
+export const replyAccepted = (client: string, when: string, site: string, bankToken?: string | null) =>
+  `You're booked: ${client}, ${when}, ${site}. Please arrive 10 minutes early.${bankToken ? ` Before your first shift, add your bank details so we can pay you: ${appUrl()}/b/${bankToken}` : " We'll remind you the day before."} - Staff Selection`;
 export const replyFull = (client: string, when: string) =>
   `Sorry, ${client} ${when} has just been filled. Reply STANDBY to go on standby in case someone drops out. - Staff Selection`;
 export const replyDeclined = (client: string, when: string) => `Thanks for letting us know you can't do ${client} ${when}. - Staff Selection`;
@@ -52,6 +52,16 @@ export const replyStandby = (client: string, when: string) =>
 export const REPLY_NO_OFFER = "We couldn't find an open shift offer for you just now. Keep an eye out for the next one. - Staff Selection";
 export const REPLY_ON_HOLD = 'Please call the office about this shift. - Staff Selection';
 export const REPLY_HELP = 'Reply YES to accept your latest shift offer, NO to decline it, or STOP to stop shift messages. - Staff Selection';
+
+// Registration
+export const regInviteText = (first: string, token: string) =>
+  `Hi ${first}, Staff Selection UK here. Please register for temp work using your personal link: ${appUrl()}/r/${token} It takes about 10 minutes. Have your share code or passport ready. - Staff Selection`;
+export const regApprovedText = (first: string, willGetShifts: boolean) =>
+  willGetShifts
+    ? `Hi ${first}, you're approved! You'll now get shift offers near you that match your skills. Reply STOP at any time to opt out. - Staff Selection`
+    : `Hi ${first}, your registration with Staff Selection UK has been approved. - Staff Selection`;
+export const bankLinkText = (first: string, token: string) =>
+  `Hi ${first}, please add your bank details so we can pay you: ${appUrl()}/b/${token} - Staff Selection`;
 
 export const OPTED_IN_REPLY = "Thanks, you're all set. We'll message you when shifts come up near you. Reply STOP at any time to opt out. - Staff Selection";
 export const OPTED_OUT_REPLY = "You've been opted out and won't get shift messages from Staff Selection. Reply START to opt back in.";

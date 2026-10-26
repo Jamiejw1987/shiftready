@@ -6,6 +6,8 @@ import { geocodePostcodes, geocodePostcode, looksLikePostcode, normalisePostcode
 import { sendSms, sendMany, sendToTemp } from '@/lib/sms';
 import { welcomeText, welcomeWa } from '@/lib/texts';
 import { JOB_TYPES } from '@/lib/format';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { removeTempFiles } from '@/lib/storage';
 
 export type NewTemp = { first: string; last: string; mobile: string; postcode: string; types: string[] };
 type Result = { ok: boolean; error?: string; message?: string };
@@ -21,7 +23,7 @@ export async function addTemp(input: NewTemp, confirmedCompliant: boolean): Prom
   if (!mobile) problems.push('enter a UK mobile starting 07');
   if (!looksLikePostcode(input.postcode)) problems.push('enter a full postcode');
   if (!cleanTypes(input.types).length) problems.push('tick at least one job type');
-  if (!confirmedCompliant) problems.push('confirm they’re compliant in KISREC');
+  if (!confirmedCompliant) problems.push('confirm they’re already fully compliant');
   if (problems.length) return { ok: false, error: 'To add this temp, ' + problems.join(', ') + '.' };
 
   const postcode = normalisePostcode(input.postcode);
@@ -96,8 +98,10 @@ export async function importTemps(rows: ImportRow[]): Promise<Result & { added?:
 
 export async function setTempStatus(id: string, status: 'active' | 'hold'): Promise<Result> {
   const { supabase, profile } = await requireStaff();
-  const { data: t } = await supabase.from('temps').select('first_name,last_name,status').eq('id', id).single();
+  const { data: t } = await supabase.from('temps').select('first_name,last_name,status,rtw_expires').eq('id', id).single();
   if (!t) return { ok: false, error: 'Temp not found.' };
+  if (status === 'active' && t.rtw_expires && t.rtw_expires < new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' }))
+    return { ok: false, error: `${t.first_name}'s right to work has expired. Record a new check on their record first.` };
   if (status === 'active' && t.status !== 'hold') return { ok: false, error: 'Only temps on hold can be reactivated. New temps become active when they opt in.' };
   await supabase.from('temps').update({ status }).eq('id', id);
   await audit(supabase, profile.id, status === 'hold' ? 'temp.hold' : 'temp.reactivated', `${status === 'hold' ? 'Put' : 'Reactivated'} ${t.first_name} ${t.last_name}${status === 'hold' ? ' on hold' : ''}`);
@@ -121,9 +125,10 @@ export async function deleteTemp(id: string): Promise<Result> {
   const { data: t } = await supabase.from('temps').select('first_name,last_name').eq('id', id).single();
   if (!t) return { ok: false, error: 'Temp not found.' };
   await supabase.from('messages').update({ to_number: null, from_number: null, body: '[removed: temp deleted]', fallback_body: null }).eq('temp_id', id);
+  const files = await removeTempFiles(createAdminClient(), id);
   const { error } = await supabase.from('temps').delete().eq('id', id);
   if (error) return { ok: false, error: 'Couldn’t delete this temp.' };
-  await audit(supabase, profile.id, 'temp.deleted', `Deleted ${t.first_name} ${t.last_name} and their personal data`);
+  await audit(supabase, profile.id, 'temp.deleted', `Deleted ${t.first_name} ${t.last_name} and their personal data${files ? ` (${files} document${files === 1 ? '' : 's'})` : ''}`);
   revalidatePath('/temps');
   return { ok: true };
 }

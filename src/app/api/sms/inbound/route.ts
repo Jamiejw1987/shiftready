@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   const word = (payload || body).toUpperCase().replace(/[^A-Z ]/g, '').replace(/\s+/g, ' ').trim();
 
   const db = createAdminClient();
-  const { data: t } = await db.from('temps').select('id,first_name,last_name,mobile,status').eq('mobile', from).maybeSingle();
+  const { data: t } = await db.from('temps').select('id,first_name,last_name,mobile,status,registered_at,bank_on_file,reg_token').eq('mobile', from).maybeSingle();
   await db.from('messages').insert({
     temp_id: t?.id ?? null, from_number: from, direction: 'in', channel, kind: 'reply', body: (body || params.ButtonText || '').slice(0, 1000),
     status: 'received', provider_id: params.MessageSid ?? null,
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
 
   const result = await respondToOffer(db, o.token, action, null);
   if (result === 'accepted' && action !== 'accept') await reply(`You're booked on ${s.client} ${when}. To cancel, please call the office. - Staff Selection`);
-  else if (result === 'accepted') await reply(replyAccepted(s.client, when, `${s.site}, ${s.site_postcode}`));
+  else if (result === 'accepted') await reply(replyAccepted(s.client, when, `${s.site}, ${s.site_postcode}`, t.registered_at && !t.bank_on_file ? t.reg_token : null));
   else if (result === 'full') await reply(replyFull(s.client, when));
   else if (result === 'declined') await reply(replyDeclined(s.client, when));
   else if (result === 'standby') await reply(replyStandby(s.client, when));

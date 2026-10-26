@@ -13,11 +13,11 @@ export default async function OfferPage({ params }: { params: { token: string } 
   const db = createAdminClient();
   const { data: o } = await db
     .from('offers')
-    .select('id,status,distance_miles,standby_at,shift_id,temps(first_name,status,optin_token),shifts(*)')
+    .select('id,status,distance_miles,standby_at,shift_id,temps(first_name,status,optin_token,reg_token,registered_at,bank_on_file),shifts(*)')
     .eq('token', params.token)
     .maybeSingle();
   if (!o) notFound();
-  const t = o.temps as unknown as { first_name: string; status: string; optin_token: string };
+  const t = o.temps as unknown as { first_name: string; status: string; optin_token: string; reg_token: string; registered_at: string | null; bank_on_file: boolean };
   const s = o.shifts as unknown as {
     id: string; client: string; site: string; site_postcode: string; shift_date: string; start_time: string; end_time: string;
     job_type: string; duties: string[]; pay_rate: number; heads: number; ppe: string[]; status: string;
@@ -38,6 +38,7 @@ export default async function OfferPage({ params }: { params: { token: string } 
           token={params.token}
           firstName={t.first_name}
           tempActive={t.status === 'active'}
+          bankUrl={t.registered_at && !t.bank_on_file ? `/b/${t.reg_token}` : null}
           offerStatus={o.status}
           standbyPos={standbyPos}
           shiftState={s.status === 'cancelled' ? 'cancelled' : past ? 'past' : (filled ?? 0) >= s.heads ? 'full' : 'open'}

@@ -91,3 +91,12 @@ With no Twilio keys, texts are recorded but not sent. That's safe for testing.
 - **Text wording** is all in `src/lib/texts.ts`.
 - **Job types and PPE options** are in `src/lib/format.ts`.
 - **Costs**: roughly 3–5p per text with Twilio, plus Supabase ($25/month on Pro) and Vercel (free tier to start; Pro is $20/user/month if you outgrow it).
+
+## Online registration (Sign-ups)
+
+1. **Database:** Supabase > SQL Editor > New query. Paste all of `supabase/2026-10-27-registration.sql` and click Run.
+2. **Encryption key:** on a Mac, open Terminal and run `openssl rand -base64 32`. In Vercel > Settings > Environment Variables add `FIELD_ENCRYPTION_KEY` with that value. Save a copy in your password manager. Never change or lose it: candidates' NI numbers, health, convictions and bank details can't be read without it. Then redeploy.
+3. **Documents:** Team > Documents. Have your employment adviser check the Key Information Document, terms and privacy notice. Edit and save as needed (each save is a new version).
+4. **Test:** Sign-ups > send a registration link to your own mobile and fill it in.
+
+How it works: consultant sends a link > candidate registers on their phone (details, right to work, emergency contact, health, convictions, 48-hour choice, signs the documents) > appears under Sign-ups > consultant checks right to work on GOV.UK and uploads the result > approves > temp gets shifts. Bank details are asked for when they accept their first shift. Right to work with an end date shows under Sign-ups 28 days before, and the temp is put on hold automatically when it expires.

@@ -157,8 +157,8 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
   return (
     <>
       <section className="panel">
-        <h1>Add a compliant temp</h1>
-        <p className="lede">Only add temps who are fully registered and compliant in KISREC. They get a welcome text and must opt in before they receive shifts.</p>
+        <h1>Add an existing temp</h1>
+        <p className="lede">For temps who are already fully compliant with you. New candidates should register through <a href="/registrations">Sign-ups</a> instead. Existing temps get a welcome text and must opt in before they receive shifts.</p>
         <div className="form">
           <div className="f"><label className="l" htmlFor="aFirst">First name</label><input id="aFirst" type="text" value={form.first} onChange={(e) => setForm({ ...form, first: e.target.value })} /></div>
           <div className="f"><label className="l" htmlFor="aLast">Surname</label><input id="aLast" type="text" value={form.last} onChange={(e) => setForm({ ...form, last: e.target.value })} /></div>
@@ -170,15 +170,15 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
         <div className="bar">
           {addMsg ? <p className={addMsg.ok ? 'okmsg' : 'err'}>{addMsg.text}</p> : <span />}
           <div className="btnrow" style={{ alignItems: 'center' }}>
-            <label className="chip"><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> Confirmed compliant in KISREC</label>
+            <label className="chip"><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> Already fully compliant</label>
             <button className="btn blue" onClick={submitAdd} disabled={pending}>Add temp and send welcome text</button>
           </div>
         </div>
       </section>
 
       <section className="panel">
-        <h2>Bulk add from KISREC</h2>
-        <p className="lede">Export your compliant temps from KISREC as a CSV and drop it here. Columns needed: first name, surname, mobile, postcode. Job types is optional.</p>
+        <h2>Bulk add existing temps</h2>
+        <p className="lede">Upload a CSV of temps who are already compliant (for example an export from KISREC). Columns needed: first name, surname, mobile, postcode. Job types is optional.</p>
         <div className={over ? 'drop over' : 'drop'}
           onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
           onDrop={(e) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files[0]; if (f) loadFile(f); }}>
@@ -194,7 +194,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
           const good = preview.rows.filter((r) => !r.issues.length).length, bad = preview.rows.length - good;
           return (
             <>
-              <div className="summary"><span className="pill mute">{preview.name}</span><span className="pill ok">{good} ready to add</span>{bad > 0 && <span className="pill bad">{bad} need fixing in KISREC</span>}</div>
+              <div className="summary"><span className="pill mute">{preview.name}</span><span className="pill ok">{good} ready to add</span>{bad > 0 && <span className="pill bad">{bad} need fixing</span>}</div>
               <div className="tablewrap"><table className="cards"><thead><tr><th>Temp</th><th>Mobile</th><th>Postcode</th><th>Cleared for</th><th>Check</th></tr></thead><tbody>
                 {preview.rows.map((r, i) => (
                   <tr key={i} className={r.issues.length ? 'bad' : ''}>
@@ -203,7 +203,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
                     <td>{r.issues.length ? <span className="err">{r.issues.join('; ')}</span> : <span className="pill ok">OK</span>}</td>
                   </tr>))}
               </tbody></table></div>
-              <div className="bar"><span className="note">Rows with problems are skipped. Fix them in KISREC and re-upload.</span>
+              <div className="bar"><span className="note">Rows with problems are skipped. Fix them in the file and re-upload.</span>
                 <div className="btnrow"><button className="btn ghost" onClick={() => setPreview(null)}>Cancel</button>
                   <button className="btn blue" disabled={!good || pending} onClick={runImport}>{pending ? 'Adding…' : `Add ${good} temps and send welcome texts`}</button></div></div>
             </>
@@ -269,7 +269,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
               return (
                 <tr key={t.id}>
                   <td className="sel"><input type="checkbox" className="rowsel" checked={sel.has(t.id)} onChange={() => toggle(t.id)} aria-label={`Select ${t.first_name} ${t.last_name}`} /></td>
-                  <td><b>{t.first_name} {t.last_name}</b></td>
+                  <td><a href={`/temps/${t.id}`}><b>{t.first_name} {t.last_name}</b></a></td>
                   <td className="num" data-l="Mobile">{displayMobile(t.mobile)}</td>
                   <td className="mono" data-l="Postcode">{t.postcode}</td>
                   {nearPoint && <td className="num" data-l="Miles">{d != null ? d.toFixed(1) : '-'}</td>}
@@ -289,7 +289,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
                 </tr>
               );
             })}
-            {!shown.length && <tr><td colSpan={9} className="note">{temps.length ? 'No temps match these filters.' : 'No temps yet. Add one above or upload a KISREC export.'}</td></tr>}
+            {!shown.length && <tr><td colSpan={9} className="note">{temps.length ? 'No temps match these filters.' : 'No temps yet. Send registration links from Sign-ups, or add existing temps above.'}</td></tr>}
           </tbody>
         </table></div>
       </section>

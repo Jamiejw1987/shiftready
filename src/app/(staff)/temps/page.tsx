@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export default async function TempsPage() {
   const { supabase, profile } = await requireStaff();
   const [{ data: temps }, { data: users }] = await Promise.all([
-    supabase.from('temps').select('id,first_name,last_name,mobile,postcode,lat,lng,job_types,status,wa_status,added_by,created_at').order('created_at', { ascending: false }),
+    supabase.from('temps').select('id,first_name,last_name,mobile,postcode,lat,lng,job_types,status,wa_status,added_by,created_at').not('status', 'in', '(invited,review)').order('created_at', { ascending: false }),
     supabase.from('profiles').select('id,full_name').order('full_name'),
   ]);
   return (

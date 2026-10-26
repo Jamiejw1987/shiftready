@@ -1,0 +1,44 @@
+PRIVACY NOTICE FOR TEMPORARY WORKERS
+
+Staff Selection UK Ltd (company number 14238416), 2 Hawk Road, Dewsbury, WF12 7AY, is the controller of your personal data. Contact us about your data at info@staffselectionuk.com.
+
+WHAT WE COLLECT
+- Your name, mobile number, email, address, date of birth and National Insurance number.
+- The work you can do, your experience, availability, transport and safety equipment.
+- Right to work information: your share code and check result, or a copy of your passport.
+- Licences and certificates you give us, such as an FLT licence.
+- Your emergency contact's name, relationship and phone number. Please tell them you have given us their details.
+- Health information you choose to tell us, so we can keep you safe at work and make adjustments.
+- Whether you have unspent criminal convictions, and any details you give.
+- Your choice about the 48-hour working week, and your signatures on our documents.
+- Your bank details, once you are booked onto a shift.
+- Shifts offered, accepted, declined and attended, and the messages we exchange with you.
+
+WHY WE USE IT, AND OUR LEGAL BASIS
+- To find you work and run your engagement with us (our contract with you).
+- To check your right to work, pay you, deduct tax and National Insurance, enrol you in a pension, keep working time records and meet other legal duties (legal obligation).
+- To keep you and others safe at work, and contact your emergency contact if needed (legal obligation and legitimate interests; vital interests in an emergency).
+- Health information: to meet our health and safety and employment law duties (UK GDPR Article 9(2)(b) and Data Protection Act 2018, Schedule 1, paragraph 1).
+- Criminal convictions information: to assess suitability for work, under Data Protection Act 2018, Schedule 1, with an appropriate policy document in place.
+- To send you shift offers by text and WhatsApp (your consent, which you can withdraw at any time by replying STOP).
+
+WHO SEES IT
+- Our consultants. Health, convictions and bank details are restricted to our admin team, and every view is recorded.
+- Clients you work for: your name and what they need to know for the shift. We don't share your health, convictions or bank details with clients without your agreement, unless the law requires it.
+- HMRC, NEST (our pension provider), and others where the law requires.
+- Companies that run our systems for us: Supabase (secure database and file storage), Vercel (website hosting), Twilio (text messages) and Meta (WhatsApp). Some of these may process data outside the UK, protected by UK-approved safeguards such as the UK International Data Transfer Addendum or the UK-US Data Bridge.
+
+HOW WE PROTECT IT
+Your most sensitive details (National Insurance number, health, convictions and bank details) are encrypted. Documents are stored privately and opened only through short-lived secure links. Staff accounts use two-factor sign-in.
+
+HOW LONG WE KEEP IT
+- Right to work records: while you work with us and for 2 years after.
+- Pay, tax and pension records: 6 years after the end of the tax year they relate to.
+- Working time records: at least 2 years.
+- Other records: 2 years after you last worked with us or last contacted us, then deleted.
+
+YOUR RIGHTS
+You can ask to see, correct or delete your data, ask us to restrict or stop using it, or ask for a copy to take elsewhere. Some data we must keep by law. Email info@staffselectionuk.com.
+If you are unhappy with how we use your data, you can complain to the Information Commissioner's Office at ico.org.uk or on 0303 123 1113.
+
+Last updated: October 2026.

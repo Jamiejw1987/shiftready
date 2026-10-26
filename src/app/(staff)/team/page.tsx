@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { requireStaff } from '@/lib/auth';
 import { fmtDateTime } from '@/lib/format';
 import { TeamClient } from './TeamClient';
@@ -21,6 +22,11 @@ export default async function TeamPage() {
         meId={profile.id}
         members={(users ?? []).map((u) => ({ ...u, temps: count(temps, 'added_by', u.id), shifts: count(shifts, 'sent_by', u.id) }))}
       />
+      <section className="panel">
+        <h2>Registration documents</h2>
+        <p className="lede">The Key Information Document, terms of engagement, privacy notice and 48-hour opt-out wording candidates sign when they register.</p>
+        <Link className="btn ghost" href="/team/documents">Open documents</Link>
+      </section>
       <section className="panel">
         <h2>Audit trail</h2>
         <p className="lede">Who did what, and when. Latest 300 actions. Only admins can see this.</p>

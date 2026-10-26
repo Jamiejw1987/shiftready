@@ -6,13 +6,14 @@ export function Nav({ admin }: { admin: boolean }) {
   const path = usePathname();
   const items = [
     { href: '/temps', label: 'Temps' },
+    { href: '/registrations', label: 'Sign-ups' },
     { href: '/shifts', label: 'Shifts' },
     ...(admin ? [{ href: '/team', label: 'Team' }] : []),
   ];
   return (
     <nav className="nav">
       {items.map((i) => (
-        <Link key={i.href} href={i.href} aria-current={path.startsWith(i.href) ? 'page' : undefined}>
+        <Link key={i.href} href={i.href} aria-current={(path === i.href || path.startsWith(i.href + '/')) ? 'page' : undefined}>
           {i.label}
         </Link>
       ))}
