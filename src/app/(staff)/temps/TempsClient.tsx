@@ -90,6 +90,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
   }
 
   // ---------- filters ----------
+  const [q, setQ] = useState('');
   const [area, setArea] = useState('');
   const [near, setNear] = useState('');
   const [nearPoint, setNearPoint] = useState<Point | null>(null);
@@ -109,7 +110,16 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
   const dist = (t: TempRow) => (nearPoint && t.lat != null && t.lng != null ? milesBetween(nearPoint, { lat: t.lat, lng: t.lng }) : null);
   const shown = useMemo(() => {
     const a = area.trim().toUpperCase().replace(/\s+/g, ''), mi = parseFloat(miles);
+    const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const digits = q.replace(/\D/g, '');
     return temps.filter((t) => {
+      if (words.length) {
+        const name = `${t.first_name} ${t.last_name}`.toLowerCase();
+        const mob = displayMobile(t.mobile).replace(/\D/g, '');
+        const byName = words.every((w) => name.includes(w));
+        const byMobile = digits.length >= 4 && mob.includes(digits.replace(/^44/, '0'));
+        if (!byName && !byMobile) return false;
+      }
       if (a && !areaMatch(t.postcode, a)) return false;
       if (nearPoint && mi) { const d = dist(t); if (d == null || d > mi) return false; }
       if (type && !t.job_types.includes(type)) return false;
@@ -118,8 +128,8 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
       return true;
     }).sort((x, y) => (nearPoint ? (dist(x) ?? 999) - (dist(y) ?? 999) : 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [temps, area, nearPoint, miles, type, status, by]);
-  function clearFilters() { setArea(''); setNear(''); setNearPoint(null); setMiles(''); setType(''); setStatus(''); setBy('all'); }
+  }, [temps, q, area, nearPoint, miles, type, status, by]);
+  function clearFilters() { setQ(''); setArea(''); setNear(''); setNearPoint(null); setMiles(''); setType(''); setStatus(''); setBy('all'); }
 
   // ---------- selection & bulk text ----------
   const [sel, setSel] = useState<Set<string>>(new Set());
@@ -214,6 +224,10 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
       <section className="panel">
         <h2>Temp list</h2>
         <p className="lede">Only temps marked Active receive shift offers and texts.</p>
+        <div className="f" style={{ marginBottom: 12 }}>
+          <label className="l" htmlFor="fQ">Search</label>
+          <input id="fQ" type="search" placeholder="Name or mobile, e.g. Dan Smith or 07700" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
+        </div>
         <div className="filters">
           <div className="f"><label className="l" htmlFor="fArea">Postcode or area</label><input id="fArea" type="text" placeholder="e.g. BD4, BD, LS" value={area} onChange={(e) => setArea(e.target.value)} /></div>
           <div className="f"><label className="l" htmlFor="fNear">Near postcode</label>
