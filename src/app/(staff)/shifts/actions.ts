@@ -2,6 +2,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireStaff, audit } from '@/lib/auth';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { geocodePostcode, looksLikePostcode, milesBetween, normalisePostcode } from '@/lib/geo';
 import { sendMany, sendToTemp } from '@/lib/sms';
 import { offerText, offerWa, promotedText, promotedWa, noShowText } from '@/lib/texts';
@@ -125,6 +126,23 @@ export async function cancelShift(shiftId: string) {
   });
   await audit(supabase, profile.id, 'shift.cancelled', `Cancelled ${s.client} shift (${shiftWhen(s)}). ${res.sent} booked temps texted`);
   revalidatePath(`/shifts/${shiftId}`);
+  revalidatePath('/shifts');
+  return { ok: true };
+}
+
+/**
+ * Admins can delete a shift that nobody worked: cancelled shifts, and shifts with no one booked or marked no-show
+ * (test shifts, mistakes). Shifts people actually worked are kept as a record (pay, holiday, 12-week rule).
+ */
+export async function deleteShift(shiftId: string) {
+  const { supabase, profile } = await requireStaff({ admin: true });
+  const { data: s } = await supabase.from('shifts').select('id,client,shift_date,start_time,end_time,status,offers(status)').eq('id', shiftId).maybeSingle();
+  if (!s) return { ok: false, error: 'Shift not found.' };
+  const worked = ((s.offers ?? []) as { status: string }[]).some((o) => o.status === 'accepted' || o.status === 'noshow');
+  if (worked && s.status !== 'cancelled') return { ok: false, error: 'Someone was booked on this shift, so it’s kept as a record. Cancel it first if it didn’t go ahead.' };
+  const { error } = await createAdminClient().from('shifts').delete().eq('id', shiftId);
+  if (error) return { ok: false, error: 'Couldn’t delete. Try again.' };
+  await audit(supabase, profile.id, 'shift.deleted', `Deleted ${s.client} shift (${shiftWhen(s)})`);
   revalidatePath('/shifts');
   return { ok: true };
 }
