@@ -4,7 +4,7 @@ import { currentDocs, docProblems } from '@/lib/docs';
 import { encryptionReady } from '@/lib/crypto';
 import { displayMobile } from '@/lib/phone';
 import { fmtDateTime } from '@/lib/format';
-import { InviteForm, ResendButton } from './RegClient';
+import { InviteForm, ResendButton, BulkInvite } from './RegClient';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +25,7 @@ export default async function RegistrationsPage() {
     supabase.from('temps').select('id,first_name,last_name,rtw_expires,status').not('rtw_expires', 'is', null).lte('rtw_expires', soon).in('status', ['active', 'hold']).order('rtw_expires'),
     supabase.from('profiles').select('id,full_name'),
   ]);
+  const { data: allMobiles } = await supabase.from('temps').select('mobile');
   const problems = [...(encryptionReady() ? [] : ['the encryption key (FIELD_ENCRYPTION_KEY) hasn’t been added in Vercel']), ...docProblems(docs)];
   const by = (id: string | null) => users?.find((u) => u.id === id)?.full_name ?? '-';
 
@@ -37,6 +38,12 @@ export default async function RegistrationsPage() {
           <p className="alert" style={{ marginBottom: 14 }}>Registration links are switched off until: {problems.join('; ')}.{profile.role === 'admin' ? <> <Link href="/team/documents">Open Documents</Link></> : ' Ask an admin.'}</p>
         )}
         <InviteForm disabled={problems.length > 0} />
+      </section>
+
+      <section className="panel">
+        <h2>Invite applicants in bulk</h2>
+        <p className="lede">For people who applied to your roles online or asked about work. Paste a list or upload an export and everyone gets their own registration link.</p>
+        <BulkInvite disabled={problems.length > 0} known={(allMobiles ?? []).map((m) => m.mobile)} />
       </section>
 
       <section className="panel">

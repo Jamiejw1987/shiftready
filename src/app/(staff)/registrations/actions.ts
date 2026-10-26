@@ -2,7 +2,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireStaff, audit } from '@/lib/auth';
 import { toE164, displayMobile } from '@/lib/phone';
-import { sendToTemp } from '@/lib/sms';
+import { sendToTemp, sendMany } from '@/lib/sms';
 import { regInviteText } from '@/lib/texts';
 import { currentDocs, docProblems } from '@/lib/docs';
 import { encryptionReady } from '@/lib/crypto';
@@ -53,4 +53,39 @@ export async function resendRegistration(id: string): Promise<Result> {
   revalidatePath('/registrations');
   revalidatePath(`/temps/${id}`);
   return r.ok ? { ok: true, message: 'Registration link sent.' } : { ok: false, error: `Text failed: ${r.error}` };
+}
+
+/**
+ * Sends registration links to many people at once: only for people who applied to your roles or asked about
+ * work with you (UK PECR soft opt-in). Every text says how to opt out; anyone already on file is skipped.
+ */
+export async function bulkInvite(rows: { first: string; last: string; mobile: string }[], confirmedApplicants: boolean): Promise<Result & { sent?: number; skipped?: number }> {
+  const { supabase, profile } = await requireStaff();
+  if (!confirmedApplicants) return { ok: false, error: 'Tick to confirm these people applied to your roles or asked about work with you.' };
+  const blocked = await readyToRegister(supabase);
+  if (blocked) return { ok: false, error: blocked };
+  if (rows.length > 500) return { ok: false, error: 'Send up to 500 at a time.' };
+  const seen = new Set<string>();
+  const clean = rows.flatMap((r) => {
+    const mobile = toE164(r.mobile), first = (r.first || '').trim().slice(0, 60), last = (r.last || '').trim().slice(0, 60);
+    if (!mobile || !first || seen.has(mobile)) return [];
+    seen.add(mobile);
+    return [{ first, last, mobile }];
+  });
+  if (!clean.length) return { ok: false, error: 'No valid names and UK mobiles found.' };
+  const { data: existing } = await supabase.from('temps').select('mobile').in('mobile', clean.map((c) => c.mobile));
+  const known = new Set((existing ?? []).map((e) => e.mobile));
+  const fresh = clean.filter((c) => !known.has(c.mobile));
+  if (!fresh.length) return { ok: false, error: 'Everyone in the list is already on ShiftReady.' };
+  const now = new Date().toISOString();
+  const { data: made, error } = await supabase
+    .from('temps')
+    .insert(fresh.map((c) => ({ first_name: c.first, last_name: c.last || '-', mobile: c.mobile, status: 'invited', job_types: [], added_by: profile.id, reg_requested_at: now })))
+    .select('id,first_name,mobile,reg_token');
+  if (error || !made) return { ok: false, error: 'Couldn’t save. Nothing was sent. Try again.' };
+  const res = await sendMany(made, (t) => sendToTemp({ db: supabase, temp: t, kind: 'registration', sentBy: profile.id, body: regInviteText(t.first_name, t.reg_token) }));
+  const skipped = rows.length - fresh.length;
+  await audit(supabase, profile.id, 'temp.bulk_invited', `Sent registration links to ${res.sent} applicants${res.failed ? ` (${res.failed} failed)` : ''}${skipped ? `, ${skipped} skipped` : ''}. Confirmed they applied or asked about work.`);
+  revalidatePath('/registrations');
+  return { ok: true, sent: res.sent, skipped, message: `Registration links sent to ${res.sent}${res.failed ? `, ${res.failed} failed` : ''}${skipped ? `. ${skipped} skipped (already on ShiftReady, duplicate or not a valid mobile)` : ''}.` };
 }

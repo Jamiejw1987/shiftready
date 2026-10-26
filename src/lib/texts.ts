@@ -55,7 +55,7 @@ export const REPLY_HELP = 'Reply YES to accept your latest shift offer, NO to de
 
 // Registration
 export const regInviteText = (first: string, token: string) =>
-  `Hi ${first}, Staff Selection UK here. Please register for temp work using your personal link: ${appUrl()}/r/${token} It takes about 10 minutes. Have your share code or passport ready. - Staff Selection`;
+  `Hi ${first}, Staff Selection UK here. Please register for temp work using your personal link: ${appUrl()}/r/${token} It takes about 10 minutes. Have your share code or passport ready. Reply STOP to opt out. - Staff Selection`;
 export const regApprovedText = (first: string, willGetShifts: boolean) =>
   willGetShifts
     ? `Hi ${first}, you're approved! You'll now get shift offers near you that match your skills. Reply STOP at any time to opt out. - Staff Selection`

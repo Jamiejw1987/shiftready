@@ -53,12 +53,12 @@ export default async function RegisterPage({ params }: { params: { token: string
   if (docProblems(docs).length)
     return shell(<div className="state"><div className="badge mute">–</div><div className="big">Registration opens soon</div><p>We’re just finishing setting up. Please try your link again later, or call the office.</p></div>);
 
-  const who = { first: t.first_name, last: t.last_name };
+  const who = { first: t.first_name, last: t.last_name === '-' ? '' : t.last_name };
   return shell(
     <RegForm
       token={params.token}
       first={t.first_name}
-      last={t.last_name}
+      last={t.last_name === '-' ? '' : t.last_name}
       mobile={displayMobile(t.mobile)}
       jobTypes={t.job_types ?? []}
       docs={{
