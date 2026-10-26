@@ -43,8 +43,8 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
   if (!/^\d{2}:\d{2}$/.test(input.start) || !/^\d{2}:\d{2}$/.test(input.end)) problems.push('start and finish times');
   if (!(JOB_TYPES as readonly string[]).includes(input.jobType)) problems.push('job type');
   if (!(input.pay > 0)) problems.push('pay rate');
-  if (!(input.heads >= 1 && input.heads <= 200)) problems.push('heads needed');
-  if (!(input.radius > 0 && input.radius <= 100)) problems.push('radius');
+  if (!(input.heads >= 1 && input.heads <= 200)) problems.push('heads needed (1 to 200)');
+  if (!(input.radius > 0 && input.radius <= 100)) problems.push('radius (1 to 100 miles)');
   if (problems.length) return { ok: false, error: 'Check the ' + problems.join(', ') + '.' };
   if (input.date < new Date().toISOString().slice(0, 10)) return { ok: false, error: 'That date is in the past.' };
 
