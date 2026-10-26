@@ -37,6 +37,10 @@ export function promotedText(o: PromotedInfo) {
 }
 export const promotedWa = (o: PromotedInfo) => [o.first, o.client, o.when, `${appUrl()}/s/${o.token}`];
 
+export const noShowText = (first: string, client: string, when: string) =>
+  `Hi ${first}, you've been marked as a no-show for ${client}, ${when}. If you did attend (for example you were there but didn't clock in), reply ATTENDED or call the office today so we can put it right. - Staff Selection`;
+export const REPLY_ATTENDED = "Thanks, we've passed this to your consultant to check with the client. We'll be in touch. - Staff Selection";
+
 // Replies to a temp's YES / NO / STANDBY / button tap
 export const replyAccepted = (client: string, when: string, site: string) =>
   `You're booked: ${client}, ${when}, ${site}. Please arrive 10 minutes early. We'll remind you the day before. - Staff Selection`;

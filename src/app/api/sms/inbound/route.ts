@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { sendToTemp } from '@/lib/sms';
+import { sendSms, sendToTemp } from '@/lib/sms';
 import { respondToOffer, type OfferAction } from '@/lib/offerFlow';
 import { validTwilioRequest } from '@/lib/twilioSignature';
 import { shiftWhen } from '@/lib/format';
 import {
-  OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD,
+  OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD, REPLY_ATTENDED,
 } from '@/lib/texts';
 
 /**
@@ -19,6 +19,7 @@ import {
 const STOP = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT', 'OPTOUT', 'OPT OUT', 'NO THANKS'];
 const YES = ['YES', 'Y', 'YEP', 'YEAH', 'YES PLEASE', 'OK', 'ACCEPT', 'ACCEPTED'];
 const START = ['START', 'UNSTOP', 'OPTIN', 'OPT IN', 'YES SEND ME SHIFTS'];
+const ATTENDED = ['ATTENDED', 'I ATTENDED', 'I WAS THERE', 'WAS THERE', 'I DID ATTEND', 'I WENT', 'I DID GO'];
 const NO = ['NO', 'N', 'NOPE', 'DECLINE', 'CANT', 'CANNOT', 'NO THANK YOU'];
 
 const twiml = () => new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', { headers: { 'Content-Type': 'text/xml' } });
@@ -65,6 +66,24 @@ export async function POST(req: NextRequest) {
       await db.from('audit_log').insert({ actor: null, action: 'temp.opted_in', detail: `${name} opted in by ${channel === 'whatsapp' ? 'WhatsApp' : 'text'}` });
       await reply(OPTED_IN_REPLY);
     }
+    return twiml();
+  }
+
+  // Disputing a no-show: tell the consultant who sent the shift.
+  if (ATTENDED.includes(word)) {
+    const since = new Date(Date.now() - 14 * 864e5).toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+    const { data: ns } = await db.from('offers').select('id,shifts!inner(client,shift_date,start_time,end_time,sent_by)').eq('temp_id', t.id).eq('status', 'noshow')
+      .gte('shifts.shift_date', since).order('created_at', { ascending: false }).limit(1);
+    const n = ns?.[0];
+    if (!n) { await reply(REPLY_HELP); return twiml(); }
+    const s = n.shifts as unknown as { client: string; shift_date: string; start_time: string; end_time: string; sent_by: string | null };
+    const what = `${name} says they attended ${s.client}, ${shiftWhen(s)} but was marked no-show`;
+    await db.from('audit_log').insert({ actor: null, action: 'temp.noshow_disputed', detail: what });
+    if (s.sent_by) {
+      const { data: p } = await db.from('profiles').select('mobile').eq('id', s.sent_by).maybeSingle();
+      if (p?.mobile) await sendSms({ db, to: p.mobile, kind: 'system', body: `ShiftReady: ${what}. Please check with the client.` });
+    }
+    await reply(REPLY_ATTENDED);
     return twiml();
   }
 

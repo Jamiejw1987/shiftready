@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { requireStaff, audit } from '@/lib/auth';
 import { geocodePostcode, looksLikePostcode, milesBetween, normalisePostcode } from '@/lib/geo';
 import { sendMany, sendToTemp } from '@/lib/sms';
-import { offerText, offerWa, promotedText, promotedWa } from '@/lib/texts';
+import { offerText, offerWa, promotedText, promotedWa, noShowText } from '@/lib/texts';
 import { shiftWhen, JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
 
 export type ShiftInput = {
@@ -87,11 +87,17 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
 
 export async function noShow(offerId: string) {
   const { supabase, profile } = await requireStaff();
-  const { data: o } = await supabase.from('offers').select('id,shift_id,temps(first_name,last_name)').eq('id', offerId).single();
+  const { data: o } = await supabase.from('offers').select('id,shift_id,temp_id,temps(first_name,last_name,mobile,status),shifts(client,shift_date,start_time,end_time)').eq('id', offerId).single();
   const { data: promotedId, error } = await supabase.rpc('mark_no_show', { p_offer_id: offerId });
   if (error || !o) return { ok: false, error: 'Couldn’t mark this no-show. Refresh and try again.' };
-  const t = o.temps as unknown as { first_name: string; last_name: string };
+  const t = o.temps as unknown as { first_name: string; last_name: string; mobile: string; status: string };
+  const sh = o.shifts as unknown as { client: string; shift_date: string; start_time: string; end_time: string };
   let detail = `Marked ${t.first_name} ${t.last_name} as no-show`;
+  // Let the temp know, in case they did attend but weren't recorded (e.g. didn't clock in).
+  if (t.status !== 'out') {
+    const r = await sendToTemp({ db: supabase, temp: { id: o.temp_id, mobile: t.mobile }, kind: 'system', offerId, sentBy: profile.id, body: noShowText(t.first_name, sh.client, shiftWhen(sh)) });
+    detail += r.ok ? ' and texted them' : ' (text to them failed)';
+  }
   if (promotedId) {
     const { data: p } = await supabase.from('offers').select('token,temp_id,temps(first_name,last_name,mobile),shifts(client,shift_date,start_time,end_time)').eq('id', promotedId).single();
     if (p) {

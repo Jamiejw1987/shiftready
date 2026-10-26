@@ -18,7 +18,7 @@ export function BoardActions({ kind, id }: { kind: 'noshow' | 'cancel'; id: stri
   const [confirm, setConfirm] = useState(false);
   const [err, setErr] = useState('');
   const label = kind === 'noshow' ? 'Mark no-show' : 'Cancel shift';
-  const confirmLabel = kind === 'noshow' ? 'Confirm no-show' : 'Yes, cancel and text booked temps';
+  const confirmLabel = kind === 'noshow' ? 'Confirm no-show and text them' : 'Yes, cancel and text booked temps';
 
   function run() {
     if (!confirm) return setConfirm(true);
