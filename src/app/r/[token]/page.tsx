@@ -5,6 +5,7 @@ import { currentDocs, docProblems, personalise } from '@/lib/docs';
 import { displayMobile } from '@/lib/phone';
 import { RegForm } from './RegForm';
 import { WtrChange } from './WtrChange';
+import { SelfService, type MyRequest } from './SelfService';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Register | ShiftReady', robots: { index: false } };
@@ -29,7 +30,10 @@ export default async function RegisterPage({ params }: { params: { token: string
 
   // Already registered: show where they're up to, and let them change their 48-hour choice.
   if (t.registered_at) {
-    const { data: prof } = await db.from('temp_profiles').select('wtr_opt_out,wtr_effective').eq('temp_id', t.id).maybeSingle();
+    const [{ data: prof }, { data: reqs }] = await Promise.all([
+      db.from('temp_profiles').select('wtr_opt_out,wtr_effective').eq('temp_id', t.id).maybeSingle(),
+      db.from('temp_requests').select('id,kind,status,start_date,end_date,days,last_day,delivery,response_note,created_at').eq('temp_id', t.id).order('created_at', { ascending: false }).limit(8),
+    ]);
     const waiting = t.status === 'review';
     return shell(
       <>
@@ -41,6 +45,7 @@ export default async function RegisterPage({ params }: { params: { token: string
             : t.status === 'active' ? 'You’ll get shift offers near you that match your skills.' : 'Please call the office if you have any questions.'}</p>
           {!waiting && !t.bank_on_file && <a className="btn blue" href={`/b/${params.token}`}>Add bank details</a>}
         </div>
+        {!waiting && <SelfService token={params.token} requests={(reqs ?? []) as MyRequest[]} />}
         {prof && <WtrChange token={params.token} optedOut={!!prof.wtr_opt_out} effective={prof.wtr_effective} lastName={t.last_name} />}
       </>,
     );

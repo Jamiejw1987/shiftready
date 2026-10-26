@@ -8,6 +8,7 @@ export function Nav({ admin }: { admin: boolean }) {
     { href: '/temps', label: 'Temps' },
     { href: '/registrations', label: 'Sign-ups' },
     { href: '/shifts', label: 'Shifts' },
+    { href: '/requests', label: 'Requests' },
     ...(admin ? [{ href: '/team', label: 'Team' }] : []),
   ];
   return (

@@ -37,6 +37,16 @@ export async function setAccess(id: string, active: boolean): Promise<Result> {
   return { ok: true };
 }
 
+export async function setPayroll(id: string, on: boolean): Promise<Result> {
+  const { supabase, profile } = await requireStaff({ admin: true });
+  const admin = createAdminClient();
+  const { data: p } = await admin.from('profiles').select('full_name,mobile').eq('id', id).single();
+  await admin.from('profiles').update({ payroll: on }).eq('id', id);
+  await audit(supabase, profile.id, 'team.payroll', `${on ? 'Made' : 'Removed'} ${p?.full_name} ${on ? 'a payroll contact' : 'as a payroll contact'}`);
+  revalidatePath('/team');
+  return { ok: true, message: on && !p?.mobile ? `${p?.full_name} is now a payroll contact. Add their mobile so they get request alerts.` : undefined };
+}
+
 export async function updateMember(id: string, input: { role: 'admin' | 'consultant'; mobile: string }): Promise<Result> {
   const { supabase, profile } = await requireStaff({ admin: true });
   if (id === profile.id && input.role !== 'admin') return { ok: false, error: 'You can’t remove your own admin role.' };

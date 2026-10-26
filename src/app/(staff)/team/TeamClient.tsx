@@ -2,9 +2,9 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { displayMobile } from '@/lib/phone';
-import { inviteConsultant, setAccess, updateMember } from './actions';
+import { inviteConsultant, setAccess, updateMember, setPayroll } from './actions';
 
-type Member = { id: string; full_name: string; email: string; role: 'admin' | 'consultant'; mobile: string | null; active: boolean; temps: number; shifts: number };
+type Member = { id: string; full_name: string; email: string; role: 'admin' | 'consultant'; mobile: string | null; active: boolean; payroll?: boolean; temps: number; shifts: number };
 
 export function TeamClient({ members, meId }: { members: Member[]; meId: string }) {
   const router = useRouter();
@@ -59,6 +59,8 @@ export function TeamClient({ members, meId }: { members: Member[]; meId: string 
                   {m.id !== meId && (
                     <button className="btn ghost small" disabled={pending} onClick={() => run(() => setAccess(m.id, !m.active))}>{m.active ? 'Switch off access' : 'Restore access'}</button>
                   )}
+                  <button className="btn ghost small" disabled={pending} onClick={() => run(() => setPayroll(m.id, !m.payroll))}>{m.payroll ? 'Remove payroll' : 'Make payroll contact'}</button>
+                  {m.payroll && <span className="pill blue">Payroll</span>}
                   {!m.active && <span className="pill bad">Off</span>}
                 </div>
               </td>

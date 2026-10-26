@@ -63,5 +63,15 @@ export const regApprovedText = (first: string, willGetShifts: boolean) =>
 export const bankLinkText = (first: string, token: string) =>
   `Hi ${first}, please add your bank details so we can pay you: ${appUrl()}/b/${token} - Staff Selection`;
 
+// Holiday and P45 requests
+const d = (iso: string) => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/London' });
+export const holidayRange = (start: string, end: string) => (start === end ? d(start) : `${d(start)} to ${d(end)}`);
+export const holidayDecisionText = (first: string, start: string, end: string, approved: boolean, note?: string | null) =>
+  `Hi ${first}, your holiday request for ${holidayRange(start, end)} has been ${approved ? 'approved' : 'declined'}.${note ? ` ${note}` : ''} - Staff Selection`;
+export const p45SentText = (first: string, delivery: string | null, note?: string | null) =>
+  `Hi ${first}, your P45 has been ${delivery === 'post' ? 'posted to you' : 'emailed to you'}.${note ? ` ${note}` : ''} - Staff Selection`;
+export const p45DeclinedText = (first: string, note?: string | null) =>
+  `Hi ${first}, we couldn't process your P45 request yet.${note ? ` ${note}` : ' Please call the office.'} - Staff Selection`;
+
 export const OPTED_IN_REPLY = "Thanks, you're all set. We'll message you when shifts come up near you. Reply STOP at any time to opt out. - Staff Selection";
 export const OPTED_OUT_REPLY = "You've been opted out and won't get shift messages from Staff Selection. Reply START to opt back in.";

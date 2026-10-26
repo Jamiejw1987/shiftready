@@ -5,7 +5,7 @@ import { respondToOffer, type OfferAction } from '@/lib/offerFlow';
 import { validTwilioRequest } from '@/lib/twilioSignature';
 import { shiftWhen } from '@/lib/format';
 import {
-  OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD, REPLY_ATTENDED,
+  appUrl, OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD, REPLY_ATTENDED,
 } from '@/lib/texts';
 
 /**
@@ -66,6 +66,13 @@ export async function POST(req: NextRequest) {
       await db.from('audit_log').insert({ actor: null, action: 'temp.opted_in', detail: `${name} opted in by ${channel === 'whatsapp' ? 'WhatsApp' : 'text'}` });
       await reply(OPTED_IN_REPLY);
     }
+    return twiml();
+  }
+
+  // Asking for their own page (holiday, P45, 48-hour choice, bank details).
+  if (['HOLIDAY', 'HOLIDAYS', 'P', 'ACCOUNT', 'MY ACCOUNT', 'LINK'].includes(word) || /^P ?45$/.test(body.trim().toUpperCase())) {
+    if (t.registered_at) await reply(`Hi ${t.first_name}, request holiday or your P45 here: ${appUrl()}/r/${t.reg_token} - Staff Selection`);
+    else await reply('Please call the office about holiday or your P45. - Staff Selection');
     return twiml();
   }
 

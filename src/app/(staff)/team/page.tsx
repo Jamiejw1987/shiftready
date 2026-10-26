@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export default async function TeamPage() {
   const { supabase, profile } = await requireStaff({ admin: true });
   const [{ data: users }, { data: temps }, { data: shifts }, { data: log }] = await Promise.all([
-    supabase.from('profiles').select('id,full_name,email,role,mobile,active').order('full_name'),
+    supabase.from('profiles').select('id,full_name,email,role,mobile,active,payroll').order('full_name'),
     supabase.from('temps').select('added_by'),
     supabase.from('shifts').select('sent_by'),
     supabase.from('audit_log').select('id,actor,action,detail,created_at').order('created_at', { ascending: false }).limit(300),
