@@ -102,6 +102,7 @@ select:disabled, input:disabled { opacity: .55; }
 .pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.warn { background: var(--warn-soft); color: var(--warn); }
 .pill.bad { background: var(--bad-soft); color: var(--bad); } .pill.mute { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
 .pill.blue { background: var(--blue-soft); color: var(--blue-deep); }
+.pill.wa { background: #e2f7ea; color: #0d7a3e; }
 
 /* ---------- Tables ---------- */
 .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); }

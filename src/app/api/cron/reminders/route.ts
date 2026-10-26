@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { sendSms } from '@/lib/sms';
-import { reminderText } from '@/lib/texts';
+import { sendToTemp } from '@/lib/sms';
+import { reminderText, reminderWa } from '@/lib/texts';
 import { hhmm } from '@/lib/format';
 
 /** Runs daily (see vercel.json). Texts everyone booked on tomorrow's shifts. */
@@ -18,7 +18,8 @@ export async function GET(req: NextRequest) {
     for (const o of offers ?? []) {
       const t = o.temps as unknown as { first_name: string; mobile: string; status: string } | null;
       if (!t || t.status === 'out') continue;
-      await sendSms({ db, to: t.mobile, kind: 'reminder', tempId: o.temp_id, body: reminderText({ first: t.first_name, client: s.client, when: `${hhmm(s.start_time)}-${hhmm(s.end_time)}`, site: s.site, ppe: s.ppe ?? [] }) });
+      const info = { first: t.first_name, client: s.client, when: `${hhmm(s.start_time)}-${hhmm(s.end_time)}`, site: s.site, ppe: s.ppe ?? [] };
+      await sendToTemp({ db, temp: { id: o.temp_id, mobile: t.mobile }, kind: 'reminder', offerId: o.id, body: reminderText(info), wa: { template: 'reminder', vars: reminderWa(info) } });
       await db.from('offers').update({ reminded_at: new Date().toISOString() }).eq('id', o.id);
       sent++;
     }

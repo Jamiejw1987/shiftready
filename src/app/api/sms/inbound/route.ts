@@ -1,27 +1,25 @@
-import { createHmac, timingSafeEqual } from 'crypto';
 import { NextResponse, type NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { sendSms } from '@/lib/sms';
-import { appUrl, OPTED_IN_REPLY, OPTED_OUT_REPLY } from '@/lib/texts';
+import { sendToTemp } from '@/lib/sms';
+import { respondToOffer, type OfferAction } from '@/lib/offerFlow';
+import { validTwilioRequest } from '@/lib/twilioSignature';
+import { shiftWhen } from '@/lib/format';
+import {
+  OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD,
+} from '@/lib/texts';
 
 /**
- * Twilio calls this when a temp replies to a text (set it as the number's "A message comes in" webhook).
- * YES / START opts them in. STOP and similar opts them out. Everything is logged.
+ * Twilio calls this when a temp replies by text or WhatsApp (set as the "A message comes in" webhook
+ * on the phone number and on the WhatsApp sender).
+ *   YES / START / "Yes, send me shifts" button -> opt in (if not yet opted in), otherwise accept the latest offer
+ *   Accept / Decline buttons                     -> answer the exact offer the buttons were on
+ *   NO -> decline the latest offer · STANDBY -> standby on the latest offer · STOP -> opt out
  */
 
-const STOP = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT', 'OPTOUT', 'OPT OUT'];
-const START = ['YES', 'Y', 'START', 'UNSTOP', 'OPTIN', 'OPT IN', 'YES PLEASE'];
-
-function validSignature(req: NextRequest, params: Record<string, string>) {
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const sig = req.headers.get('x-twilio-signature');
-  if (!token || !sig) return false;
-  const url = appUrl() + req.nextUrl.pathname;
-  const data = url + Object.keys(params).sort().map((k) => k + params[k]).join('');
-  const expected = createHmac('sha1', token).update(Buffer.from(data, 'utf-8')).digest('base64');
-  const a = Buffer.from(expected), b = Buffer.from(sig);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
+const STOP = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT', 'OPTOUT', 'OPT OUT', 'NO THANKS'];
+const YES = ['YES', 'Y', 'YEP', 'YEAH', 'YES PLEASE', 'OK', 'ACCEPT', 'ACCEPTED'];
+const START = ['START', 'UNSTOP', 'OPTIN', 'OPT IN', 'YES SEND ME SHIFTS'];
+const NO = ['NO', 'N', 'NOPE', 'DECLINE', 'CANT', 'CANNOT', 'NO THANK YOU'];
 
 const twiml = () => new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', { headers: { 'Content-Type': 'text/xml' } });
 
@@ -29,29 +27,81 @@ export async function POST(req: NextRequest) {
   const form = await req.formData();
   const params: Record<string, string> = {};
   form.forEach((v, k) => (params[k] = String(v)));
-  if (!validSignature(req, params)) return new NextResponse('Forbidden', { status: 403 });
+  if (!validTwilioRequest(req, params)) return new NextResponse('Forbidden', { status: 403 });
 
-  const from = params.From || '';
+  const rawFrom = params.From || '';
+  const channel = rawFrom.startsWith('whatsapp:') ? 'whatsapp' : 'sms';
+  const from = rawFrom.replace(/^whatsapp:/, '');
   const body = (params.Body || '').trim();
-  const word = body.toUpperCase().replace(/[^A-Z ]/g, '').trim();
+  const payload = (params.ButtonPayload || '').toUpperCase();
+  const word = (payload || body).toUpperCase().replace(/[^A-Z ]/g, '').replace(/\s+/g, ' ').trim();
+
   const db = createAdminClient();
-  const { data: t } = await db.from('temps').select('id,first_name,last_name,status').eq('mobile', from).maybeSingle();
-
-  await db.from('messages').insert({ temp_id: t?.id ?? null, from_number: from, direction: 'in', kind: 'reply', body: body.slice(0, 1000), status: 'received', provider_id: params.MessageSid ?? null });
+  const { data: t } = await db.from('temps').select('id,first_name,last_name,mobile,status').eq('mobile', from).maybeSingle();
+  await db.from('messages').insert({
+    temp_id: t?.id ?? null, from_number: from, direction: 'in', channel, kind: 'reply', body: (body || params.ButtonText || '').slice(0, 1000),
+    status: 'received', provider_id: params.MessageSid ?? null,
+  });
   if (!t) return twiml();
+  if (channel === 'whatsapp') await db.from('temps').update({ wa_status: 'yes' }).eq('id', t.id);
 
-  if (STOP.includes(word)) {
+  const reply = (text: string) => sendToTemp({ db, temp: t, body: text, kind: 'reply' });
+  const name = `${t.first_name} ${t.last_name}`;
+
+  // Opting out always wins.
+  if (STOP.includes(word) || payload === 'OPTOUT') {
     if (t.status !== 'out') {
       await db.from('temps').update({ status: 'out', opted_out_at: new Date().toISOString() }).eq('id', t.id);
-      await db.from('audit_log').insert({ actor: null, action: 'temp.opted_out', detail: `${t.first_name} ${t.last_name} opted out by text (${word})` });
-      await sendSms({ db, to: from, body: OPTED_OUT_REPLY, kind: 'system', tempId: t.id });
+      await db.from('audit_log').insert({ actor: null, action: 'temp.opted_out', detail: `${name} opted out by ${channel === 'whatsapp' ? 'WhatsApp' : 'text'}` });
+      await reply(OPTED_OUT_REPLY);
     }
-  } else if (START.includes(word)) {
+    return twiml();
+  }
+
+  // Opting in: the welcome button, START, or YES from someone not yet opted in.
+  if (payload === 'OPTIN' || START.includes(word) || (YES.includes(word) && (t.status === 'pending' || t.status === 'out'))) {
     if (t.status === 'pending' || t.status === 'out') {
       await db.from('temps').update({ status: 'active', opted_in_at: new Date().toISOString(), opted_out_at: null }).eq('id', t.id);
-      await db.from('audit_log').insert({ actor: null, action: 'temp.opted_in', detail: `${t.first_name} ${t.last_name} opted in by text (${word})` });
-      await sendSms({ db, to: from, body: OPTED_IN_REPLY, kind: 'system', tempId: t.id });
+      await db.from('audit_log').insert({ actor: null, action: 'temp.opted_in', detail: `${name} opted in by ${channel === 'whatsapp' ? 'WhatsApp' : 'text'}` });
+      await reply(OPTED_IN_REPLY);
     }
+    return twiml();
   }
+
+  // Answering a shift offer.
+  let action: OfferAction | null = null;
+  if (payload === 'ACCEPT' || YES.includes(word)) action = 'accept';
+  else if (payload === 'DECLINE' || NO.includes(word)) action = 'decline';
+  else if (word === 'STANDBY' || payload === 'STANDBY') action = 'standby';
+  if (!action) {
+    if (/^(HELP|INFO|\?)$/.test(word)) await reply(REPLY_HELP);
+    return twiml(); // Anything else is left for a consultant to read in the message log.
+  }
+  if (t.status === 'hold') { await reply(REPLY_ON_HOLD); return twiml(); }
+
+  // Which offer? A WhatsApp button knows the exact message it was on; a typed reply means the latest open offer.
+  let offerId: string | null = null;
+  if (params.OriginalRepliedMessageSid) {
+    const { data: m } = await db.from('messages').select('offer_id').eq('provider_id', params.OriginalRepliedMessageSid).maybeSingle();
+    offerId = m?.offer_id ?? null;
+  }
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+  let q = db.from('offers').select('id,token,status,shifts!inner(client,site,site_postcode,shift_date,start_time,end_time,status)').eq('temp_id', t.id);
+  q = offerId ? q.eq('id', offerId) : q.gte('shifts.shift_date', today).neq('shifts.status', 'cancelled')
+    .in('status', ['sent', 'standby', 'declined', 'alerts', 'accepted']);
+  const { data: offers } = await q.order('created_at', { ascending: false }).limit(1);
+  const o = offers?.[0];
+  if (!o) { await reply(REPLY_NO_OFFER); return twiml(); }
+  const s = o.shifts as unknown as { client: string; site: string; site_postcode: string; shift_date: string; start_time: string; end_time: string };
+  const when = shiftWhen(s);
+
+  const result = await respondToOffer(db, o.token, action, null);
+  if (result === 'accepted' && action !== 'accept') await reply(`You're booked on ${s.client} ${when}. To cancel, please call the office. - Staff Selection`);
+  else if (result === 'accepted') await reply(replyAccepted(s.client, when, `${s.site}, ${s.site_postcode}`));
+  else if (result === 'full') await reply(replyFull(s.client, when));
+  else if (result === 'declined') await reply(replyDeclined(s.client, when));
+  else if (result === 'standby') await reply(replyStandby(s.client, when));
+  else if (result === 'not_active') await reply(REPLY_ON_HOLD);
+  else await reply(REPLY_NO_OFFER);
   return twiml();
 }

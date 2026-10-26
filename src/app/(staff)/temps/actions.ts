@@ -3,8 +3,8 @@ import { revalidatePath } from 'next/cache';
 import { requireStaff, audit } from '@/lib/auth';
 import { toE164, displayMobile } from '@/lib/phone';
 import { geocodePostcodes, geocodePostcode, looksLikePostcode, normalisePostcode } from '@/lib/geo';
-import { sendSms, sendMany } from '@/lib/sms';
-import { welcomeText } from '@/lib/texts';
+import { sendSms, sendMany, sendToTemp } from '@/lib/sms';
+import { welcomeText, welcomeWa } from '@/lib/texts';
 import { JOB_TYPES } from '@/lib/format';
 
 export type NewTemp = { first: string; last: string; mobile: string; postcode: string; types: string[] };
@@ -35,7 +35,7 @@ export async function addTemp(input: NewTemp, confirmedCompliant: boolean): Prom
     .single();
   if (error) return { ok: false, error: error.code === '23505' ? 'That mobile number is already on the list.' : 'Couldn’t save this temp. Try again.' };
 
-  const sms = await sendSms({ db: supabase, to: data.mobile, body: welcomeText(data.first_name, data.optin_token), kind: 'welcome', tempId: data.id, sentBy: profile.id });
+  const sms = await sendToTemp({ db: supabase, temp: data, body: welcomeText(data.first_name, data.optin_token), kind: 'welcome', sentBy: profile.id, wa: { template: 'welcome', vars: welcomeWa(data.first_name) } });
   await audit(supabase, profile.id, 'temp.added', `Added ${first} ${last}. Welcome text ${sms.ok ? 'sent' : 'failed'} to ${displayMobile(data.mobile)}`);
   revalidatePath('/temps');
   return sms.ok
@@ -86,8 +86,8 @@ export async function importTemps(rows: ImportRow[]): Promise<Result & { added?:
   const { data, error } = await supabase.from('temps').insert(toInsert).select();
   if (error || !data) return { ok: false, error: 'Couldn’t save the import. Nothing was added. Try again.' };
 
-  const res = await sendMany(
-    data.map((t) => ({ db: supabase, to: t.mobile, body: welcomeText(t.first_name, t.optin_token), kind: 'welcome', tempId: t.id, sentBy: profile.id })),
+  const res = await sendMany(data, (t) =>
+    sendToTemp({ db: supabase, temp: t, body: welcomeText(t.first_name, t.optin_token), kind: 'welcome', sentBy: profile.id, wa: { template: 'welcome', vars: welcomeWa(t.first_name) } }),
   );
   await audit(supabase, profile.id, 'temp.bulk_added', `Bulk added ${data.length} temps from CSV. ${res.sent} welcome texts sent${res.failed ? `, ${res.failed} failed` : ''}`);
   revalidatePath('/temps');
@@ -109,7 +109,7 @@ export async function resendWelcome(id: string): Promise<Result> {
   const { supabase, profile } = await requireStaff();
   const { data: t } = await supabase.from('temps').select('*').eq('id', id).single();
   if (!t || t.status !== 'pending') return { ok: false, error: 'Only temps awaiting opt-in can be sent the welcome again.' };
-  const r = await sendSms({ db: supabase, to: t.mobile, body: welcomeText(t.first_name, t.optin_token), kind: 'welcome', tempId: t.id, sentBy: profile.id });
+  const r = await sendToTemp({ db: supabase, temp: t, body: welcomeText(t.first_name, t.optin_token), kind: 'welcome', sentBy: profile.id, wa: { template: 'welcome', vars: welcomeWa(t.first_name) } });
   await audit(supabase, profile.id, 'temp.welcome_resent', `Resent welcome text to ${t.first_name} ${t.last_name}`);
   revalidatePath('/temps');
   return r.ok ? { ok: true, message: 'Welcome text resent.' } : { ok: false, error: `Text failed: ${r.error}` };
@@ -120,7 +120,7 @@ export async function deleteTemp(id: string): Promise<Result> {
   const { supabase, profile } = await requireStaff({ admin: true });
   const { data: t } = await supabase.from('temps').select('first_name,last_name').eq('id', id).single();
   if (!t) return { ok: false, error: 'Temp not found.' };
-  await supabase.from('messages').update({ to_number: null, from_number: null, body: '[removed: temp deleted]' }).eq('temp_id', id);
+  await supabase.from('messages').update({ to_number: null, from_number: null, body: '[removed: temp deleted]', fallback_body: null }).eq('temp_id', id);
   const { error } = await supabase.from('temps').delete().eq('id', id);
   if (error) return { ok: false, error: 'Couldn’t delete this temp.' };
   await audit(supabase, profile.id, 'temp.deleted', `Deleted ${t.first_name} ${t.last_name} and their personal data`);
@@ -136,8 +136,9 @@ export async function sendBulkText(ids: string[], body: string): Promise<Result>
   const { data: temps } = await supabase.from('temps').select('id,first_name,mobile,status').in('id', ids.slice(0, 5000));
   const active = (temps ?? []).filter((t) => t.status === 'active');
   if (!active.length) return { ok: false, error: 'None of the selected temps have opted in, so no texts were sent.' };
-  const res = await sendMany(
-    active.map((t) => ({ db: supabase, to: t.mobile, body: text.replace(/\{first\}/g, t.first_name), kind: 'bulk', tempId: t.id, sentBy: profile.id })),
+  // Bulk messages are free-form, which WhatsApp only allows as replies, so they always go as texts.
+  const res = await sendMany(active, (t) =>
+    sendSms({ db: supabase, to: t.mobile, body: text.replace(/\{first\}/g, t.first_name), kind: 'bulk', tempId: t.id, sentBy: profile.id }),
   );
   await audit(supabase, profile.id, 'sms.bulk', `Sent bulk text to ${res.sent} temps: "${text.slice(0, 60)}${text.length > 60 ? '...' : ''}"`);
   revalidatePath('/temps');

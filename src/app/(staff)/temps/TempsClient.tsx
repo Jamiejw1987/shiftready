@@ -10,7 +10,7 @@ import { addTemp, importTemps, setTempStatus, resendWelcome, deleteTemp, sendBul
 
 export type TempRow = {
   id: string; first_name: string; last_name: string; mobile: string; postcode: string;
-  lat: number | null; lng: number | null; job_types: string[]; status: 'pending' | 'active' | 'hold' | 'out';
+  lat: number | null; lng: number | null; job_types: string[]; status: 'pending' | 'active' | 'hold' | 'out'; wa_status?: 'unknown' | 'yes' | 'no';
   added_by: string | null; created_at: string;
 };
 type User = { id: string; full_name: string };
@@ -274,7 +274,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
                   <td className="mono" data-l="Postcode">{t.postcode}</td>
                   {nearPoint && <td className="num" data-l="Miles">{d != null ? d.toFixed(1) : '-'}</td>}
                   <td className="full">{t.job_types.map((x) => <span key={x} className="pill blue" style={{ marginRight: 4 }}>{x}</span>)}</td>
-                  <td><span className={`pill ${k}`}>{l}</span></td>
+                  <td><span className={`pill ${k}`}>{l}</span>{t.wa_status === 'yes' && <span className="pill wa" title="Gets messages on WhatsApp" style={{ marginLeft: 4 }}>WhatsApp</span>}</td>
                   <td className="by" data-l="Added by">{userName(t.added_by)}<small>{new Date(t.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</small></td>
                   <td>
                     <div className="btnrow">

@@ -3,8 +3,8 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireStaff, audit } from '@/lib/auth';
 import { geocodePostcode, looksLikePostcode, milesBetween, normalisePostcode } from '@/lib/geo';
-import { sendMany, sendSms } from '@/lib/sms';
-import { offerText, promotedText } from '@/lib/texts';
+import { sendMany, sendToTemp } from '@/lib/sms';
+import { offerText, offerWa, promotedText, promotedWa } from '@/lib/texts';
 import { shiftWhen, JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
 
 export type ShiftInput = {
@@ -73,12 +73,11 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
       .insert(temps.map((t) => ({ shift_id: shift.id, temp_id: t.id, distance_miles: Math.round(t.miles * 10) / 10 })))
       .select('id,temp_id,token');
     const byTemp = new Map(temps.map((t) => [t.id, t]));
-    const res = await sendMany(
-      (offers ?? []).map((o) => ({
-        db: supabase, to: byTemp.get(o.temp_id)!.mobile, kind: 'offer', tempId: o.temp_id, sentBy: profile.id,
-        body: offerText({ client: shift.client, when: shiftWhen(shift), pay: Number(shift.pay_rate), token: o.token }),
-      })),
-    );
+    const res = await sendMany(offers ?? [], (o) => {
+      const t = byTemp.get(o.temp_id)!;
+      const info = { first: t.first_name, client: shift.client, when: shiftWhen(shift), site: `${shift.site}, ${shift.site_postcode}`, pay: Number(shift.pay_rate), duties: shift.duties ?? [], ppe: shift.ppe ?? [], token: o.token };
+      return sendToTemp({ db: supabase, temp: t, kind: 'offer', offerId: o.id, sentBy: profile.id, body: offerText(info), wa: { template: 'offer', vars: offerWa(info) } });
+    });
     sent = res.sent; failed = res.failed;
   }
   await audit(supabase, profile.id, 'shift.sent', `Sent ${shift.client} shift (${shiftWhen(shift)}, ${shift.heads} needed) to ${sent} temps${failed ? `, ${failed} texts failed` : ''}`);
@@ -98,7 +97,8 @@ export async function noShow(offerId: string) {
     if (p) {
       const pt = p.temps as unknown as { first_name: string; last_name: string; mobile: string };
       const ps = p.shifts as unknown as { client: string; shift_date: string; start_time: string; end_time: string };
-      await sendSms({ db: supabase, to: pt.mobile, kind: 'promoted', tempId: p.temp_id, sentBy: profile.id, body: promotedText({ first: pt.first_name, client: ps.client, when: shiftWhen(ps), token: p.token }) });
+      const info = { first: pt.first_name, client: ps.client, when: shiftWhen(ps), token: p.token };
+      await sendToTemp({ db: supabase, temp: { id: p.temp_id, mobile: pt.mobile }, kind: 'promoted', offerId: promotedId, sentBy: profile.id, body: promotedText(info), wa: { template: 'promoted', vars: promotedWa(info) } });
       detail += `. ${pt.first_name} ${pt.last_name} promoted from standby and texted`;
     }
   } else detail += '. Nobody on standby, slot reopened';
@@ -113,12 +113,10 @@ export async function cancelShift(shiftId: string) {
   if (!s || s.status === 'cancelled') return { ok: false, error: 'Shift not found or already cancelled.' };
   await supabase.from('shifts').update({ status: 'cancelled' }).eq('id', shiftId);
   const { data: booked } = await supabase.from('offers').select('temp_id,temps(first_name,mobile)').eq('shift_id', shiftId).in('status', ['accepted', 'standby']);
-  const res = await sendMany(
-    (booked ?? []).map((b) => {
-      const t = b.temps as unknown as { first_name: string; mobile: string };
-      return { db: supabase, to: t.mobile, kind: 'system', tempId: b.temp_id, sentBy: profile.id, body: `Hi ${t.first_name}, sorry, the ${s.client} shift on ${shiftWhen(s)} has been cancelled by the client. You don't need to attend. - Staff Selection` };
-    }),
-  );
+  const res = await sendMany(booked ?? [], (b) => {
+    const t = b.temps as unknown as { first_name: string; mobile: string };
+    return sendToTemp({ db: supabase, temp: { id: b.temp_id, mobile: t.mobile }, kind: 'system', sentBy: profile.id, body: `Hi ${t.first_name}, sorry, the ${s.client} shift on ${shiftWhen(s)} has been cancelled by the client. You don't need to attend. - Staff Selection` });
+  });
   await audit(supabase, profile.id, 'shift.cancelled', `Cancelled ${s.client} shift (${shiftWhen(s)}). ${res.sent} booked temps texted`);
   revalidatePath(`/shifts/${shiftId}`);
   revalidatePath('/shifts');
