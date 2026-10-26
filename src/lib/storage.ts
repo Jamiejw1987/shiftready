@@ -2,10 +2,10 @@ import 'server-only';
 import { randomUUID } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export const DOC_KINDS = ['passport', 'id', 'rtw_check', 'flt_licence', 'other'] as const;
+export const DOC_KINDS = ['passport', 'id', 'rtw_check', 'ni_proof', 'flt_licence', 'other'] as const;
 export type DocKindFile = (typeof DOC_KINDS)[number];
 export const DOC_KIND_LABEL: Record<DocKindFile, string> = {
-  passport: 'Passport', id: 'Photo ID', rtw_check: 'Right to work check result', flt_licence: 'FLT licence', other: 'Other document',
+  passport: 'Passport', id: 'Photo ID', rtw_check: 'Right to work check result', ni_proof: 'Proof of NI number', flt_licence: 'FLT licence', other: 'Other document',
 };
 const EXT: Record<string, string> = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heif', 'application/pdf': 'pdf',

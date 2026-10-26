@@ -11,7 +11,7 @@ type Props = {
   token: string; first: string; last: string; mobile: string; jobTypes: string[];
   docs: { kid: Doc; terms: Doc; privacy: Doc; wtr: Doc };
 };
-type FileKind = 'passport' | 'flt_licence' | 'other';
+type FileKind = 'passport' | 'flt_licence' | 'ni_proof' | 'other';
 
 function Section({ n, title, children, note }: { n: number; title: string; note?: string; children: React.ReactNode }) {
   return (
@@ -78,7 +78,9 @@ export function RegForm(p: Props) {
 
   function submit() {
     setErr('');
+    if (!files.ni_proof) return setErr('Please add a photo of your proof of NI number (section 1).');
     if (d.rtwRoute === 'british_irish' && !files.passport) return setErr('Please add a photo of your passport (section 3).');
+    if (d.jobTypes.includes('FLT counterbalance') && !files.flt_licence) return setErr('Please add a photo of your FLT licence (section 3).');
     start(async () => {
       try {
         const chosen = (Object.entries(files) as [FileKind, File][]).filter(([k]) => k !== 'flt_licence' || d.jobTypes.includes('FLT counterbalance'));
@@ -118,26 +120,29 @@ export function RegForm(p: Props) {
           <div className="f"><label className="l" htmlFor="last">Surname</label><input id="last" type="text" autoComplete="family-name" value={d.last} onChange={(e) => set('last', e.target.value)} /></div>
           <div className="f w4"><label className="l" htmlFor="dob">Date of birth</label><input id="dob" type="date" autoComplete="bday" value={d.dob} onChange={(e) => set('dob', e.target.value)} /></div>
           <div className="f w4"><span className="l">Mobile</span><div className="note" style={{ fontSize: 15 }}>{p.mobile} <span className="note">(call the office to change it)</span></div></div>
-          <div className="f w4"><label className="l" htmlFor="email">Email <span className="note">(optional)</span></label><input id="email" type="email" autoComplete="email" value={d.email} onChange={(e) => set('email', e.target.value)} /></div>
+          <div className="f w4"><label className="l" htmlFor="email">Email</label><input id="email" type="email" autoComplete="email" value={d.email} onChange={(e) => set('email', e.target.value)} /></div>
           <div className="f w4"><label className="l" htmlFor="a1">Address</label><input id="a1" type="text" autoComplete="address-line1" placeholder="House number and street" value={d.address1} onChange={(e) => set('address1', e.target.value)} /></div>
           <div className="f w4"><input aria-label="Address line 2" type="text" autoComplete="address-line2" placeholder="Area (optional)" value={d.address2} onChange={(e) => set('address2', e.target.value)} /></div>
           <div className="f"><label className="l" htmlFor="town">Town</label><input id="town" type="text" autoComplete="address-level2" value={d.town} onChange={(e) => set('town', e.target.value)} /></div>
           <div className="f"><label className="l" htmlFor="pc">Postcode</label><input id="pc" type="text" autoComplete="postal-code" autoCapitalize="characters" value={d.postcode} onChange={(e) => set('postcode', e.target.value)} /></div>
-          <div className="f w4"><label className="l" htmlFor="ni">National Insurance number <span className="note">(if you have one)</span></label><input id="ni" type="text" autoCapitalize="characters" placeholder="QQ 12 34 56 C" value={d.ni} onChange={(e) => set('ni', e.target.value)} /></div>
+          <div className="f w4"><label className="l" htmlFor="ni">National Insurance number</label><input id="ni" type="text" autoCapitalize="characters" placeholder="QQ 12 34 56 C" value={d.ni} onChange={(e) => set('ni', e.target.value)} /></div>
+          <div className="f w4"><span className="l">Proof of your NI number</span><FilePick kind="ni_proof" label="Take or choose photo" />
+            <span className="note">A photo of an old payslip, P45, P60 or NI letter or card that shows your number.</span></div>
         </div>
       </Section>
 
       <Section n={2} title="Work">
         <div className="f"><span className="l">What work can you do?</span>
           <div className="chips">{JOB_TYPES.map((t) => <label key={t} className="chip"><input type="checkbox" checked={d.jobTypes.includes(t)} onChange={() => toggle('jobTypes', t)} /> {t}</label>)}</div></div>
-        <div className="f"><label className="l" htmlFor="exp">Your experience <span className="note">(optional)</span></label>
+        <div className="f"><label className="l" htmlFor="exp">Your experience</label>
           <textarea id="exp" placeholder="e.g. 2 years picking and packing at a food warehouse" value={d.experience} onChange={(e) => set('experience', e.target.value)} /></div>
         <div className="f"><span className="l">When can you work?</span>
           <div className="chips">{AVAILABILITY.map((t) => <label key={t} className="chip"><input type="checkbox" checked={d.availability.includes(t)} onChange={() => toggle('availability', t)} /> {t}</label>)}</div></div>
         <div className="f"><label className="l" htmlFor="tr">How will you get to work?</label>
           <select id="tr" value={d.transport} onChange={(e) => set('transport', e.target.value)}><option value="">Choose…</option>{TRANSPORT.map((t) => <option key={t}>{t}</option>)}</select></div>
         <div className="f"><span className="l">Safety kit you already have</span>
-          <div className="chips">{PPE_OPTIONS.map((t) => <label key={t} className="chip"><input type="checkbox" checked={d.ownPpe.includes(t)} onChange={() => toggle('ownPpe', t)} /> {t}</label>)}</div></div>
+          <div className="chips">{PPE_OPTIONS.map((t) => <label key={t} className="chip"><input type="checkbox" checked={d.ownPpe.includes(t)} onChange={() => setD((x) => ({ ...x, ownPpe: x.ownPpe.includes(t) ? x.ownPpe.filter((y) => y !== t) : [...x.ownPpe.filter((y) => y !== 'None'), t] }))} /> {t}</label>)}
+            <label className="chip"><input type="checkbox" checked={d.ownPpe.includes('None')} onChange={() => setD((x) => ({ ...x, ownPpe: x.ownPpe.includes('None') ? [] : ['None'] }))} /> None yet</label></div></div>
       </Section>
 
       <Section n={3} title="Right to work" note="By law we must check you can work in the UK before you start.">
@@ -155,7 +160,7 @@ export function RegForm(p: Props) {
             <span className="note">We’ll also need to see the original passport, in person or on a video call.</span></div>
         )}
         {d.jobTypes.includes('FLT counterbalance') && (
-          <div className="f"><span className="l">FLT licence or certificate <span className="note">(optional)</span></span><FilePick kind="flt_licence" label="Add a photo" /></div>
+          <div className="f"><span className="l">FLT licence or certificate</span><FilePick kind="flt_licence" label="Take or choose photo" /></div>
         )}
       </Section>
 

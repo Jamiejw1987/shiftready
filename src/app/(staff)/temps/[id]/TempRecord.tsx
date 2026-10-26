@@ -119,7 +119,7 @@ export function Uploader({ id }: { id: string }) {
     <>
       <div className="btnrow">
         <select aria-label="Document type" value={kind} onChange={(e) => setKind(e.target.value)} style={{ width: 'auto' }}>
-          <option value="rtw_check">Right to work check result</option><option value="passport">Passport</option><option value="id">Photo ID</option>
+          <option value="rtw_check">Right to work check result</option><option value="passport">Passport</option><option value="id">Photo ID</option><option value="ni_proof">Proof of NI number</option>
           <option value="flt_licence">FLT licence</option><option value="other">Other</option>
         </select>
         <label className="btn" htmlFor="staffFile">{pending ? 'Uploading…' : 'Upload'}</label>

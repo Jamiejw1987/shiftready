@@ -63,18 +63,24 @@ export async function submitRegistration(token: string, r: RegData, uploads: { k
   const first = clean(r.first, 60), last = clean(r.last, 60);
   if (!first || !last) p.push('your first name and surname');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(r.dob) || age(r.dob) < 16 || age(r.dob) > 90) p.push('your date of birth (you must be 16 or over)');
-  if (r.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email.trim())) p.push('a valid email address, or leave it blank');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((r.email || '').trim())) p.push('your email address');
   if (!clean(r.address1) || !clean(r.town)) p.push('your address');
   if (!looksLikePostcode(r.postcode)) p.push('your full postcode');
   const ni = r.ni.replace(/\s+/g, '').toUpperCase();
-  if (ni && !/^[A-Z]{2}\d{6}[A-D]$/.test(ni)) p.push('your National Insurance number (like QQ123456C), or leave it blank');
+  if (!/^[A-Z]{2}\d{6}[A-D]$/.test(ni)) p.push('your National Insurance number (like QQ123456C)');
+  if (!uploads.some((u) => u.kind === 'ni_proof')) p.push('a photo of your proof of NI number');
   const jobTypes = r.jobTypes.filter((x) => (JOB_TYPES as readonly string[]).includes(x));
   if (!jobTypes.length) p.push('at least one type of work');
+  if (clean(r.experience, 1000).length < 3) p.push('your experience (or write \u201cnone\u201d)');
+  if (!r.availability.some((x) => AVAILABILITY.includes(x))) p.push('when you can work');
+  if (!TRANSPORT.includes(r.transport)) p.push('how you\u2019ll get to work');
+  if (!r.ownPpe.length) p.push('the safety kit you have (or \u201cNone yet\u201d)');
+  if (jobTypes.includes('FLT counterbalance') && !uploads.some((u) => u.kind === 'flt_licence')) p.push('a photo of your FLT licence');
   const shareCode = r.shareCode.replace(/[\s-]+/g, '').toUpperCase();
   if (r.rtwRoute !== 'british_irish' && r.rtwRoute !== 'share_code') p.push('how you’ll prove your right to work');
   if (r.rtwRoute === 'share_code' && !/^[A-Z0-9]{9}$/.test(shareCode)) p.push('your 9-character share code');
   if (r.rtwRoute === 'british_irish' && !uploads.some((u) => u.kind === 'passport' || u.kind === 'id')) p.push('a photo of your passport');
-  if (!clean(r.nokName) || !/^[+\d\s()-]{7,20}$/.test(r.nokPhone || '')) p.push('your emergency contact’s name and phone number');
+  if (!clean(r.nokName) || !clean(r.nokRelationship) || !/^[+\d\s()-]{7,20}$/.test(r.nokPhone || '')) p.push('your emergency contact’s name, relationship and phone number');
   if (r.healthDeclared === null) p.push('an answer to the health and safety question');
   if (r.convictionsDeclared === null) p.push('an answer to the convictions question');
   if (r.wtrOptOut === null) p.push('your choice about the 48-hour week');
@@ -96,7 +102,7 @@ export async function submitRegistration(token: string, r: RegData, uploads: { k
   const { error: pe } = await db.from('temp_profiles').upsert({
     temp_id: t.id, dob: r.dob, email: clean(r.email, 120) || null,
     address1: clean(r.address1), address2: clean(r.address2) || null, town: clean(r.town, 80),
-    ni_enc: ni ? encrypt(ni) : null,
+    ni_enc: encrypt(ni),
     experience: clean(r.experience, 1000) || null, transport: TRANSPORT.includes(r.transport) ? r.transport : null,
     own_ppe: r.ownPpe.filter((x) => (PPE_OPTIONS as readonly string[]).includes(x)),
     availability: r.availability.filter((x) => AVAILABILITY.includes(x)),
