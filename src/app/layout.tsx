@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: 'Shift offers and temp management for Staff Selection UK',
   manifest: '/manifest.webmanifest',
   icons: { icon: '/icon-192.png', apple: '/apple-touch-icon.png' },
-  appleWebApp: { capable: true, title: 'ShiftReady', statusBarStyle: 'black' },
+  appleWebApp: { capable: true, title: 'ShiftReady', statusBarStyle: 'black-translucent' },
   robots: { index: false, follow: false },
 };
 

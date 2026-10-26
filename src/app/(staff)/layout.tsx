@@ -7,15 +7,20 @@ export const dynamic = 'force-dynamic';
 
 export default async function StaffLayout({ children }: { children: React.ReactNode }) {
   const { profile } = await requireStaff();
+  const initials = profile.full_name.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase();
   return (
     <>
       <header className="band">
         <div className="band-in">
-          <Logo />
-          <Nav admin={profile.role === 'admin'} />
+          <div className="band-logo"><Logo /></div>
+          <div className="band-nav"><Nav admin={profile.role === 'admin'} /></div>
           <div className="user">
-            <span><b>{profile.full_name}</b> <span className="pill blue">{profile.role === 'admin' ? 'Admin' : 'Consultant'}</span></span>
-            <form action={signOut}><button className="btn">Sign out</button></form>
+            <span className="avatar" aria-hidden="true">{initials}</span>
+            <span className="who">
+              <b>{profile.full_name}</b>
+              <span className="role">{profile.role === 'admin' ? 'Admin' : 'Consultant'}</span>
+            </span>
+            <form action={signOut}><button className="btn signout">Sign out</button></form>
           </div>
         </div>
       </header>
