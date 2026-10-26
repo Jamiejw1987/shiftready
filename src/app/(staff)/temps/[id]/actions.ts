@@ -4,7 +4,7 @@ import { requireStaff, audit } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { decrypt } from '@/lib/crypto';
 import { sendToTemp } from '@/lib/sms';
-import { regApprovedText, bankLinkText } from '@/lib/texts';
+import { regApprovedText, bankLinkText, myLinkText } from '@/lib/texts';
 import { uploadSlots, recordUploads, DOC_KIND_LABEL, type DocKindFile } from '@/lib/storage';
 
 type Result = { ok: boolean; error?: string; message?: string };
@@ -116,6 +116,16 @@ export async function sendBankLink(tempId: string): Promise<Result> {
   const r = await sendToTemp({ db: supabase, temp: t, kind: 'system', sentBy: profile.id, body: bankLinkText(t.first_name, t.reg_token) });
   await audit(supabase, profile.id, 'temp.bank_link_sent', `Sent bank details link to ${t.first_name} ${t.last_name}`);
   return r.ok ? { ok: true, message: 'Bank details link sent.' } : { ok: false, error: `Text failed: ${r.error}` };
+}
+
+export async function sendMyLink(tempId: string): Promise<Result> {
+  const { supabase, profile } = await requireStaff();
+  const { data: t } = await supabase.from('temps').select('id,first_name,last_name,mobile,reg_token,status').eq('id', tempId).single();
+  if (!t) return { ok: false, error: 'Not found.' };
+  if (t.status === 'invited' || t.status === 'review') return { ok: false, error: 'They need to finish registering first.' };
+  const r = await sendToTemp({ db: supabase, temp: t, kind: 'system', sentBy: profile.id, body: myLinkText(t.first_name, t.reg_token) });
+  await audit(supabase, profile.id, 'temp.my_link_sent', `Sent holiday/P45 link to ${t.first_name} ${t.last_name}`);
+  return r.ok ? { ok: true, message: 'Link sent.' } : { ok: false, error: `Text failed: ${r.error}` };
 }
 
 /** Admins can clear bank details (e.g. a temp has changed bank) so the temp can add new ones from their link. */

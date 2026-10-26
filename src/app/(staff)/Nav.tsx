@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-export function Nav({ admin }: { admin: boolean }) {
+export function Nav({ admin, waiting = 0 }: { admin: boolean; waiting?: number }) {
   const path = usePathname();
   const items = [
     { href: '/temps', label: 'Temps' },
@@ -15,7 +15,7 @@ export function Nav({ admin }: { admin: boolean }) {
     <nav className="nav">
       {items.map((i) => (
         <Link key={i.href} href={i.href} aria-current={(path === i.href || path.startsWith(i.href + '/')) ? 'page' : undefined}>
-          {i.label}
+          {i.label}{i.href === '/requests' && waiting > 0 && <span className="navbadge">{waiting}</span>}
         </Link>
       ))}
     </nav>

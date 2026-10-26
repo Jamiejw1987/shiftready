@@ -73,5 +73,8 @@ export const p45SentText = (first: string, delivery: string | null, note?: strin
 export const p45DeclinedText = (first: string, note?: string | null) =>
   `Hi ${first}, we couldn't process your P45 request yet.${note ? ` ${note}` : ' Please call the office.'} - Staff Selection`;
 
+export const myLinkText = (first: string, token: string) =>
+  `Hi ${first}, here's your Staff Selection link to request holiday or your P45. Keep it for next time: ${appUrl()}/me/${token} - Staff Selection`;
+
 export const OPTED_IN_REPLY = "Thanks, you're all set. We'll message you when shifts come up near you. Reply STOP at any time to opt out. - Staff Selection";
 export const OPTED_OUT_REPLY = "You've been opted out and won't get shift messages from Staff Selection. Reply START to opt back in.";

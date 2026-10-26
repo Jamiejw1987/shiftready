@@ -19,12 +19,14 @@ create table if not exists public.temp_requests (
   days           numeric(4,1),      -- holiday: working days requested
   last_day       date,              -- P45: last day worked
   delivery       text check (delivery in ('email', 'post')),   -- P45
+  send_to        text,              -- P45: email or address given with the request
   note           text,
   response_note  text,
   handled_by     uuid references public.profiles (id) on delete set null,
   handled_at     timestamptz,
   created_at     timestamptz not null default now()
 );
+alter table public.temp_requests add column if not exists send_to text;
 create index if not exists temp_requests_status_idx on public.temp_requests (status, created_at desc);
 create index if not exists temp_requests_temp_idx on public.temp_requests (temp_id, created_at desc);
 

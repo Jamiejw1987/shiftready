@@ -48,6 +48,19 @@ a { color: var(--blue-deep); }
   .nav a { flex: 1; text-align: center; padding: 8px 4px; font-size: 14px; white-space: nowrap; letter-spacing: .3px; }
 }
 
+.navbadge { display: inline-flex; align-items: center; justify-content: center; line-height: 1; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 5px; border-radius: 999px; background: #ff5a4e; color: #fff; font: 700 11px var(--f-body); letter-spacing: 0; vertical-align: 1px; }
+
+@media (max-width: 420px) {
+  .band-logo { min-width: 0; }
+  .logo .wm { font-size: 15px; } .logo .wm span { font-size: 9px; letter-spacing: 2px; }
+  .logo img { width: 32px; height: 32px; }
+  .avatar { width: 30px; height: 30px; font-size: 12px; }
+  .btn.signout { padding: 5px 10px; font-size: 13px; min-height: 32px; }
+  .nav { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { flex: 1 0 auto; padding: 8px 9px; font-size: 13px; }
+}
+
 /* ---------- Page ---------- */
 .wrap { max-width: 1160px; margin: 0 auto; padding: 20px var(--gutter-r) calc(48px + env(safe-area-inset-bottom, 0px)) var(--gutter-l); display: flex; flex-direction: column; gap: 16px; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 22px; min-width: 0; box-shadow: var(--shadow); }

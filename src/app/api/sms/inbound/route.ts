@@ -71,8 +71,10 @@ export async function POST(req: NextRequest) {
 
   // Asking for their own page (holiday, P45, 48-hour choice, bank details).
   if (['HOLIDAY', 'HOLIDAYS', 'P', 'ACCOUNT', 'MY ACCOUNT', 'LINK'].includes(word) || /^P ?45$/.test(body.trim().toUpperCase())) {
-    if (t.registered_at) await reply(`Hi ${t.first_name}, request holiday or your P45 here: ${appUrl()}/r/${t.reg_token} - Staff Selection`);
-    else await reply('Please call the office about holiday or your P45. - Staff Selection');
+    if (t.status === 'invited' || t.status === 'review') await reply('Please finish registering first, then you can request holiday or your P45. - Staff Selection');
+    else if (word === 'P') await reply(`Hi ${t.first_name}, confirm your last day and request your P45 here: ${appUrl()}/me/${t.reg_token}?do=p45 - Staff Selection`);
+    else if (word.startsWith('HOLIDAY')) await reply(`Hi ${t.first_name}, choose the dates you'd like off here: ${appUrl()}/me/${t.reg_token}?do=holiday - Staff Selection`);
+    else await reply(`Hi ${t.first_name}, request holiday or your P45 here: ${appUrl()}/me/${t.reg_token} - Staff Selection`);
     return twiml();
   }
 

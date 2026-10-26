@@ -4,7 +4,7 @@ import { requireStaff, audit } from '@/lib/auth';
 import { toE164, displayMobile } from '@/lib/phone';
 import { geocodePostcodes, geocodePostcode, looksLikePostcode, normalisePostcode } from '@/lib/geo';
 import { sendSms, sendMany, sendToTemp } from '@/lib/sms';
-import { welcomeText, welcomeWa } from '@/lib/texts';
+import { welcomeText, welcomeWa, appUrl } from '@/lib/texts';
 import { JOB_TYPES } from '@/lib/format';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { removeTempFiles } from '@/lib/storage';
@@ -138,12 +138,12 @@ export async function sendBulkText(ids: string[], body: string): Promise<Result>
   const text = body.trim();
   if (!text) return { ok: false, error: 'Write a message first.' };
   if (text.length > 600) return { ok: false, error: 'Keep the message under 600 characters.' };
-  const { data: temps } = await supabase.from('temps').select('id,first_name,mobile,status').in('id', ids.slice(0, 5000));
+  const { data: temps } = await supabase.from('temps').select('id,first_name,mobile,status,reg_token').in('id', ids.slice(0, 5000));
   const active = (temps ?? []).filter((t) => t.status === 'active');
   if (!active.length) return { ok: false, error: 'None of the selected temps have opted in, so no texts were sent.' };
   // Bulk messages are free-form, which WhatsApp only allows as replies, so they always go as texts.
   const res = await sendMany(active, (t) =>
-    sendSms({ db: supabase, to: t.mobile, body: text.replace(/\{first\}/g, t.first_name), kind: 'bulk', tempId: t.id, sentBy: profile.id }),
+    sendSms({ db: supabase, to: t.mobile, body: text.replace(/\{first\}/g, t.first_name).replace(/\{link\}/g, `${appUrl()}/me/${t.reg_token}`), kind: 'bulk', tempId: t.id, sentBy: profile.id }),
   );
   await audit(supabase, profile.id, 'sms.bulk', `Sent bulk text to ${res.sent} temps: "${text.slice(0, 60)}${text.length > 60 ? '...' : ''}"`);
   revalidatePath('/temps');

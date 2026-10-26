@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 type Row = {
   id: string; kind: 'holiday' | 'p45'; status: string; start_date: string | null; end_date: string | null; days: number | null;
-  last_day: string | null; delivery: string | null; note: string | null; response_note: string | null; handled_by: string | null; handled_at: string | null; created_at: string;
+  last_day: string | null; delivery: string | null; send_to: string | null; note: string | null; response_note: string | null; handled_by: string | null; handled_at: string | null; created_at: string;
   temps: { id: string; first_name: string; last_name: string; mobile: string; temp_profiles: { email: string | null; address1: string | null; address2: string | null; town: string | null } | null; postcode: string | null } | null;
 };
 const STATUS: Record<string, [string, string]> = { pending: ['warn', 'Waiting'], approved: ['ok', 'Approved'], declined: ['bad', 'Declined'], done: ['ok', 'Sent'] };
@@ -20,7 +20,7 @@ export default async function RequestsPage() {
   const canDecide = profile.role === 'admin' || (profile as unknown as { payroll?: boolean }).payroll === true;
   const [{ data: rows }, { data: users }] = await Promise.all([
     supabase.from('temp_requests')
-      .select('id,kind,status,start_date,end_date,days,last_day,delivery,note,response_note,handled_by,handled_at,created_at,temps(id,first_name,last_name,mobile,postcode,temp_profiles(email,address1,address2,town))')
+      .select('id,kind,status,start_date,end_date,days,last_day,delivery,send_to,note,response_note,handled_by,handled_at,created_at,temps(id,first_name,last_name,mobile,postcode,temp_profiles(email,address1,address2,town))')
       .order('created_at', { ascending: false }).limit(300),
     supabase.from('profiles').select('id,full_name'),
   ]);
@@ -33,8 +33,10 @@ export default async function RequestsPage() {
     ? <><b>Holiday</b> · {holidayRange(r.start_date!, r.end_date!)} · {Number(r.days)} day{Number(r.days) === 1 ? '' : 's'}</>
     : <><b>P45</b> · last day {r.last_day ? day(r.last_day) : '-'} · by {r.delivery}</>;
   const sendTo = (r: Row) => {
+    if (r.kind !== 'p45') return null;
+    if (r.send_to) return r.send_to;
     const p = r.temps?.temp_profiles;
-    if (r.kind !== 'p45' || !p) return null;
+    if (!p) return null;
     return r.delivery === 'post' ? [p.address1, p.address2, p.town, r.temps?.postcode].filter(Boolean).join(', ') : p.email;
   };
 

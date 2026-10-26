@@ -3,7 +3,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { prepareFile, uploadToSlot, OK_TYPES } from '@/lib/upload';
 import { resendRegistration } from '../../registrations/actions';
-import { approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, staffUploadSlot, clearBank } from './actions';
+import { sendMyLink, approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, staffUploadSlot, clearBank } from './actions';
 
 type Msg = { ok: boolean; text: string } | null;
 const Note = ({ m }: { m: Msg }) => (m ? <p className={m.ok ? 'okmsg' : 'err'} style={{ marginTop: 10 }}>{m.text}</p> : null);
@@ -26,6 +26,7 @@ export function RecordActions({ id, firstName, status, registered, canApprove, a
         <div className="btnrow">
           {!registered && status !== 'out' && <button className="btn ghost" disabled={pending} onClick={() => run(() => resendRegistration(id))}>{status === 'invited' ? 'Resend registration link' : 'Send registration form'}</button>}
           {status !== 'out' && <button className="btn ghost" onClick={() => { setCompose(!compose); setMsg(null); }}>Text {firstName}</button>}
+          {status !== 'invited' && status !== 'review' && <button className="btn ghost" disabled={pending} onClick={() => run(() => sendMyLink(id))}>Text holiday/P45 link</button>}
           {status === 'review' && <button className="btn blue" disabled={!canApprove || pending} onClick={() => run(() => approve(id))}>Approve</button>}
         </div>
       </div>

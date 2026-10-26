@@ -12,12 +12,12 @@ export type MyRequest = {
 const day = (iso: string) => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 const LABEL: Record<MyRequest['status'], [string, string]> = { pending: ['warn', 'Waiting'], approved: ['ok', 'Approved'], declined: ['bad', 'Declined'], done: ['ok', 'Sent'] };
 
-export function SelfService({ token, requests }: { token: string; requests: MyRequest[] }) {
+export function SelfService({ token, requests, hasEmail, hasAddress, open = '' }: { token: string; requests: MyRequest[]; hasEmail: boolean; hasAddress: boolean; open?: '' | 'holiday' | 'p45' }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [mode, setMode] = useState<'' | 'holiday' | 'p45'>('');
+  const [mode, setMode] = useState<'' | 'holiday' | 'p45'>(open);
   const [h, setH] = useState({ start: '', end: '', days: '', note: '' });
-  const [p, setP] = useState({ lastDay: '', delivery: 'email' as 'email' | 'post', note: '' });
+  const [p, setP] = useState({ lastDay: '', delivery: 'email' as 'email' | 'post', sendTo: '', note: '' });
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
   const todayIso = new Date().toLocaleDateString('en-CA');
@@ -35,7 +35,7 @@ export function SelfService({ token, requests }: { token: string; requests: MyRe
       const r = mode === 'holiday' ? await requestHoliday(token, h) : await requestP45(token, p);
       if (!r.ok) return setErr(r.error ?? 'Something went wrong.');
       setOk(mode === 'holiday' ? 'Holiday request sent. We’ll text you when it’s been looked at.' : 'P45 request sent. We’ll text you when it’s on its way.');
-      setMode(''); setH({ start: '', end: '', days: '', note: '' }); setP({ lastDay: '', delivery: 'email', note: '' });
+      setMode(''); setH({ start: '', end: '', days: '', note: '' }); setP({ lastDay: '', delivery: 'email', sendTo: '', note: '' });
       router.refresh();
     });
   }
@@ -71,7 +71,16 @@ export function SelfService({ token, requests }: { token: string; requests: MyRe
               <label className="tick"><input type="radio" name="dl" checked={p.delivery === 'email'} onChange={() => setP({ ...p, delivery: 'email' })} /> Email</label>
               <label className="tick"><input type="radio" name="dl" checked={p.delivery === 'post'} onChange={() => setP({ ...p, delivery: 'post' })} /> Post</label>
             </div>
-            <span className="note">We’ll use the email or address you gave when you registered. If they’ve changed, say below.</span></div>
+          </div>
+          {(() => {
+            const onFile = p.delivery === 'email' ? hasEmail : hasAddress;
+            return (
+              <div className="f"><label className="l" htmlFor="pt">{p.delivery === 'email' ? 'Email address' : 'Postal address'} {onFile && <span className="note">(only if it’s changed since you registered)</span>}</label>
+                {p.delivery === 'email'
+                  ? <input id="pt" type="email" autoComplete="email" value={p.sendTo} onChange={(e) => setP({ ...p, sendTo: e.target.value })} />
+                  : <textarea id="pt" autoComplete="street-address" value={p.sendTo} onChange={(e) => setP({ ...p, sendTo: e.target.value })} style={{ minHeight: 70 }} />}</div>
+            );
+          })()}
           <div className="f"><label className="l" htmlFor="pn">Anything else? <span className="note">(optional)</span></label><input id="pn" type="text" value={p.note} onChange={(e) => setP({ ...p, note: e.target.value })} /></div>
         </>
       )}

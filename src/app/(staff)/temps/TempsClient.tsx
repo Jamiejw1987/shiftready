@@ -22,6 +22,7 @@ const TEMPLATES = [
   ['Shifts coming up this week', "Hi {first}, we've got lots of shifts coming up this week near you. Keep an eye on your texts and accept fast to secure a place. - Staff Selection"],
   ['Urgent cover needed', "Hi {first}, we urgently need cover for tomorrow. Keep an eye on your texts for the shift offer. - Staff Selection"],
   ['PPE reminder', 'Hi {first}, quick reminder to bring safety boots and hi-vis to every shift, or you may be sent home unpaid. - Staff Selection'],
+  ['Holiday and P45 link', "Hi {first}, you can now request holiday or your P45 from your phone. Keep this link: {link} - Staff Selection"],
   ['Write my own', ''],
 ];
 
@@ -141,7 +142,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
   const [bulkMsg, setBulkMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const recipients = temps.filter((t) => sel.has(t.id) && t.status === 'active');
   const skipped = sel.size - recipients.length;
-  const seg = segmentInfo(plainText(body.replace(/\{first\}/g, 'Christopher')));
+  const seg = segmentInfo(plainText(body.replace(/\{first\}/g, 'Christopher').replace(/\{link\}/g, 'https://shiftready-tan.vercel.app/me/00000000-0000-0000-0000-000000000000')));
   function sendBulk() {
     start(async () => {
       const r = await sendBulkText(recipients.map((t) => t.id), body);
@@ -260,7 +261,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
             <h3 style={{ margin: 0 }}>Bulk text</h3>
             <div className="f"><label className="l" htmlFor="tpl">Template</label>
               <select id="tpl" onChange={(e) => setBody(TEMPLATES[+e.target.value][1])}>{TEMPLATES.map(([l], i) => <option key={l} value={i}>{l}</option>)}</select></div>
-            <div className="f"><label className="l" htmlFor="msgBody">Message <span className="note">{'{first}'} is replaced with each temp’s first name</span></label>
+            <div className="f"><label className="l" htmlFor="msgBody">Message <span className="note">{'{first}'} becomes each temp’s first name, {'{link}'} their own holiday/P45 link</span></label>
               <textarea id="msgBody" value={body} onChange={(e) => setBody(e.target.value)} style={{ minHeight: 110 }} />
               <span className="counter">{seg.chars} characters · {seg.segments} text{seg.segments > 1 ? 's' : ''} per person{seg.unicode ? ' · contains special characters or emoji, which make texts shorter and cost more' : ''}</span></div>
             <p className="note" style={{ margin: 0 }}>Goes to <b>{recipients.length}</b> active temp{recipients.length === 1 ? '' : 's'} (about {recipients.length * seg.segments} texts).

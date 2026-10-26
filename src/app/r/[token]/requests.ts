@@ -11,8 +11,9 @@ const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/L
 async function tempFor(token: string) {
   if (!UUID.test(token)) return null;
   const db = createAdminClient();
-  const { data: t } = await db.from('temps').select('id,first_name,last_name,status,registered_at').eq('reg_token', token).maybeSingle();
-  if (!t?.registered_at || t.status === 'invited' || t.status === 'review') return null;
+  const { data: t } = await db.from('temps').select('id,first_name,last_name,status').eq('reg_token', token).maybeSingle();
+  // Anyone working with us (or who has worked with us) can ask; candidates still registering can't.
+  if (!t || t.status === 'invited' || t.status === 'review') return null;
   return { db, t };
 }
 
@@ -35,10 +36,11 @@ export async function requestHoliday(token: string, r: { start: string; end: str
   await db.from('audit_log').insert({ actor: null, action: 'request.holiday', detail: `${t.first_name} ${t.last_name} requested ${days} day${days === 1 ? '' : 's'} holiday, ${holidayRange(r.start, r.end)}` });
   await alertPayroll(db, `ShiftReady: ${t.first_name} ${t.last_name} has requested holiday, ${holidayRange(r.start, r.end)} (${days} day${days === 1 ? '' : 's'}). Open Requests to approve or decline.`);
   revalidatePath(`/r/${token}`);
+  revalidatePath(`/me/${token}`);
   return { ok: true };
 }
 
-export async function requestP45(token: string, r: { lastDay: string; delivery: 'email' | 'post'; note: string }) {
+export async function requestP45(token: string, r: { lastDay: string; delivery: 'email' | 'post'; sendTo: string; note: string }) {
   const o = await tempFor(token);
   if (!o) return { ok: false, error: 'This link can’t be used for requests. Please call the office.' };
   const { db, t } = o;
@@ -46,10 +48,18 @@ export async function requestP45(token: string, r: { lastDay: string; delivery: 
   if (r.delivery !== 'email' && r.delivery !== 'post') return { ok: false, error: 'Choose email or post.' };
   const { count } = await db.from('temp_requests').select('id', { count: 'exact', head: true }).eq('temp_id', t.id).eq('kind', 'p45').eq('status', 'pending');
   if (count) return { ok: false, error: 'You’ve already asked for your P45. We’ll text you when it’s sent.' };
+  const sendTo = (r.sendTo || '').replace(/\s+/g, ' ').trim().slice(0, 300) || null;
+  if (!sendTo) {
+    const { data: p } = await db.from('temp_profiles').select('email,address1').eq('temp_id', t.id).maybeSingle();
+    if (r.delivery === 'email' && !p?.email) return { ok: false, error: 'Enter the email address to send it to.' };
+    if (r.delivery === 'post' && !p?.address1) return { ok: false, error: 'Enter the address to post it to.' };
+  }
+  if (sendTo && r.delivery === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(sendTo)) return { ok: false, error: 'That email address doesn’t look right.' };
   const note = r.note.replace(/\s+/g, ' ').trim().slice(0, 500) || null;
-  await db.from('temp_requests').insert({ temp_id: t.id, kind: 'p45', last_day: r.lastDay, delivery: r.delivery, note });
+  await db.from('temp_requests').insert({ temp_id: t.id, kind: 'p45', last_day: r.lastDay, delivery: r.delivery, send_to: sendTo, note });
   await db.from('audit_log').insert({ actor: null, action: 'request.p45', detail: `${t.first_name} ${t.last_name} requested their P45 (last day ${r.lastDay}, by ${r.delivery})` });
   await alertPayroll(db, `ShiftReady: ${t.first_name} ${t.last_name} has requested their P45 (by ${r.delivery}). Open Requests to deal with it.`);
   revalidatePath(`/r/${token}`);
+  revalidatePath(`/me/${token}`);
   return { ok: true };
 }
