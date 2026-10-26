@@ -130,9 +130,12 @@ export async function submitRegistration(token: string, r: RegData, uploads: { k
   await db.from('temps').update(update).eq('id', t.id);
   await db.from('audit_log').insert({ actor: null, action: 'temp.registered', detail: `${first} ${last} completed their registration${needsAdmin ? ' (needs an admin to review)' : ''}` });
 
-  if (t.added_by) {
-    const { data: c } = await db.from('profiles').select('mobile').eq('id', t.added_by).maybeSingle();
-    if (c?.mobile) await sendSms({ db, to: c.mobile, kind: 'system', body: `ShiftReady: ${first} ${last} has registered and is ready for you to check.` });
+  // Tell whoever sent the registration link (the latest one, if it was resent), or else who added them.
+  const { data: sent } = await db.from('messages').select('sent_by').eq('temp_id', t.id).eq('kind', 'registration').not('sent_by', 'is', null).order('created_at', { ascending: false }).limit(1);
+  const notify = sent?.[0]?.sent_by ?? t.added_by;
+  if (notify) {
+    const { data: c } = await db.from('profiles').select('mobile').eq('id', notify).maybeSingle();
+    if (c?.mobile) await sendSms({ db, to: c.mobile, kind: 'system', body: `ShiftReady: ${first} ${last} has finished their registration and is ready for you to check under Sign-ups.` });
   }
   revalidatePath(`/r/${token}`);
   return { ok: true };

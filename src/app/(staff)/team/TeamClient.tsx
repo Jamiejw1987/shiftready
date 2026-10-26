@@ -74,7 +74,7 @@ export function TeamClient({ members, meId }: { members: Member[]; meId: string 
         <div className="form">
           <div className="f"><label className="l" htmlFor="iName">Full name</label><input id="iName" type="text" value={inv.name} onChange={(e) => setInv({ ...inv, name: e.target.value })} /></div>
           <div className="f"><label className="l" htmlFor="iEmail">Work email</label><input id="iEmail" type="email" value={inv.email} onChange={(e) => setInv({ ...inv, email: e.target.value })} /></div>
-          <div className="f"><label className="l" htmlFor="iMob">Mobile for accept alerts (optional)</label><input id="iMob" type="tel" placeholder="07…" value={inv.mobile} onChange={(e) => setInv({ ...inv, mobile: e.target.value })} /></div>
+          <div className="f"><label className="l" htmlFor="iMob">Mobile for alerts: shift accepted, registration finished (optional)</label><input id="iMob" type="tel" placeholder="07…" value={inv.mobile} onChange={(e) => setInv({ ...inv, mobile: e.target.value })} /></div>
           <div className="f"><label className="l" htmlFor="iRole">Role</label>
             <select id="iRole" value={inv.role} onChange={(e) => setInv({ ...inv, role: e.target.value as Member['role'] })}><option value="consultant">Consultant</option><option value="admin">Admin</option></select></div>
         </div>
