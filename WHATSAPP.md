@@ -37,17 +37,18 @@ Hi {{1}}, welcome to Staff Selection UK. You've been added to our ShiftReady lis
 Buttons (title → id): `Yes, send me shifts` → `OPTIN` · `No thanks` → `OPTOUT`
 Sample for {{1}}: `Dan`
 
-### `shiftready_offer` (type: Quick reply)
+### `shiftready_offer2` (type: Quick reply)
 Body:
 ```
 Hi {{1}}, new shift from Staff Selection UK:
-{{2}}
-{{3}}
-{{5}}
+Client: {{2}}
+When: {{3}}
+Where: {{5}}
 Pay: £{{4}}/hr
 Duties: {{6}}
 You'll need: {{7}}
-Tapping Accept confirms you have everything listed. Full details: {{8}}
+Full details: {{8}}
+Tapping Accept confirms you have everything listed.
 ```
 Buttons (title → id): `Accept` → `ACCEPT` · `Decline` → `DECLINE`
 Samples: {{1}} `Dan` · {{2}} `Aire Valley Foods` · {{3}} `Wed 28 Oct 06:00-14:00` · {{4}} `12.71` · {{5}} `Unit 4, Euroway Estate, BD4 6SE` · {{6}} `Picking and packing` · {{7}} `safety boots, hi-vis vest` · {{8}} `https://shiftready-tan.vercel.app/s/example`
@@ -62,11 +63,12 @@ Samples: `Dan` · `Aire Valley Foods` · `06:00-14:00` · `Unit 4, Euroway Estat
 ### `shiftready_promoted` (type: Text)
 Body:
 ```
-Hi {{1}}, good news: a place has come up and you've been moved from standby onto {{2}}, {{3}}. Details: {{4}}
+Hi {{1}}, good news: a place has come up and you've been moved from standby onto {{2}}, {{3}}. Details: {{4}} See you there!
 ```
 Samples: `Dan` · `Aire Valley Foods` · `Wed 28 Oct 06:00-14:00` · `https://shiftready-tan.vercel.app/s/example`
 
 The `{{numbers}}` must stay exactly as shown: ShiftReady fills them in that order.
+WhatsApp rejects a template that starts or ends with a `{{number}}`, so always keep some words after the last one.
 
 ## 3. Switch it on (Vercel)
 
