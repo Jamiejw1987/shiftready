@@ -5,6 +5,7 @@ export function toE164(input: string): string | null {
   if (s.startsWith('00')) s = '+' + s.slice(2);
   if (s.startsWith('+44')) s = '0' + s.slice(3);
   else if (s.startsWith('44') && s.length === 12) s = '0' + s.slice(2);
+  else if (/^7\d{9}$/.test(s)) s = '0' + s; // Excel drops the leading 0
   if (!/^07\d{9}$/.test(s)) return null;
   return '+44' + s.slice(1);
 }
