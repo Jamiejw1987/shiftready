@@ -115,12 +115,12 @@ export async function resendWelcome(id: string): Promise<Result> {
   return r.ok ? { ok: true, message: 'Welcome text resent.' } : { ok: false, error: `Text failed: ${r.error}` };
 }
 
-/** GDPR: permanently remove a temp's record (admins only). Their messages stay as an anonymous log. */
+/** GDPR: permanently remove a temp's record (admins only). Their texts stay as an anonymous count, with numbers and wording removed. */
 export async function deleteTemp(id: string): Promise<Result> {
   const { supabase, profile } = await requireStaff({ admin: true });
   const { data: t } = await supabase.from('temps').select('first_name,last_name').eq('id', id).single();
   if (!t) return { ok: false, error: 'Temp not found.' };
-  await supabase.from('messages').update({ to_number: null, from_number: null }).eq('temp_id', id);
+  await supabase.from('messages').update({ to_number: null, from_number: null, body: '[removed: temp deleted]' }).eq('temp_id', id);
   const { error } = await supabase.from('temps').delete().eq('id', id);
   if (error) return { ok: false, error: 'Couldn’t delete this temp.' };
   await audit(supabase, profile.id, 'temp.deleted', `Deleted ${t.first_name} ${t.last_name} and their personal data`);
