@@ -5,6 +5,7 @@ import { shiftWhen, shiftHours } from '@/lib/format';
 import { displayMobile } from '@/lib/phone';
 import { BoardActions, AutoRefresh } from './BoardActions';
 import { SendMore } from './SendMore';
+import { AddToShift } from './AddToShift';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +57,7 @@ export default async function ShiftBoard({ params, searchParams }: { params: { i
                 {declined.length ? declined.map((o) => <div key={o.id} className="slot"><span>{name(o)}</span>{o.decline_reason && <span className="pill mute">{o.decline_reason}</span>}</div>) : <div className="slot empty">None</div>}</div>
             </div>}
         {!cancelled && confirmed.length < s.heads && s.shift_date >= new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' }) && <SendMore id={s.id} radius={Number(s.radius_miles)} />}
+        {!cancelled && confirmed.length < s.heads && <AddToShift id={s.id} />}
         {!cancelled && <div className="bar"><span className="note">Duties: {s.duties.join('; ') || 'none listed'}{s.ppe.length ? ` · Must have: ${s.ppe.join(', ')}` : ''}</span><BoardActions kind="cancel" id={s.id} /></div>}
       </section>
 

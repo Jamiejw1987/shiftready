@@ -5,7 +5,8 @@ import { requireStaff, audit } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { geocodePostcode, looksLikePostcode, milesBetween, normalisePostcode } from '@/lib/geo';
 import { sendMany, sendToTemp } from '@/lib/sms';
-import { offerText, offerWa, promotedText, promotedWa, noShowText } from '@/lib/texts';
+import { offerText, offerWa, promotedText, promotedWa, noShowText, replyAccepted } from '@/lib/texts';
+import { displayMobile } from '@/lib/phone';
 import { shiftWhen, JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
 import { bookingsNear, overlaps } from '@/lib/clash';
 
@@ -230,4 +231,51 @@ export async function sendToMore(shiftId: string, radius: number) {
   await audit(supabase, profile.id, 'shift.sent_more', `Sent ${s.client} shift (${shiftWhen(s)}) to ${res.sent} more temps${res.failed ? `, ${res.failed} failed` : ''}${radius > Number(s.radius_miles) ? `, radius now ${radius} mi` : ''}`);
   revalidatePath(`/shifts/${s.id}`);
   return { ok: true, message: `Sent to ${res.sent} more temp${res.sent === 1 ? '' : 's'}${res.failed ? ` (${res.failed} failed)` : ''}${busy ? `. ${busy} already booked at that time were skipped` : ''}.` };
+}
+
+/** Finds active temps by name or mobile to book onto a shift by hand. */
+export async function findTempsForShift(shiftId: string, q: string) {
+  const { supabase } = await requireStaff();
+  const query = q.trim();
+  if (query.length < 2) return [];
+  const digits = query.replace(/\D/g, '');
+  const { data: temps } = await supabase.from('temps').select('id,first_name,last_name,mobile,postcode,status').in('status', ['active', 'hold', 'pending']).limit(2000);
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const hits = (temps ?? []).filter((t) => {
+    const name = `${t.first_name} ${t.last_name}`.toLowerCase();
+    const mob = displayMobile(t.mobile).replace(/\D/g, '');
+    return (digits.length >= 4 && mob.includes(digits.replace(/^44/, '0'))) || (words.length && words.every((w) => name.includes(w)));
+  }).slice(0, 8);
+  const { data: s } = await supabase.from('shifts').select('id,shift_date,start_time,end_time').eq('id', shiftId).maybeSingle();
+  const { data: mine } = await supabase.from('offers').select('temp_id,status').eq('shift_id', shiftId).in('temp_id', hits.map((h) => h.id));
+  const booked = s ? await bookingsNear(supabase, hits.map((h) => h.id), s.shift_date) : new Map();
+  return hits.map((t) => ({
+    id: t.id, name: `${t.first_name} ${t.last_name}`, mobile: displayMobile(t.mobile), postcode: t.postcode, status: t.status,
+    onShift: (mine ?? []).some((o) => o.temp_id === t.id && o.status === 'accepted'),
+    clash: s ? (booked.get(t.id) ?? []).some((b: { id: string }) => b.id !== s.id && overlaps(b as never, s)) : false,
+  }));
+}
+
+/** Books a temp onto a shift by hand, e.g. they rang or texted the office to confirm. */
+export async function addToShift(shiftId: string, tempId: string, textThem: boolean) {
+  const { supabase, profile } = await requireStaff();
+  const { data: s } = await supabase.from('shifts').select('*').eq('id', shiftId).maybeSingle();
+  const { data: t } = await supabase.from('temps').select('id,first_name,last_name,mobile,status,registered_at,bank_on_file,reg_token').eq('id', tempId).maybeSingle();
+  if (!s || !t) return { ok: false, error: 'Not found. Refresh the page.' };
+  if (s.status === 'cancelled') return { ok: false, error: 'This shift is cancelled.' };
+  if (t.status !== 'active') return { ok: false, error: `${t.first_name} isn’t active (${t.status === 'hold' ? 'on hold' : 'hasn’t opted in yet'}), so can’t be booked.` };
+  const { count } = await supabase.from('offers').select('id', { count: 'exact', head: true }).eq('shift_id', s.id).eq('status', 'accepted');
+  if ((count ?? 0) >= s.heads) return { ok: false, error: 'This shift is already full. Take someone off first, or increase the heads.' };
+  const clash = (await bookingsNear(supabase, [t.id], s.shift_date)).get(t.id)?.find((b) => b.id !== s.id && overlaps(b, s));
+  if (clash) return { ok: false, error: `${t.first_name} is already booked on ${clash.client} at that time.` };
+  const now = new Date().toISOString();
+  const { data: o, error } = await supabase.from('offers')
+    .upsert({ shift_id: s.id, temp_id: t.id, status: 'accepted', responded_at: now, standby_at: null, decline_reason: null }, { onConflict: 'shift_id,temp_id' })
+    .select('id').single();
+  if (error || !o) return { ok: false, error: 'Couldn’t book them on. Try again.' };
+  if ((count ?? 0) + 1 >= s.heads) await supabase.from('shifts').update({ status: 'filled' }).eq('id', s.id);
+  if (textThem) await sendToTemp({ db: supabase, temp: t, kind: 'system', offerId: o.id, sentBy: profile.id, body: replyAccepted(s.client, shiftWhen(s), `${s.site}, ${s.site_postcode}`, t.registered_at && !t.bank_on_file ? t.reg_token : null) });
+  await audit(supabase, profile.id, 'shift.added_manually', `Booked ${t.first_name} ${t.last_name} onto ${s.client} (${shiftWhen(s)}) by hand${textThem ? ' and texted them' : ''}`);
+  revalidatePath(`/shifts/${s.id}`);
+  return { ok: true, message: `${t.first_name} is booked on${textThem ? ' and has been texted' : ''}.` };
 }
