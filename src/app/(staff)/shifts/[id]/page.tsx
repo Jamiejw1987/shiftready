@@ -6,6 +6,7 @@ import { displayMobile } from '@/lib/phone';
 import { BoardActions, AutoRefresh } from './BoardActions';
 import { SendMore } from './SendMore';
 import { AddToShift } from './AddToShift';
+import { EditShift } from './EditShift';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,7 +59,7 @@ export default async function ShiftBoard({ params, searchParams }: { params: { i
             </div>}
         {!cancelled && confirmed.length < s.heads && s.shift_date >= new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' }) && <SendMore id={s.id} radius={Number(s.radius_miles)} />}
         {!cancelled && confirmed.length < s.heads && <AddToShift id={s.id} />}
-        {!cancelled && <div className="bar"><span className="note">Duties: {s.duties.join('; ') || 'none listed'}{s.ppe.length ? ` · Must have: ${s.ppe.join(', ')}` : ''}</span><BoardActions kind="cancel" id={s.id} /></div>}
+        {!cancelled && <div className="bar"><span className="note">Duties: {s.duties.join('; ') || 'none listed'}{s.ppe.length ? ` · Must have: ${s.ppe.join(', ')}` : ''}</span><span className="btnrow"><EditShift id={s.id} heads={s.heads} pay={Number(s.pay_rate)} start={s.start_time} end={s.end_time} duties={s.duties ?? []} ppe={s.ppe ?? []} booked={confirmed.length} /><BoardActions kind="cancel" id={s.id} /></span></div>}
       </section>
 
       <section className="panel">

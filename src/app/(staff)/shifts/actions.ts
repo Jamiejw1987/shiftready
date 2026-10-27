@@ -5,7 +5,7 @@ import { requireStaff, audit } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { geocodePostcode, looksLikePostcode, milesBetween, normalisePostcode } from '@/lib/geo';
 import { sendMany, sendToTemp } from '@/lib/sms';
-import { offerText, offerWa, promotedText, promotedWa, noShowText, replyAccepted } from '@/lib/texts';
+import { offerText, offerWa, promotedText, promotedWa, noShowText, replyAccepted, appUrl } from '@/lib/texts';
 import { displayMobile } from '@/lib/phone';
 import { shiftWhen, JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
 import { bookingsNear, overlaps } from '@/lib/clash';
@@ -278,4 +278,71 @@ export async function addToShift(shiftId: string, tempId: string, textThem: bool
   await audit(supabase, profile.id, 'shift.added_manually', `Booked ${t.first_name} ${t.last_name} onto ${s.client} (${shiftWhen(s)}) by hand${textThem ? ' and texted them' : ''}`);
   revalidatePath(`/shifts/${s.id}`);
   return { ok: true, message: `${t.first_name} is booked on${textThem ? ' and has been texted' : ''}.` };
+}
+
+export type ShiftEdit = { heads: number; pay: number; start: string; end: string; duties: string; ppe: string[]; notify: boolean };
+
+/**
+ * Edits an existing shift: number of people needed, pay, times, duties and PPE.
+ * Extra places are offered to standby first (in order, if they're free); booked temps can be texted about changes.
+ */
+export async function updateShift(shiftId: string, e: ShiftEdit) {
+  const { supabase, profile } = await requireStaff();
+  const { data: s } = await supabase.from('shifts').select('*').eq('id', shiftId).maybeSingle();
+  if (!s) return { ok: false, error: 'Shift not found.' };
+  if (s.status === 'cancelled') return { ok: false, error: 'This shift is cancelled.' };
+  const heads = Math.round(e.heads), pay = Math.round(e.pay * 100) / 100;
+  if (!(heads >= 1 && heads <= 200)) return { ok: false, error: 'People needed must be 1 to 200.' };
+  if (!(pay > 0)) return { ok: false, error: 'Enter the pay rate.' };
+  if (!/^\d{2}:\d{2}$/.test(e.start) || !/^\d{2}:\d{2}$/.test(e.end)) return { ok: false, error: 'Check the start and finish times.' };
+  const { data: offers } = await supabase.from('offers').select('id,temp_id,status,token,standby_at,temps(first_name,mobile,status)').eq('shift_id', s.id);
+  const booked = (offers ?? []).filter((o) => o.status === 'accepted');
+  if (heads < booked.length) return { ok: false, error: `${booked.length} people are already booked. Take someone off first, or keep it at ${booked.length} or more.` };
+
+  const ppe = e.ppe.filter((x) => (PPE_OPTIONS as readonly string[]).includes(x));
+  const duties = e.duties.split('\n').map((x) => x.trim()).filter(Boolean);
+  const changes: string[] = [];
+  if (heads !== s.heads) changes.push(`people needed ${s.heads} → ${heads}`);
+  if (pay !== Number(s.pay_rate)) changes.push(`pay £${Number(s.pay_rate).toFixed(2)} → £${pay.toFixed(2)}`);
+  if (e.start !== s.start_time.slice(0, 5) || e.end !== s.end_time.slice(0, 5)) changes.push(`times ${s.start_time.slice(0, 5)}-${s.end_time.slice(0, 5)} → ${e.start}-${e.end}`);
+  if (JSON.stringify(duties) !== JSON.stringify(s.duties ?? [])) changes.push('duties');
+  if (JSON.stringify([...ppe].sort()) !== JSON.stringify([...(s.ppe ?? [])].sort())) changes.push('PPE');
+  if (!changes.length) return { ok: false, error: 'Nothing has changed.' };
+
+  const updated = { ...s, heads, pay_rate: pay, start_time: e.start, end_time: e.end, duties, ppe };
+  await supabase.from('shifts').update({ heads, pay_rate: pay, start_time: e.start, end_time: e.end, duties, ppe, status: booked.length >= heads ? 'filled' : 'open' }).eq('id', s.id);
+
+  // Fill any new places from standby, in the order people joined it, skipping anyone now booked elsewhere at that time.
+  let promoted = 0;
+  const free = heads - booked.length;
+  if (free > 0) {
+    const standby = (offers ?? []).filter((o) => o.status === 'standby').sort((a, b) => (a.standby_at ?? '').localeCompare(b.standby_at ?? ''));
+    const busy = await bookingsNear(supabase, standby.map((o) => o.temp_id), updated.shift_date);
+    for (const o of standby) {
+      if (promoted >= free) break;
+      if ((busy.get(o.temp_id) ?? []).some((b) => b.id !== s.id && overlaps(b, updated))) continue;
+      await supabase.from('offers').update({ status: 'accepted', responded_at: new Date().toISOString(), standby_at: null }).eq('id', o.id);
+      const t = o.temps as unknown as { first_name: string; mobile: string };
+      const info = { first: t.first_name, client: s.client, when: shiftWhen(updated), token: o.token };
+      await sendToTemp({ db: supabase, temp: { id: o.temp_id, mobile: t.mobile }, kind: 'promoted', offerId: o.id, sentBy: profile.id, body: promotedText(info), wa: { template: 'promoted', vars: promotedWa(info) } });
+      promoted++;
+    }
+    if (booked.length + promoted >= heads) await supabase.from('shifts').update({ status: 'filled' }).eq('id', s.id);
+  }
+
+  // Tell booked temps about changes that affect them (not just the number of people needed).
+  let told = 0;
+  const affecting = changes.filter((c) => !c.startsWith('people needed'));
+  if (e.notify && affecting.length) {
+    const res = await sendMany(booked, (o) => {
+      const t = o.temps as unknown as { first_name: string; mobile: string; status: string };
+      return sendToTemp({ db: supabase, temp: { id: o.temp_id, mobile: t.mobile }, kind: 'system', offerId: o.id, sentBy: profile.id,
+        body: `Hi ${t.first_name}, your ${s.client} shift has changed. It's now ${shiftWhen(updated)}, £${pay.toFixed(2)}/hr${ppe.length ? `. Bring: ${ppe.join(', ').toLowerCase()}` : ''}. Details: ${appUrl()}/s/${o.token} - Staff Selection` });
+    });
+    told = res.sent;
+  }
+  await audit(supabase, profile.id, 'shift.edited', `Edited ${s.client} shift (${shiftWhen(updated)}): ${changes.join(', ')}${promoted ? `. ${promoted} moved up from standby` : ''}${told ? `. ${told} booked temps texted` : ''}`);
+  revalidatePath(`/shifts/${s.id}`);
+  revalidatePath('/shifts');
+  return { ok: true, message: `Saved.${promoted ? ` ${promoted} moved up from standby and texted.` : ''}${told ? ` ${told} booked temp${told === 1 ? '' : 's'} texted about the change.` : ''}${free - promoted > 0 ? ` ${free - promoted} place${free - promoted === 1 ? '' : 's'} still to fill: use Send to more temps or Add someone by hand.` : ''}` };
 }
