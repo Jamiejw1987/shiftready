@@ -6,13 +6,14 @@ import { shiftHours } from '@/lib/format';
 import { seriesWhen, dayShort } from '@/lib/series';
 import { AutoRefresh } from '../../[id]/BoardActions';
 import { WeekGrid, SeriesSendMore } from './WeekGrid';
+import { WeekActions } from './WeekActions';
 
 export const dynamic = 'force-dynamic';
 
 type Offer = { id: string; shift_id: string; temp_id: string; status: string; available: boolean | null; distance_miles: number | null; temps: { first_name: string; last_name: string; mobile: string } | null };
 
 export default async function SeriesBoard({ params, searchParams }: { params: { id: string }; searchParams: { sent?: string; failed?: string } }) {
-  const { supabase } = await requireStaff();
+  const { supabase, profile } = await requireStaff();
   const { data: days } = await supabase.from('shifts').select('*').eq('series_id', params.id).order('shift_date');
   if (!days?.length) notFound();
   const { data: raw } = await supabase.from('offers').select('id,shift_id,temp_id,status,available,distance_miles,temps(first_name,last_name,mobile)').in('shift_id', days.map((d) => d.id));
@@ -53,6 +54,10 @@ export default async function SeriesBoard({ params, searchParams }: { params: { 
         <p className="note">{repliedTemps.size} of {askedTemps.size} temps have replied{waiting ? `, ${waiting} still to reply` : ''}. Tick the days you want each person on, then book them: each person gets one text listing their days.</p>
         <WeekGrid seriesId={params.id} cols={cols} rows={rows} />
         {open && <SeriesSendMore seriesId={params.id} radius={Number(s0.radius_miles)} />}
+        <div className="bar">
+          <span className="note">{cols.every((c) => c.cancelled) ? 'This week has been cancelled.' : ''}</span>
+          <WeekActions seriesId={params.id} canCancel={cols.some((c) => !c.cancelled && !c.past)} admin={profile.role === 'admin'} />
+        </div>
       </section>
       <section className="panel">
         <h2>Each day</h2>

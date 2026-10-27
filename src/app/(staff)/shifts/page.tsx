@@ -4,6 +4,7 @@ import { shiftWhen } from '@/lib/format';
 import { ShiftForm } from './ShiftForm';
 import { DeleteShift } from './DeleteShift';
 import { seriesWhen } from '@/lib/series';
+import { WeekActions } from './series/[id]/WeekActions';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +41,7 @@ export default async function ShiftsPage() {
         <td className="num" data-l="Standby">-</td>
         <td data-l="Sent by">{name(d0.sent_by)}</td>
         <td><span className={`pill ${booked >= heads && heads ? 'ok' : live.length ? 'warn' : 'bad'}`}>{!live.length ? 'Cancelled' : booked >= heads ? 'Filled' : `${heads - booked} places to fill`}</span></td>
-        {admin && <td></td>}
+        {admin && <td>{!live.length || booked === 0 ? <WeekActions seriesId={w.id} canCancel={false} admin redirectAfterDelete={false} /> : null}</td>}
       </tr>
     );
   });

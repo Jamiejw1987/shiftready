@@ -489,3 +489,41 @@ export async function seriesBook(seriesId: string, offerIds: string[]) {
     message: `${people.length} ${people.length === 1 ? 'person' : 'people'} booked and texted${res.failed ? ` (${res.failed} texts failed)` : ''}.${skipped.length ? ` Not booked: ${[...new Set(skipped)].join('; ')}.` : ''}`,
   };
 }
+
+/** Cancels every remaining day of a weekly shift. Booked temps get one text listing the days they no longer need to attend. */
+export async function seriesCancel(seriesId: string) {
+  const { supabase, profile } = await requireStaff();
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+  const { data: days } = await supabase.from('shifts').select('*').eq('series_id', seriesId).order('shift_date');
+  const live = (days ?? []).filter((d) => d.status !== 'cancelled' && d.shift_date >= today);
+  if (!live.length) return { ok: false, error: 'There are no upcoming days left to cancel.' };
+  await supabase.from('shifts').update({ status: 'cancelled' }).in('id', live.map((d) => d.id));
+  const { data: booked } = await supabase.from('offers').select('temp_id,shift_id,temps(first_name,mobile,status)').in('shift_id', live.map((d) => d.id)).in('status', ['accepted', 'standby']);
+  const byTemp = new Map<string, { t: { first_name: string; mobile: string; status: string }; days: string[] }>();
+  for (const b of booked ?? []) {
+    const cur = byTemp.get(b.temp_id) ?? { t: b.temps as unknown as { first_name: string; mobile: string; status: string }, days: [] };
+    cur.days.push(b.shift_id);
+    byTemp.set(b.temp_id, cur);
+  }
+  const res = await sendMany([...byTemp.entries()].filter(([, v]) => v.t.status !== 'out'), ([tempId, v]) =>
+    sendToTemp({ db: supabase, temp: { id: tempId, mobile: v.t.mobile }, kind: 'system', sentBy: profile.id,
+      body: `Hi ${v.t.first_name}, sorry, the ${live[0].client} shifts on ${seriesWhen(live.filter((d) => v.days.includes(d.id)))} have been cancelled. You don't need to attend. - Staff Selection` }));
+  await audit(supabase, profile.id, 'shift.series_cancelled', `Cancelled ${live[0].client} weekly shift (${seriesWhen(live)}). ${res.sent} temps texted`);
+  revalidatePath(`/shifts/series/${seriesId}`);
+  revalidatePath('/shifts');
+  return { ok: true, message: `Cancelled. ${res.sent} temp${res.sent === 1 ? '' : 's'} texted.` };
+}
+
+/** Admins can delete a weekly shift nobody worked (all days cancelled, or no one booked), e.g. a test. */
+export async function seriesDelete(seriesId: string) {
+  const { supabase, profile } = await requireStaff({ admin: true });
+  const { data: days } = await supabase.from('shifts').select('id,client,shift_date,start_time,end_time,status,offers(status)').eq('series_id', seriesId);
+  if (!days?.length) return { ok: false, error: 'Not found.' };
+  const worked = days.some((d) => d.status !== 'cancelled' && ((d.offers ?? []) as { status: string }[]).some((o) => o.status === 'accepted' || o.status === 'noshow'));
+  if (worked) return { ok: false, error: 'People are booked on this week, so it’s kept as a record. Cancel the week first if it didn’t go ahead.' };
+  const { error } = await createAdminClient().from('shifts').delete().eq('series_id', seriesId);
+  if (error) return { ok: false, error: 'Couldn’t delete. Try again.' };
+  await audit(supabase, profile.id, 'shift.series_deleted', `Deleted ${days[0].client} weekly shift (${seriesWhen(days)})`);
+  revalidatePath('/shifts');
+  return { ok: true };
+}
