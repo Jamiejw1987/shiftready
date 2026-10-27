@@ -35,12 +35,14 @@ export function OfferPanel(p: Props) {
       const r = await respond(p.token, action, { ppeTicked: ticked.filter(Boolean).length, reason });
       if (r.result === 'error') setErr('Something went wrong. Please try again, or call the office.');
       if (r.result === 'not_active') setErr('Your profile is on hold. Please call the office.');
+      if (r.result === 'clash') setErr('You’re already booked on another shift at this time, so you can’t take this one. Call the office if you need to swap.');
       setDeclining(false);
       router.refresh();
     });
   }
 
   if (p.shiftState === 'cancelled') return <State badge="✕" kind="mute" title="Shift cancelled" text={`Sorry, the ${s.client} shift on ${s.whenShort} was cancelled. You don't need to attend.`} />;
+  if (p.offerStatus === 'removed') return <State badge="–" kind="mute" title="Taken off this shift" text="The office has taken you off this shift, so you don’t need to attend. Call the office if you have any questions." />;
   if (p.offerStatus === 'noshow') return <State badge="!" kind="mute" title="Marked as no-show" text="Your consultant recorded you as not attending this shift. Call the office if this is wrong." />;
   if (p.offerStatus === 'accepted')
     return <State badge="✓" kind="ok" title="Shift confirmed" text={`${s.client}, ${s.when}. Arrive 10 minutes early at ${s.site}. We'll text you a reminder the day before.`}>

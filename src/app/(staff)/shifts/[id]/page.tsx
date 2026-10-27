@@ -16,7 +16,7 @@ const LABEL: Record<string, [string, string]> = {
   sent: ['mute', 'No reply yet'], accepted: ['ok', 'Accepted'], declined: ['mute', 'Declined'], standby: ['warn', 'Standby'], alerts: ['mute', 'Wants alerts'], noshow: ['bad', 'No-show'],
 };
 
-export default async function ShiftBoard({ params, searchParams }: { params: { id: string }; searchParams: { sent?: string; failed?: string } }) {
+export default async function ShiftBoard({ params, searchParams }: { params: { id: string }; searchParams: { sent?: string; failed?: string; busy?: string } }) {
   const { supabase } = await requireStaff();
   const { data: s } = await supabase.from('shifts').select('*').eq('id', params.id).maybeSingle();
   if (!s) notFound();
@@ -41,13 +41,13 @@ export default async function ShiftBoard({ params, searchParams }: { params: { i
         <p className="lede" style={{ marginBottom: 8 }}>
           {shiftWhen(s)} · {shiftHours(s).toFixed(1)} hrs · £{Number(s.pay_rate).toFixed(2)}/hr · {s.job_type} · {s.site}, {s.site_postcode} · within {Number(s.radius_miles)} mi
         </p>
-        {searchParams.sent && <p className="okmsg">Offer texted to {searchParams.sent} temps{Number(searchParams.failed) ? `. ${searchParams.failed} texts failed` : ''}. This page updates every 15 seconds.</p>}
+        {searchParams.sent && <p className="okmsg">Offer texted to {searchParams.sent} temps{Number(searchParams.failed) ? `. ${searchParams.failed} texts failed` : ''}{Number(searchParams.busy) ? `. ${searchParams.busy} already booked at that time were skipped` : ''}. This page updates every 15 seconds.</p>}
         {cancelled
           ? <p className="err">This shift was cancelled. Booked temps were texted.</p>
           : <div className="board" style={{ marginTop: 12 }}>
               <div className="col"><h3>Confirmed <span className="count">{confirmed.length}/{s.heads}</span></h3>
                 {Array.from({ length: s.heads }, (_, i) => confirmed[i]
-                  ? <div key={i} className="slot filled"><span>{name(confirmed[i])}<br /><span className="note">{confirmed[i].temps && displayMobile(confirmed[i].temps!.mobile)}</span>{confirmed[i].temps?.registered_at && !confirmed[i].temps?.bank_on_file && <><br /><span className="pill warn">No bank details</span></>}</span><BoardActions kind="noshow" id={confirmed[i].id} /></div>
+                  ? <div key={i} className="slot filled"><span>{name(confirmed[i])}<br /><span className="note">{confirmed[i].temps && displayMobile(confirmed[i].temps!.mobile)}</span>{confirmed[i].temps?.registered_at && !confirmed[i].temps?.bank_on_file && <><br /><span className="pill warn">No bank details</span></>}</span><span className="btnrow"><BoardActions kind="remove" id={confirmed[i].id} /><BoardActions kind="noshow" id={confirmed[i].id} /></span></div>
                   : <div key={i} className="slot empty">Open slot</div>)}</div>
               <div className="col"><h3>Standby <span className="count">{standby.length}</span></h3>
                 {standby.length ? standby.map((o, i) => <div key={o.id} className="slot"><span>{i + 1}. {name(o)}</span></div>) : <div className="slot empty">Nobody yet</div>}</div>

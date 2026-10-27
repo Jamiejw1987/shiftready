@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { sendSms } from './sms';
 import { shiftWhen } from './format';
+import { findClash } from './clash';
 
 export type OfferAction = 'accept' | 'decline' | 'standby' | 'alerts' | 'reset';
 const REASONS = ['Not available', 'Too far', 'Pay rate', 'Other'];
@@ -13,6 +14,14 @@ const REASONS = ['Not available', 'Too far', 'Pay rate', 'Other'];
  */
 export async function respondToOffer(db: SupabaseClient, token: string, action: OfferAction, reason?: string | null) {
   const r = REASONS.includes(reason ?? '') ? reason : null;
+  const { data: o } = await db.from('offers').select('temp_id,status,decline_reason,shifts(id,shift_date,start_time,end_time)').eq('token', token).maybeSingle();
+  // Someone the office took off a shift can't put themselves back on it.
+  if (o?.status === 'declined' && o.decline_reason === 'Removed by office' && action !== 'decline') return 'removed';
+  if (action === 'accept') {
+    // Nobody can be booked on two shifts that overlap.
+    const s = o?.shifts as unknown as { id: string; shift_date: string; start_time: string; end_time: string } | null;
+    if (o && s && o.status !== 'accepted' && (await findClash(db, o.temp_id, s))) return 'clash';
+  }
   const { data, error } = await db.rpc('respond_to_offer', { p_token: token, p_action: action, p_reason: action === 'decline' ? r : null });
   if (error) return 'error';
   const result = data as string;

@@ -13,7 +13,7 @@ export default async function OfferPage({ params }: { params: { token: string } 
   const db = createAdminClient();
   const { data: o } = await db
     .from('offers')
-    .select('id,status,distance_miles,standby_at,shift_id,temps(first_name,status,optin_token,reg_token,registered_at,bank_on_file),shifts(*)')
+    .select('id,status,decline_reason,distance_miles,standby_at,shift_id,temps(first_name,status,optin_token,reg_token,registered_at,bank_on_file),shifts(*)')
     .eq('token', params.token)
     .maybeSingle();
   if (!o) notFound();
@@ -39,7 +39,7 @@ export default async function OfferPage({ params }: { params: { token: string } 
           firstName={t.first_name}
           tempActive={t.status === 'active'}
           bankUrl={t.registered_at && !t.bank_on_file ? `/b/${t.reg_token}` : null}
-          offerStatus={o.status}
+          offerStatus={o.status === 'declined' && o.decline_reason === 'Removed by office' ? 'removed' : o.status}
           standbyPos={standbyPos}
           shiftState={s.status === 'cancelled' ? 'cancelled' : past ? 'past' : (filled ?? 0) >= s.heads ? 'full' : 'open'}
           placesLeft={Math.max(0, s.heads - (filled ?? 0))}

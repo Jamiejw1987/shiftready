@@ -5,7 +5,7 @@ import { respondToOffer, type OfferAction } from '@/lib/offerFlow';
 import { validTwilioRequest } from '@/lib/twilioSignature';
 import { shiftWhen } from '@/lib/format';
 import {
-  appUrl, OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD, REPLY_ATTENDED,
+  appUrl, OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD, REPLY_ATTENDED, replyClash,
 } from '@/lib/texts';
 
 /**
@@ -127,6 +127,8 @@ export async function POST(req: NextRequest) {
   if (result === 'accepted' && action !== 'accept') await reply(`You're booked on ${s.client} ${when}. To cancel, please call the office. - Staff Selection`);
   else if (result === 'accepted') await reply(replyAccepted(s.client, when, `${s.site}, ${s.site_postcode}`, t.registered_at && !t.bank_on_file ? t.reg_token : null));
   else if (result === 'full') await reply(replyFull(s.client, when));
+  else if (result === 'clash') await reply(replyClash(s.client, when));
+  else if (result === 'removed') await reply(`You were taken off ${s.client} ${when}. Please call the office if you have any questions. - Staff Selection`);
   else if (result === 'declined') await reply(replyDeclined(s.client, when));
   else if (result === 'standby') await reply(replyStandby(s.client, when));
   else if (result === 'not_active') await reply(REPLY_ON_HOLD);

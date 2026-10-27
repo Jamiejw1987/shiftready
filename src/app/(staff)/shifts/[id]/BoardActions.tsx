@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { noShow, cancelShift } from '../actions';
+import { noShow, cancelShift, removeFromShift } from '../actions';
 
 export function AutoRefresh({ seconds }: { seconds: number }) {
   const router = useRouter();
@@ -12,18 +12,18 @@ export function AutoRefresh({ seconds }: { seconds: number }) {
   return null;
 }
 
-export function BoardActions({ kind, id }: { kind: 'noshow' | 'cancel'; id: string }) {
+export function BoardActions({ kind, id }: { kind: 'noshow' | 'cancel' | 'remove'; id: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [confirm, setConfirm] = useState(false);
   const [err, setErr] = useState('');
-  const label = kind === 'noshow' ? 'Mark no-show' : 'Cancel shift';
-  const confirmLabel = kind === 'noshow' ? 'Confirm no-show and text them' : 'Yes, cancel and text booked temps';
+  const label = kind === 'noshow' ? 'Mark no-show' : kind === 'remove' ? 'Take off shift' : 'Cancel shift';
+  const confirmLabel = kind === 'noshow' ? 'Confirm no-show and text them' : kind === 'remove' ? 'Confirm and text them' : 'Yes, cancel and text booked temps';
 
   function run() {
     if (!confirm) return setConfirm(true);
     start(async () => {
-      const r = kind === 'noshow' ? await noShow(id) : await cancelShift(id);
+      const r = kind === 'noshow' ? await noShow(id) : kind === 'remove' ? await removeFromShift(id) : await cancelShift(id);
       if (!r.ok) setErr(r.error ?? 'Something went wrong.');
       setConfirm(false);
       router.refresh();

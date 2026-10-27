@@ -7,6 +7,7 @@ import { geocodePostcode, looksLikePostcode, milesBetween, normalisePostcode } f
 import { sendMany, sendToTemp } from '@/lib/sms';
 import { offerText, offerWa, promotedText, promotedWa, noShowText } from '@/lib/texts';
 import { shiftWhen, JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
+import { bookingsNear, overlaps } from '@/lib/clash';
 
 export type ShiftInput = {
   client: string; site: string; sitePostcode: string; date: string; start: string; end: string;
@@ -66,7 +67,11 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
     .single();
   if (error || !shift) return { ok: false, error: 'Couldn’t save the shift. Try again.' };
 
-  const temps = await matchTemps(supabase, point, input.jobType, input.radius);
+  const matched = await matchTemps(supabase, point, input.jobType, input.radius);
+  // Skip anyone already booked on a shift at the same time.
+  const booked = await bookingsNear(supabase, matched.map((t) => t.id), shift.shift_date);
+  const temps = matched.filter((t) => !(booked.get(t.id) ?? []).some((b) => overlaps(b, shift)));
+  const busy = matched.length - temps.length;
   let sent = 0, failed = 0;
   if (temps.length) {
     const { data: offers } = await supabase
@@ -81,9 +86,9 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
     });
     sent = res.sent; failed = res.failed;
   }
-  await audit(supabase, profile.id, 'shift.sent', `Sent ${shift.client} shift (${shiftWhen(shift)}, ${shift.heads} needed) to ${sent} temps${failed ? `, ${failed} texts failed` : ''}`);
+  await audit(supabase, profile.id, 'shift.sent', `Sent ${shift.client} shift (${shiftWhen(shift)}, ${shift.heads} needed) to ${sent} temps${failed ? `, ${failed} texts failed` : ''}${busy ? `. ${busy} already booked at that time were skipped` : ''}`);
   revalidatePath('/shifts');
-  redirect(`/shifts/${shift.id}?sent=${sent}&failed=${failed}`);
+  redirect(`/shifts/${shift.id}?sent=${sent}&failed=${failed}&busy=${busy}`);
 }
 
 export async function noShow(offerId: string) {
@@ -144,5 +149,39 @@ export async function deleteShift(shiftId: string) {
   if (error) return { ok: false, error: 'Couldn’t delete. Try again.' };
   await audit(supabase, profile.id, 'shift.deleted', `Deleted ${s.client} shift (${shiftWhen(s)})`);
   revalidatePath('/shifts');
+  return { ok: true };
+}
+
+/**
+ * Takes a booked temp off a shift without recording a no-show (double booking, change of plan, client request).
+ * The first person on standby who's free at that time is moved up and texted; otherwise the place reopens.
+ */
+export async function removeFromShift(offerId: string) {
+  const { supabase, profile } = await requireStaff();
+  const db = createAdminClient();
+  const { data: o } = await db.from('offers').select('id,status,shift_id,temp_id,temps(first_name,last_name,mobile,status),shifts(id,client,shift_date,start_time,end_time,status)').eq('id', offerId).maybeSingle();
+  if (!o || o.status !== 'accepted') return { ok: false, error: 'They’re not booked on this shift any more. Refresh the page.' };
+  const t = o.temps as unknown as { first_name: string; last_name: string; mobile: string; status: string };
+  const s = o.shifts as unknown as { id: string; client: string; shift_date: string; start_time: string; end_time: string; status: string };
+  await db.from('offers').update({ status: 'declined', decline_reason: 'Removed by office', standby_at: null }).eq('id', offerId);
+  let detail = `Took ${t.first_name} ${t.last_name} off ${s.client} (${shiftWhen(s)})`;
+  if (t.status !== 'out') await sendToTemp({ db, temp: { id: o.temp_id, mobile: t.mobile }, kind: 'system', offerId, sentBy: profile.id, body: `Hi ${t.first_name}, you've been taken off the ${s.client} shift on ${shiftWhen(s)}. You don't need to attend. Call the office if you have any questions. - Staff Selection` });
+
+  // Move up the first person on standby who isn't booked elsewhere at that time.
+  const { data: standby } = await db.from('offers').select('id,temp_id,token,temps(first_name,last_name,mobile)').eq('shift_id', s.id).eq('status', 'standby').order('standby_at');
+  const booked = await bookingsNear(db, (standby ?? []).map((x) => x.temp_id), s.shift_date);
+  const next = (standby ?? []).find((x) => !(booked.get(x.temp_id) ?? []).some((b) => b.id !== s.id && overlaps(b, s)));
+  if (next && s.status !== 'cancelled') {
+    await db.from('offers').update({ status: 'accepted', responded_at: new Date().toISOString(), standby_at: null }).eq('id', next.id);
+    const pt = next.temps as unknown as { first_name: string; last_name: string; mobile: string };
+    const info = { first: pt.first_name, client: s.client, when: shiftWhen(s), token: next.token };
+    await sendToTemp({ db, temp: { id: next.temp_id, mobile: pt.mobile }, kind: 'promoted', offerId: next.id, sentBy: profile.id, body: promotedText(info), wa: { template: 'promoted', vars: promotedWa(info) } });
+    detail += `. ${pt.first_name} ${pt.last_name} moved up from standby and texted`;
+  } else if (s.status === 'filled') {
+    await db.from('shifts').update({ status: 'open' }).eq('id', s.id);
+    detail += '. Place reopened';
+  }
+  await audit(supabase, profile.id, 'shift.removed', detail);
+  revalidatePath(`/shifts/${s.id}`);
   return { ok: true };
 }
