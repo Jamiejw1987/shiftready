@@ -4,7 +4,10 @@ import { requireStaff, audit } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { decrypt } from '@/lib/crypto';
 import { sendToTemp } from '@/lib/sms';
-import { regApprovedText, bankLinkText, myLinkText } from '@/lib/texts';
+import { regApprovedText, bankLinkText, myLinkText, regInviteText } from '@/lib/texts';
+import { toE164, displayMobile } from '@/lib/phone';
+import { geocodePostcode, looksLikePostcode, normalisePostcode } from '@/lib/geo';
+import { JOB_TYPES } from '@/lib/format';
 import { uploadSlots, recordUploads, DOC_KIND_LABEL, type DocKindFile } from '@/lib/storage';
 
 type Result = { ok: boolean; error?: string; message?: string };
@@ -137,4 +140,58 @@ export async function clearBank(tempId: string): Promise<Result> {
   await audit(supabase, profile.id, 'temp.bank_cleared', `Cleared ${t?.first_name} ${t?.last_name}'s bank details so they can add new ones`);
   revalidatePath(`/temps/${tempId}`);
   return { ok: true, message: 'Bank details cleared. Send them the bank link to add new ones.' };
+}
+
+/** Corrects a temp's name, mobile, postcode or job types. A new mobile gets a short text so they know it's been updated. */
+export async function updateDetails(tempId: string, d: { first: string; last: string; mobile: string; postcode: string; jobTypes: string[] }): Promise<Result> {
+  const { supabase, profile } = await requireStaff();
+  const { data: t } = await supabase.from('temps').select('*').eq('id', tempId).single();
+  if (!t) return { ok: false, error: 'Not found.' };
+  const first = d.first.trim().slice(0, 60), last = d.last.trim().slice(0, 60);
+  const mobile = toE164(d.mobile);
+  if (!first || !last) return { ok: false, error: 'Add a first name and surname.' };
+  if (!mobile) return { ok: false, error: 'Enter a UK mobile starting 07.' };
+  const jobTypes = d.jobTypes.filter((x) => (JOB_TYPES as readonly string[]).includes(x));
+  const isCandidate = t.status === 'invited';
+  if (!jobTypes.length && !isCandidate) return { ok: false, error: 'Tick at least one job type.' };
+  const update: Record<string, unknown> = { first_name: first, last_name: last, job_types: jobTypes };
+  const changes: string[] = [];
+  if (first !== t.first_name || last !== t.last_name) changes.push('name');
+  if (JSON.stringify(jobTypes) !== JSON.stringify(t.job_types)) changes.push('job types');
+
+  if (d.postcode.trim() || t.postcode) {
+    if (!looksLikePostcode(d.postcode)) return { ok: false, error: 'Enter a full postcode.' };
+    const pc = normalisePostcode(d.postcode);
+    if (pc !== t.postcode) {
+      const point = await geocodePostcode(pc);
+      if (!point) return { ok: false, error: `We couldn’t find the postcode ${pc}.` };
+      Object.assign(update, { postcode: pc, lat: point.lat, lng: point.lng });
+      changes.push('postcode');
+    }
+  }
+  const mobileChanged = mobile !== t.mobile;
+  if (mobileChanged) {
+    const { data: other } = await supabase.from('temps').select('first_name,last_name').eq('mobile', mobile).neq('id', tempId).maybeSingle();
+    if (other) return { ok: false, error: `That mobile already belongs to ${other.first_name} ${other.last_name}.` };
+    // WhatsApp has to be re-checked for the new number.
+    Object.assign(update, { mobile, wa_status: 'unknown' });
+    changes.push(`mobile ${displayMobile(t.mobile)} → ${displayMobile(mobile)}`);
+  }
+  if (!changes.length) return { ok: false, error: 'Nothing has changed.' };
+  const { error } = await supabase.from('temps').update(update).eq('id', tempId);
+  if (error) return { ok: false, error: 'Couldn’t save. Try again.' };
+
+  let texted = '';
+  if (mobileChanged && t.status !== 'out') {
+    const temp = { id: tempId, mobile };
+    const body = isCandidate
+      ? regInviteText(first, t.reg_token)
+      : `Hi ${first}, Staff Selection UK has updated your mobile number to this one. You'll get shift offers here from now on. Reply STOP to opt out. - Staff Selection`;
+    const r = await sendToTemp({ db: supabase, temp, kind: isCandidate ? 'registration' : 'system', sentBy: profile.id, body });
+    texted = r.ok ? (isCandidate ? ' Registration link sent to the new number.' : ' A text has been sent to the new number.') : ' The text to the new number failed: check it’s right.';
+  }
+  await audit(supabase, profile.id, 'temp.updated', `Updated ${first} ${last}: ${changes.join(', ')}`);
+  revalidatePath(`/temps/${tempId}`);
+  revalidatePath('/temps');
+  return { ok: true, message: `Saved.${texted}` };
 }

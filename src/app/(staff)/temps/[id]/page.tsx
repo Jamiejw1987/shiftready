@@ -5,7 +5,8 @@ import { displayMobile } from '@/lib/phone';
 import { fmtDateTime, shiftWhen } from '@/lib/format';
 import { DOC_LABEL, type DocKind } from '@/lib/docs';
 import { DOC_KIND_LABEL, type DocKindFile } from '@/lib/storage';
-import { RecordActions, RtwCheck, Uploader, Reveal, BankActions } from './TempRecord';
+import { RecordActions, RtwCheck, Uploader, Reveal, BankActions, EditDetails } from './TempRecord';
+import { JOB_TYPES } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +49,8 @@ export default async function TempRecordPage({ params }: { params: { id: string 
           {t.registered_at && (t.bank_on_file ? <span className="pill ok">Bank details on file</span> : <span className="pill warn">No bank details</span>)}
           {t.wa_status === 'yes' && <span className="pill wa">WhatsApp</span>}
         </div>
-        <p className="lede" style={{ marginBottom: 0 }}>{displayMobile(t.mobile)}{t.postcode ? ` · ${t.postcode}` : ''} · added by {name(t.added_by)} · {day(t.created_at)}</p>
+        <p className="lede" style={{ marginBottom: 0 }}>{displayMobile(t.mobile)}{t.postcode ? ` · ${t.postcode}` : ''}{t.added_by ? ` · added by ${name(t.added_by)}` : ""} · {day(t.created_at)}</p>
+        <div style={{ marginTop: 12 }}><EditDetails id={t.id} first={t.first_name} last={t.last_name} mobile={displayMobile(t.mobile)} postcode={t.postcode ?? ''} jobTypes={t.job_types ?? []} allTypes={JOB_TYPES} /></div>
         <RecordActions
           id={t.id}
           firstName={t.first_name}

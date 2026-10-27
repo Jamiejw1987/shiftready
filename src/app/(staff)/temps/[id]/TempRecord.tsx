@@ -3,7 +3,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { prepareFile, uploadToSlot, OK_TYPES } from '@/lib/upload';
 import { resendRegistration } from '../../registrations/actions';
-import { sendMyLink, approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, staffUploadSlot, clearBank } from './actions';
+import { updateDetails, sendMyLink, approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, staffUploadSlot, clearBank } from './actions';
 
 type Msg = { ok: boolean; text: string } | null;
 const Note = ({ m }: { m: Msg }) => (m ? <p className={m.ok ? 'okmsg' : 'err'} style={{ marginTop: 10 }}>{m.text}</p> : null);
@@ -161,5 +161,45 @@ export function BankActions({ id, onFile, admin }: { id: string; onFile: boolean
       </div>
       <Note m={msg} />
     </>
+  );
+}
+
+export function EditDetails({ id, first, last, mobile, postcode, jobTypes, allTypes }: { id: string; first: string; last: string; mobile: string; postcode: string; jobTypes: string[]; allTypes: readonly string[] }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [open, setOpen] = useState(false);
+  const init = () => ({ first, last: last === '-' ? '' : last, mobile, postcode, jobTypes });
+  const [f, setF] = useState(init);
+  const [msg, setMsg] = useState<Msg>(null);
+  if (!open) return (
+    <>
+      <button className="btn ghost" onClick={() => { setF(init()); setOpen(true); setMsg(null); }}>Edit details</button>
+      <Note m={msg} />
+    </>
+  );
+  return (
+    <div className="compose" style={{ marginTop: 12, marginBottom: 0 }}>
+      <h3 style={{ margin: 0 }}>Edit details</h3>
+      <div className="form">
+        <div className="f"><label className="l" htmlFor="dFirst">First name</label><input id="dFirst" type="text" value={f.first} onChange={(e) => setF({ ...f, first: e.target.value })} /></div>
+        <div className="f"><label className="l" htmlFor="dLast">Surname</label><input id="dLast" type="text" value={f.last} onChange={(e) => setF({ ...f, last: e.target.value })} /></div>
+        <div className="f"><label className="l" htmlFor="dMob">Mobile</label><input id="dMob" type="tel" value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value })} /></div>
+        <div className="f"><label className="l" htmlFor="dPc">Postcode</label><input id="dPc" type="text" value={f.postcode} onChange={(e) => setF({ ...f, postcode: e.target.value })} /></div>
+        <div className="f w4"><span className="l">Cleared for</span>
+          <div className="chips">{allTypes.map((x) => (
+            <label key={x} className="chip"><input type="checkbox" checked={f.jobTypes.includes(x)} onChange={() => setF({ ...f, jobTypes: f.jobTypes.includes(x) ? f.jobTypes.filter((y) => y !== x) : [...f.jobTypes, x] })} /> {x}</label>
+          ))}</div></div>
+      </div>
+      <p className="note" style={{ margin: 0 }}>If you change the mobile, the new number gets a text so they know (or their registration link, if they haven’t registered yet).</p>
+      <Note m={msg} />
+      <div className="btnrow" style={{ justifyContent: 'flex-end' }}>
+        <button className="btn ghost" onClick={() => setOpen(false)}>Cancel</button>
+        <button className="btn blue" disabled={pending} onClick={() => start(async () => {
+          const r = await updateDetails(id, f);
+          setMsg({ ok: r.ok, text: r.ok ? r.message! : r.error! });
+          if (r.ok) { setOpen(false); router.refresh(); }
+        })}>{pending ? 'Saving…' : 'Save'}</button>
+      </div>
+    </div>
   );
 }
