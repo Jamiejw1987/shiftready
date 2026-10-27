@@ -185,3 +185,49 @@ export async function removeFromShift(offerId: string) {
   revalidatePath(`/shifts/${s.id}`);
   return { ok: true };
 }
+
+/** Temps who'd be new for this shift: matching, within the radius, not sent it before, and not booked elsewhere at that time. */
+async function newTempsFor(supabase: Awaited<ReturnType<typeof requireStaff>>['supabase'], shiftId: string, radius: number) {
+  const { data: s } = await supabase.from('shifts').select('*').eq('id', shiftId).maybeSingle();
+  if (!s || s.lat == null || s.lng == null) return { s: null, temps: [] as (Temp & { miles: number })[], busy: 0 };
+  const matched = await matchTemps(supabase, { lat: s.lat, lng: s.lng }, s.job_type, radius);
+  const { data: already } = await supabase.from('offers').select('temp_id').eq('shift_id', shiftId);
+  const sent = new Set((already ?? []).map((o) => o.temp_id));
+  const fresh = matched.filter((t) => !sent.has(t.id));
+  const booked = await bookingsNear(supabase, fresh.map((t) => t.id), s.shift_date);
+  const temps = fresh.filter((t) => !(booked.get(t.id) ?? []).some((b) => overlaps(b, s)));
+  return { s, temps, busy: fresh.length - temps.length };
+}
+
+export async function previewMore(shiftId: string, radius: number) {
+  const { supabase } = await requireStaff();
+  if (!(radius > 0 && radius <= 100)) return { ok: false as const, error: 'Radius must be 1 to 100 miles.' };
+  const { s, temps, busy } = await newTempsFor(supabase, shiftId, radius);
+  if (!s) return { ok: false as const, error: 'Shift not found.' };
+  return { ok: true as const, count: temps.length, busy };
+}
+
+/** Sends an open shift to temps who haven't had it yet (e.g. newly added temps, or a wider radius). Nobody gets it twice. */
+export async function sendToMore(shiftId: string, radius: number) {
+  const { supabase, profile } = await requireStaff();
+  if (!(radius > 0 && radius <= 100)) return { ok: false, error: 'Radius must be 1 to 100 miles.' };
+  const { s, temps, busy } = await newTempsFor(supabase, shiftId, radius);
+  if (!s) return { ok: false, error: 'Shift not found.' };
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+  if (s.status === 'cancelled' || s.shift_date < today) return { ok: false, error: 'This shift is cancelled or has passed.' };
+  if (!temps.length) return { ok: false, error: 'There’s nobody new to send it to. Try a bigger radius, or add more temps.' };
+  const { data: offers } = await supabase
+    .from('offers')
+    .upsert(temps.map((t) => ({ shift_id: s.id, temp_id: t.id, distance_miles: Math.round(t.miles * 10) / 10 })), { onConflict: 'shift_id,temp_id', ignoreDuplicates: true })
+    .select('id,temp_id,token');
+  const byTemp = new Map(temps.map((t) => [t.id, t]));
+  const res = await sendMany(offers ?? [], (o) => {
+    const t = byTemp.get(o.temp_id)!;
+    const info = { first: t.first_name, client: s.client, when: shiftWhen(s), site: `${s.site}, ${s.site_postcode}`, pay: Number(s.pay_rate), duties: s.duties ?? [], ppe: s.ppe ?? [], token: o.token };
+    return sendToTemp({ db: supabase, temp: t, kind: 'offer', offerId: o.id, sentBy: profile.id, body: offerText(info), wa: { template: 'offer', vars: offerWa(info) } });
+  });
+  if (radius > Number(s.radius_miles)) await supabase.from('shifts').update({ radius_miles: radius }).eq('id', s.id);
+  await audit(supabase, profile.id, 'shift.sent_more', `Sent ${s.client} shift (${shiftWhen(s)}) to ${res.sent} more temps${res.failed ? `, ${res.failed} failed` : ''}${radius > Number(s.radius_miles) ? `, radius now ${radius} mi` : ''}`);
+  revalidatePath(`/shifts/${s.id}`);
+  return { ok: true, message: `Sent to ${res.sent} more temp${res.sent === 1 ? '' : 's'}${res.failed ? ` (${res.failed} failed)` : ''}${busy ? `. ${busy} already booked at that time were skipped` : ''}.` };
+}
