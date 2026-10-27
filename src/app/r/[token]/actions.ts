@@ -16,7 +16,7 @@ export type RegData = {
   first: string; last: string; dob: string; email: string;
   address1: string; address2: string; town: string; postcode: string; ni: string;
   jobTypes: string[]; experience: string; transport: string; ownPpe: string[]; availability: string[];
-  rtwRoute: 'british_irish' | 'share_code' | ''; shareCode: string;
+  rtwRoute: 'british_irish' | 'share_code' | ''; shareCode: string; nationality: string;
   nokName: string; nokRelationship: string; nokPhone: string;
   healthDeclared: boolean | null; healthDetails: string;
   convictionsDeclared: boolean | null; convictionsDetails: string;
@@ -77,6 +77,7 @@ export async function submitRegistration(token: string, r: RegData, uploads: { k
   if (!r.ownPpe.length) p.push('the safety kit you have (or \u201cNone yet\u201d)');
   if (jobTypes.includes('FLT counterbalance') && !uploads.some((u) => u.kind === 'flt_licence')) p.push('a photo of your FLT licence');
   const shareCode = r.shareCode.replace(/[\s-]+/g, '').toUpperCase();
+  if (clean(r.nationality, 60).length < 3) p.push('your nationality');
   if (r.rtwRoute !== 'british_irish' && r.rtwRoute !== 'share_code') p.push('how you’ll prove your right to work');
   if (r.rtwRoute === 'share_code' && !/^[A-Z0-9]{9}$/.test(shareCode)) p.push('your 9-character share code');
   if (r.rtwRoute === 'british_irish' && !uploads.some((u) => u.kind === 'passport' || u.kind === 'id')) p.push('a photo of your passport');
@@ -100,7 +101,7 @@ export async function submitRegistration(token: string, r: RegData, uploads: { k
   const needsAdmin = Boolean(r.healthDeclared || r.convictionsDeclared || under18);
 
   const { error: pe } = await db.from('temp_profiles').upsert({
-    temp_id: t.id, dob: r.dob, email: clean(r.email, 120) || null,
+    temp_id: t.id, dob: r.dob, nationality: clean(r.nationality, 60), email: clean(r.email, 120) || null,
     address1: clean(r.address1), address2: clean(r.address2) || null, town: clean(r.town, 80),
     ni_enc: encrypt(ni),
     experience: clean(r.experience, 1000) || null, transport: TRANSPORT.includes(r.transport) ? r.transport : null,

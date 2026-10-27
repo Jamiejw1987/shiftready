@@ -2,7 +2,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
-import { AVAILABILITY, TRANSPORT } from '@/lib/regOptions';
+import { AVAILABILITY, TRANSPORT, NATIONALITIES } from '@/lib/regOptions';
 import { prepareFile, uploadToSlot, OK_TYPES } from '@/lib/upload';
 import { startUploads, submitRegistration, type RegData } from './actions';
 
@@ -49,7 +49,7 @@ export function RegForm(p: Props) {
   const [d, setD] = useState<RegData>({
     first: p.first, last: p.last, dob: '', email: '', address1: '', address2: '', town: '', postcode: '', ni: '',
     jobTypes: p.jobTypes, experience: '', transport: '', ownPpe: [], availability: [],
-    rtwRoute: '', shareCode: '', nokName: '', nokRelationship: '', nokPhone: '',
+    rtwRoute: '', shareCode: '', nationality: '', nokName: '', nokRelationship: '', nokPhone: '',
     healthDeclared: null, healthDetails: '', convictionsDeclared: null, convictionsDetails: '', wtrOptOut: null,
     readKid: false, readTerms: false, readPrivacy: false, messagesConsent: true, signature: '',
   });
@@ -146,6 +146,10 @@ export function RegForm(p: Props) {
       </Section>
 
       <Section n={3} title="Right to work" note="By law we must check you can work in the UK before you start.">
+        <div className="f"><label className="l" htmlFor="nat">Nationality</label>
+          <input id="nat" type="text" list="natList" autoComplete="off" placeholder="e.g. British" value={d.nationality} onChange={(e) => set('nationality', e.target.value)} />
+          <datalist id="natList">{NATIONALITIES.map((n) => <option key={n} value={n} />)}</datalist>
+          <span className="note">Only used to check your right to work.</span></div>
         <div className="yn" style={{ gridTemplateColumns: '1fr' }}>
           <label className="tick"><input type="radio" name="rtw" checked={d.rtwRoute === 'share_code'} onChange={() => set('rtwRoute', 'share_code')} /> I have a share code (eVisa or settled status)</label>
           <label className="tick"><input type="radio" name="rtw" checked={d.rtwRoute === 'british_irish'} onChange={() => set('rtwRoute', 'british_irish')} /> I have a British or Irish passport</label>

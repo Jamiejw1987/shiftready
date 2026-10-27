@@ -569,7 +569,7 @@ Staff Selection UK Ltd (company number 14238416), 2 Hawk Road, Dewsbury, WF12 7A
 WHAT WE COLLECT
 - Your name, mobile number, email, address, date of birth and National Insurance number.
 - The work you can do, your experience, availability, transport and safety equipment.
-- Right to work information: your share code and check result, or a copy of your passport.
+- Your nationality and right to work information: your share code and check result, or a copy of your passport.
 - Licences and certificates you give us, such as an FLT licence.
 - Your emergency contact's name, relationship and phone number. Please tell them you have given us their details.
 - Health information you choose to tell us, so we can keep you safe at work and make adjustments.
@@ -704,3 +704,6 @@ select cron.schedule(
        headers := jsonb_build_object('x-cron-key', (select value from public.app_secrets where name = 'cron_key'))
      ) $$
 );
+
+-- ShiftReady: nationality on registration. Run once in Supabase SQL Editor. Safe to re-run.
+alter table public.temp_profiles add column if not exists nationality text;

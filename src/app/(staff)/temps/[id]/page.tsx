@@ -23,7 +23,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
   if (!t) notFound();
   const [{ data: p }, { data: docs }, { data: sigs }, { data: offers }, { data: users }] = await Promise.all([
     supabase.from('temp_profiles')
-      .select('dob,email,address1,address2,town,experience,transport,own_ppe,availability,share_code,nok_name,nok_relationship,nok_phone,wtr_opt_out,wtr_changed_at,wtr_effective,privacy_ack_at,messages_consent,signature_name,signed_at,signed_ip,bank_last4,bank_added_at,submitted_at,ni_enc,health_enc,convictions_enc')
+      .select('dob,nationality,email,address1,address2,town,experience,transport,own_ppe,availability,share_code,nok_name,nok_relationship,nok_phone,wtr_opt_out,wtr_changed_at,wtr_effective,privacy_ack_at,messages_consent,signature_name,signed_at,signed_ip,bank_last4,bank_added_at,submitted_at,ni_enc,health_enc,convictions_enc')
       .eq('temp_id', t.id).maybeSingle(),
     supabase.from('temp_documents').select('id,kind,filename,uploaded_by,created_at').eq('temp_id', t.id).order('created_at', { ascending: false }),
     supabase.from('temp_signatures').select('id,action,signed_name,signed_at,ip,app_documents(kind,version,title)').eq('temp_id', t.id).order('signed_at', { ascending: false }),
@@ -90,6 +90,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
 
           <section className="panel">
             <h2>Right to work</h2>
+            <dl className="kv" style={{ marginBottom: 10 }}><dt>Nationality</dt><dd>{p?.nationality || 'Not given'}</dd></dl>
             {t.rtw_checked_at ? (
               <dl className="kv" style={{ marginBottom: 14 }}>
                 <dt>Checked</dt><dd>{fmtDateTime(t.rtw_checked_at)} by {name(t.rtw_checked_by)}</dd>
