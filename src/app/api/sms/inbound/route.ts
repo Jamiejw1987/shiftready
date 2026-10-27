@@ -78,6 +78,33 @@ export async function POST(req: NextRequest) {
     return twiml();
   }
 
+  // Answering the "still coming?" check-in sent before a shift.
+  const firstWord = word.split(' ')[0];
+  const ciYes = YES.includes(word) || YES.includes(firstWord) || /^(ON MY WAY|OMW|COMING|SEE YOU)/.test(word);
+  const ciNo = !ciYes && (NO.includes(word) || NO.includes(firstWord) || /^(CANT|CANNOT|NOT COMING|SICK|ILL)/.test(word));
+  if (ciYes || ciNo) {
+    const since = new Date(Date.now() - 4 * 3600e3).toISOString();
+    const { data: ci } = await db.from('offers').select('id,shifts(client,start_time,sent_by)').eq('temp_id', t.id).eq('status', 'accepted')
+      .gte('checkin_sent_at', since).is('checkin_reply', null).order('checkin_sent_at', { ascending: false }).limit(1);
+    const c = ci?.[0];
+    if (c) {
+      const s = c.shifts as unknown as { client: string; start_time: string; sent_by: string | null };
+      const yes = ciYes;
+      await db.from('offers').update({ checkin_reply: yes ? 'yes' : 'no', checkin_replied_at: new Date().toISOString() }).eq('id', c.id);
+      if (yes) {
+        await reply(`Thanks ${t.first_name}, see you at ${s.start_time.slice(0, 5)}. - Staff Selection`);
+      } else {
+        await reply(`Thanks for letting us know, ${t.first_name}. We'll arrange cover. Please call the office if you can. - Staff Selection`);
+        await db.from('audit_log').insert({ actor: null, action: 'checkin.cant_make_it', detail: `${name} replied that they can't make ${s.client} at ${s.start_time.slice(0, 5)}` });
+        if (s.sent_by) {
+          const { data: p } = await db.from('profiles').select('mobile').eq('id', s.sent_by).maybeSingle();
+          if (p?.mobile) await sendSms({ db, to: p.mobile, kind: 'system', body: `ShiftReady URGENT: ${name} can't make ${s.client} at ${s.start_time.slice(0, 5)}. Open the shift to take them off and fill the place.` });
+        }
+      }
+      return twiml();
+    }
+  }
+
   // Disputing a no-show: tell the consultant who sent the shift.
   if (ATTENDED.includes(word)) {
     const since = new Date(Date.now() - 14 * 864e5).toLocaleDateString('en-CA', { timeZone: 'Europe/London' });

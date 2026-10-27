@@ -11,7 +11,7 @@ import { EditShift } from './EditShift';
 export const dynamic = 'force-dynamic';
 
 type OfferRow = {
-  id: string; status: string; decline_reason: string | null; standby_at: string | null; distance_miles: number | null; responded_at: string | null;
+  id: string; status: string; decline_reason: string | null; checkin_sent_at: string | null; checkin_reply: string | null; standby_at: string | null; distance_miles: number | null; responded_at: string | null;
   temps: { first_name: string; last_name: string; mobile: string; registered_at: string | null; bank_on_file: boolean } | null;
 };
 
@@ -25,7 +25,7 @@ export default async function ShiftBoard({ params, searchParams }: { params: { i
   if (!s) notFound();
   const { data: offersRaw } = await supabase
     .from('offers')
-    .select('id,status,decline_reason,standby_at,distance_miles,responded_at,temps(first_name,last_name,mobile,registered_at,bank_on_file)')
+    .select('id,status,decline_reason,checkin_sent_at,checkin_reply,standby_at,distance_miles,responded_at,temps(first_name,last_name,mobile,registered_at,bank_on_file)')
     .eq('shift_id', s.id)
     .order('distance_miles');
   const offers = (offersRaw ?? []) as unknown as OfferRow[];
@@ -50,7 +50,7 @@ export default async function ShiftBoard({ params, searchParams }: { params: { i
           : <div className="board" style={{ marginTop: 12 }}>
               <div className="col"><h3>Confirmed <span className="count">{confirmed.length}/{s.heads}</span></h3>
                 {Array.from({ length: s.heads }, (_, i) => confirmed[i]
-                  ? <div key={i} className="slot filled"><span>{name(confirmed[i])}<br /><span className="note">{confirmed[i].temps && displayMobile(confirmed[i].temps!.mobile)}</span>{confirmed[i].temps?.registered_at && !confirmed[i].temps?.bank_on_file && <><br /><span className="pill warn">No bank details</span></>}</span><span className="btnrow"><BoardActions kind="remove" id={confirmed[i].id} /><BoardActions kind="noshow" id={confirmed[i].id} /></span></div>
+                  ? <div key={i} className="slot filled"><span>{name(confirmed[i])}<br /><span className="note">{confirmed[i].temps && displayMobile(confirmed[i].temps!.mobile)}</span>{confirmed[i].temps?.registered_at && !confirmed[i].temps?.bank_on_file && <><br /><span className="pill warn">No bank details</span></>}{confirmed[i].checkin_reply === 'yes' ? <><br /><span className="pill ok">Confirmed coming</span></> : confirmed[i].checkin_reply === 'no' ? <><br /><span className="pill bad">Can’t make it</span></> : confirmed[i].checkin_sent_at ? <><br /><span className="pill warn">Check-in: no reply yet</span></> : null}</span><span className="btnrow"><BoardActions kind="remove" id={confirmed[i].id} /><BoardActions kind="noshow" id={confirmed[i].id} /></span></div>
                   : <div key={i} className="slot empty">Open slot</div>)}</div>
               <div className="col"><h3>Standby <span className="count">{standby.length}</span></h3>
                 {standby.length ? standby.map((o, i) => <div key={o.id} className="slot"><span>{i + 1}. {name(o)}</span></div>) : <div className="slot empty">Nobody yet</div>}</div>
