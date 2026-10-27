@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
 
   // Answering a shift offer.
   let action: OfferAction | null = null;
-  if (payload === 'ACCEPT' || YES.includes(word)) action = 'accept';
+  if (payload === 'ACCEPT' || YES.includes(word) || word === 'ALL' || word === 'ALL DAYS') action = 'accept';
   else if (payload === 'DECLINE' || NO.includes(word)) action = 'decline';
   else if (word === 'STANDBY' || payload === 'STANDBY') action = 'standby';
   if (!action) {
@@ -141,14 +141,29 @@ export async function POST(req: NextRequest) {
     offerId = m?.offer_id ?? null;
   }
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
-  let q = db.from('offers').select('id,token,status,shifts!inner(client,site,site_postcode,shift_date,start_time,end_time,status)').eq('temp_id', t.id);
+  let q = db.from('offers').select('id,token,status,shifts!inner(client,site,site_postcode,shift_date,start_time,end_time,status,series_id)').eq('temp_id', t.id);
   q = offerId ? q.eq('id', offerId) : q.gte('shifts.shift_date', today).neq('shifts.status', 'cancelled')
     .in('status', ['sent', 'standby', 'declined', 'alerts', 'accepted']);
   const { data: offers } = await q.order('created_at', { ascending: false }).limit(1);
   const o = offers?.[0];
   if (!o) { await reply(REPLY_NO_OFFER); return twiml(); }
-  const s = o.shifts as unknown as { client: string; site: string; site_postcode: string; shift_date: string; start_time: string; end_time: string };
+  const s = o.shifts as unknown as { client: string; site: string; site_postcode: string; shift_date: string; start_time: string; end_time: string; series_id: string | null };
   const when = shiftWhen(s);
+
+  // Weekly shift: a reply means "available every day" (YES / ALL / Accept button) or "none" (NO / Decline). Nobody is booked yet.
+  if (s.series_id && (action === 'accept' || action === 'decline')) {
+    const { data: days } = await db.from('shifts').select('id').eq('series_id', s.series_id).neq('status', 'cancelled').gte('shift_date', today);
+    const { data: mine } = await db.from('offers').select('id,status,decline_reason').eq('temp_id', t.id).in('shift_id', (days ?? []).map((d) => d.id));
+    const open = (mine ?? []).filter((m) => !(m.status === 'accepted' || m.status === 'noshow' || (m.status === 'declined' && m.decline_reason === 'Removed by office')));
+    const yes = action === 'accept';
+    const now = new Date().toISOString();
+    for (const m of open) await db.from('offers').update({ available: yes, available_at: now, responded_at: now, ...(yes ? { ppe_confirmed: true } : {}) }).eq('id', m.id);
+    await db.from('audit_log').insert({ actor: null, action: 'offer.availability', detail: `${name} said they can do ${yes ? `all ${open.length} days` : 'none of the days'} of ${s.client} (by ${channel === 'whatsapp' ? 'WhatsApp' : 'text'})` });
+    await reply(yes
+      ? `Thanks ${t.first_name}, we've noted you can do all ${open.length} days of ${s.client}. You're not booked yet: we'll text you to confirm your days. To change your days: ${appUrl()}/s/${o.token} - Staff Selection`
+      : `Thanks for letting us know, ${t.first_name}. - Staff Selection`);
+    return twiml();
+  }
 
   const result = await respondToOffer(db, o.token, action, null);
   if (result === 'accepted' && action !== 'accept') await reply(`You're booked on ${s.client} ${when}. To cancel, please call the office. - Staff Selection`);

@@ -78,5 +78,12 @@ export const p45DeclinedText = (first: string, note?: string | null) =>
 export const myLinkText = (first: string, token: string) =>
   `Hi ${first}, here's your Staff Selection link to request holiday or your P45. Keep it for next time: ${appUrl()}/me/${token} - Staff Selection`;
 
+// Weekly shifts
+type SeriesInfo = { first: string; client: string; when: string; pay: number; ppe: string[]; token: string };
+export const seriesOfferText = (o: SeriesInfo) =>
+  `Shifts: ${o.client}, ${o.when}, £${o.pay.toFixed(2)}/hr.${o.ppe.length ? ` You need: ${o.ppe.join(', ').toLowerCase()}.` : ''} Tell us which days you can do: ${appUrl()}/s/${o.token} or reply ALL for every day, NO for none. - Staff Selection`;
+export const seriesBookedText = (first: string, client: string, days: string, site: string, bankToken?: string | null) =>
+  `Hi ${first}, you're booked: ${client}, ${days}, ${site}. Please arrive 10 minutes early. We'll check in with you before each shift.${bankToken ? ` Before your first shift, add your bank details: ${appUrl()}/b/${bankToken}` : ''} - Staff Selection`;
+
 export const OPTED_IN_REPLY = "Thanks, you're all set. We'll message you when shifts come up near you. Reply STOP at any time to opt out. - Staff Selection";
 export const OPTED_OUT_REPLY = "You've been opted out and won't get shift messages from Staff Selection. Reply START to opt back in.";

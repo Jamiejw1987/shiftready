@@ -220,4 +220,12 @@ details > summary { cursor: pointer; font-weight: 700; color: var(--blue-deep); 
 .alert.bad { background: var(--bad-soft); color: var(--bad); }
 .secret { font-family: var(--f-mono); background: var(--field); border: 1px dashed var(--line-strong); border-radius: var(--r-sm); padding: 8px 10px; white-space: pre-wrap; font-size: 13px; }
 
+/* ---------- Week grid ---------- */
+table.week th, table.week td { white-space: nowrap; }
+table.week td.wk-cell { text-align: center; }
+table.week td.wk-no { text-align: center; color: var(--line-strong); }
+.wk-pick { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 999px; cursor: pointer; font-size: 13px; background: #fff; }
+.wk-pick input { width: 18px; height: 18px; accent-color: var(--blue); margin: 0; }
+.wk-pick:has(input:checked) { border-color: var(--blue); background: var(--blue-soft); color: var(--blue-deep); font-weight: 700; }
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

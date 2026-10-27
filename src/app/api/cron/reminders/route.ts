@@ -11,13 +11,19 @@ export async function GET(req: NextRequest) {
 
   const db = createAdminClient();
   const tomorrow = new Date(Date.now() + 864e5).toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
-  const { data: shifts } = await db.from('shifts').select('id,client,site,start_time,end_time,ppe').eq('shift_date', tomorrow).neq('status', 'cancelled');
+  const { data: shifts } = await db.from('shifts').select('id,client,site,start_time,end_time,ppe,series_id,shift_date').eq('shift_date', tomorrow).neq('status', 'cancelled');
   let sent = 0;
   for (const s of shifts ?? []) {
     const { data: offers } = await db.from('offers').select('id,temp_id,temps(first_name,mobile,status)').eq('shift_id', s.id).eq('status', 'accepted').is('reminded_at', null);
     for (const o of offers ?? []) {
       const t = o.temps as unknown as { first_name: string; mobile: string; status: string } | null;
       if (!t || t.status === 'out') continue;
+      // Weekly shifts: only the day-before reminder for their first booked day (the 2-hour check-in still goes every day).
+      if (s.series_id) {
+        const { data: earlier } = await db.from('offers').select('id, shifts!inner(series_id,shift_date)').eq('temp_id', o.temp_id).eq('status', 'accepted')
+          .eq('shifts.series_id', s.series_id).lt('shifts.shift_date', s.shift_date).limit(1);
+        if (earlier?.length) { await db.from('offers').update({ reminded_at: new Date().toISOString() }).eq('id', o.id); continue; }
+      }
       const info = { first: t.first_name, client: s.client, when: `${hhmm(s.start_time)}-${hhmm(s.end_time)}`, site: s.site, ppe: s.ppe ?? [] };
       await sendToTemp({ db, temp: { id: o.temp_id, mobile: t.mobile }, kind: 'reminder', offerId: o.id, body: reminderText(info), wa: { template: 'reminder', vars: reminderWa(info) } });
       await db.from('offers').update({ reminded_at: new Date().toISOString() }).eq('id', o.id);

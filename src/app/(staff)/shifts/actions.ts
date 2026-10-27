@@ -5,14 +5,18 @@ import { requireStaff, audit } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { geocodePostcode, looksLikePostcode, milesBetween, normalisePostcode } from '@/lib/geo';
 import { sendMany, sendToTemp } from '@/lib/sms';
-import { offerText, offerWa, promotedText, promotedWa, noShowText, replyAccepted, appUrl } from '@/lib/texts';
+import { offerText, offerWa, promotedText, promotedWa, noShowText, replyAccepted, appUrl, seriesOfferText, seriesBookedText } from '@/lib/texts';
 import { displayMobile } from '@/lib/phone';
 import { shiftWhen, JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
 import { bookingsNear, overlaps } from '@/lib/clash';
+import { seriesWhen, dayLabel } from '@/lib/series';
+import { randomUUID } from 'crypto';
 
 export type ShiftInput = {
   client: string; site: string; sitePostcode: string; date: string; start: string; end: string;
   jobType: string; duties: string; pay: number; heads: number; radius: number; ppe: string[];
+  /** Several days: one offer covers them all and temps say which days they can do. */
+  dates?: string[];
 };
 
 type Temp = { id: string; first_name: string; mobile: string; lat: number | null; lng: number | null; job_types: string[] };
@@ -50,6 +54,8 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
   if (!(input.radius > 0 && input.radius <= 100)) problems.push('radius (1 to 100 miles)');
   if (problems.length) return { ok: false, error: 'Check the ' + problems.join(', ') + '.' };
   if (input.date < new Date().toISOString().slice(0, 10)) return { ok: false, error: 'That date is in the past.' };
+  const dates = [...new Set((input.dates ?? []).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)))].sort();
+  if (dates.length > 1) return createSeries(supabase, profile, input, dates);
 
   const pc = normalisePostcode(input.sitePostcode);
   const point = await geocodePostcode(pc);
@@ -345,4 +351,141 @@ export async function updateShift(shiftId: string, e: ShiftEdit) {
   revalidatePath(`/shifts/${s.id}`);
   revalidatePath('/shifts');
   return { ok: true, message: `Saved.${promoted ? ` ${promoted} moved up from standby and texted.` : ''}${told ? ` ${told} booked temp${told === 1 ? '' : 's'} texted about the change.` : ''}${free - promoted > 0 ? ` ${free - promoted} place${free - promoted === 1 ? '' : 's'} still to fill: use Send to more temps or Add someone by hand.` : ''}` };
+}
+
+type Db = Awaited<ReturnType<typeof requireStaff>>['supabase'];
+type Me = Awaited<ReturnType<typeof requireStaff>>['profile'];
+type DayRow = { id: string; shift_date: string; start_time: string; end_time: string; client: string; site: string; site_postcode: string; pay_rate: number; ppe: string[] | null; duties: string[] | null; [k: string]: unknown };
+
+/** Sends one message per temp covering every day of a weekly shift they're free for. Returns how many were sent. */
+async function offerSeries(supabase: Db, profile: Me, days: DayRow[], temps: (Temp & { miles: number })[]) {
+  const booked = await bookingsNear(supabase, temps.map((t) => t.id), days[0].shift_date);
+  for (const day of days.slice(1)) {
+    const more = await bookingsNear(supabase, temps.map((t) => t.id), day.shift_date);
+    more.forEach((v, k) => booked.set(k, [...(booked.get(k) ?? []), ...v]));
+  }
+  const rows = temps.flatMap((t) => days
+    .filter((day) => !(booked.get(t.id) ?? []).some((b) => b.id !== day.id && overlaps(b, day)))
+    .map((day) => ({ shift_id: day.id, temp_id: t.id, distance_miles: Math.round(t.miles * 10) / 10 })));
+  if (!rows.length) return { sent: 0, failed: 0, people: 0 };
+  const { data: offers } = await supabase.from('offers').upsert(rows, { onConflict: 'shift_id,temp_id', ignoreDuplicates: true }).select('id,temp_id,token,shift_id');
+  const dateOf = new Map(days.map((x) => [x.id, x.shift_date]));
+  const firstByTemp = new Map<string, { id: string; token: string; temp_id: string; days: string[] }>();
+  for (const o of (offers ?? []).sort((a, b) => (dateOf.get(a.shift_id) ?? '').localeCompare(dateOf.get(b.shift_id) ?? ''))) {
+    const cur = firstByTemp.get(o.temp_id);
+    if (cur) cur.days.push(o.shift_id); else firstByTemp.set(o.temp_id, { id: o.id, token: o.token, temp_id: o.temp_id, days: [o.shift_id] });
+  }
+  const byTemp = new Map(temps.map((t) => [t.id, t]));
+  const s0 = days[0];
+  const res = await sendMany([...firstByTemp.values()], (o) => {
+    const t = byTemp.get(o.temp_id)!;
+    const theirDays = days.filter((x) => o.days.includes(x.id));
+    const when = seriesWhen(theirDays);
+    const info = { first: t.first_name, client: s0.client, when, pay: Number(s0.pay_rate), ppe: s0.ppe ?? [], token: o.token };
+    const wa = offerWa({ ...info, site: `${s0.site}, ${s0.site_postcode}`, duties: s0.duties ?? [] });
+    return sendToTemp({ db: supabase, temp: t, kind: 'offer', offerId: o.id, sentBy: profile.id, body: seriesOfferText(info), wa: { template: 'offer', vars: wa } });
+  });
+  return { ...res, people: firstByTemp.size };
+}
+
+async function createSeries(supabase: Db, profile: Me, input: ShiftInput, dates: string[]): Promise<{ ok: false; error: string } | never> {
+  if (dates.length > 14) return { ok: false, error: 'Choose up to 14 days.' };
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+  if (dates[0] < today) return { ok: false, error: 'One of the days is in the past.' };
+  const pc = normalisePostcode(input.sitePostcode);
+  const point = await geocodePostcode(pc);
+  if (!point) return { ok: false, error: `We couldn’t find the postcode ${pc}.` };
+  const seriesId = randomUUID();
+  const base = {
+    client: input.client.trim(), site: input.site.trim(), site_postcode: pc, lat: point.lat, lng: point.lng,
+    start_time: input.start, end_time: input.end, job_type: input.jobType,
+    duties: input.duties.split('\n').map((s) => s.trim()).filter(Boolean),
+    pay_rate: Math.round(input.pay * 100) / 100, heads: Math.round(input.heads), radius_miles: input.radius,
+    ppe: input.ppe.filter((p) => (PPE_OPTIONS as readonly string[]).includes(p)), sent_by: profile.id, series_id: seriesId,
+  };
+  const { data: days, error } = await supabase.from('shifts').insert(dates.map((shift_date) => ({ ...base, shift_date }))).select().order('shift_date');
+  if (error || !days?.length) return { ok: false, error: 'Couldn’t save the shifts. Try again.' };
+  const temps = await matchTemps(supabase, point, input.jobType, input.radius);
+  const res = await offerSeries(supabase, profile, days, temps);
+  await audit(supabase, profile.id, 'shift.sent', `Sent ${base.client} weekly shift (${seriesWhen(days)}, ${base.heads} a day) to ${res.sent} temps${res.failed ? `, ${res.failed} texts failed` : ''}`);
+  revalidatePath('/shifts');
+  redirect(`/shifts/series/${seriesId}?sent=${res.sent}&failed=${res.failed}`);
+}
+
+/** Sends a weekly shift to temps who haven't had it yet. */
+export async function seriesSendMore(seriesId: string, radius: number) {
+  const { supabase, profile } = await requireStaff();
+  if (!(radius > 0 && radius <= 100)) return { ok: false, error: 'Radius must be 1 to 100 miles.' };
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+  const { data: all } = await supabase.from('shifts').select('*').eq('series_id', seriesId).order('shift_date');
+  const days = (all ?? []).filter((d) => d.status !== 'cancelled' && d.shift_date >= today);
+  if (!days.length) return { ok: false, error: 'No upcoming days left on this shift.' };
+  const matched = await matchTemps(supabase, { lat: days[0].lat, lng: days[0].lng }, days[0].job_type, radius);
+  const { data: already } = await supabase.from('offers').select('temp_id').in('shift_id', (all ?? []).map((d) => d.id));
+  const had = new Set((already ?? []).map((o) => o.temp_id));
+  const fresh = matched.filter((t) => !had.has(t.id));
+  if (!fresh.length) return { ok: false, error: 'There’s nobody new to send it to. Try a bigger radius, or add more temps.' };
+  const res = await offerSeries(supabase, profile, days, fresh);
+  if (radius > Number(days[0].radius_miles)) await supabase.from('shifts').update({ radius_miles: radius }).eq('series_id', seriesId);
+  await audit(supabase, profile.id, 'shift.sent_more', `Sent ${days[0].client} weekly shift to ${res.sent} more temps`);
+  revalidatePath(`/shifts/series/${seriesId}`);
+  return { ok: true, message: `Sent to ${res.sent} more temp${res.sent === 1 ? '' : 's'}${res.failed ? ` (${res.failed} failed)` : ''}.` };
+}
+
+export async function seriesPreviewMore(seriesId: string, radius: number) {
+  const { supabase } = await requireStaff();
+  const { data: all } = await supabase.from('shifts').select('id,lat,lng,job_type').eq('series_id', seriesId);
+  if (!all?.length || !(radius > 0)) return 0;
+  const matched = await matchTemps(supabase, { lat: all[0].lat, lng: all[0].lng }, all[0].job_type, radius);
+  const { data: already } = await supabase.from('offers').select('temp_id').in('shift_id', all.map((d) => d.id));
+  const had = new Set((already ?? []).map((o) => o.temp_id));
+  return matched.filter((t) => !had.has(t.id)).length;
+}
+
+/**
+ * Books temps onto the days they said they're available, from the week grid. Each person gets one text listing
+ * all the days they've been booked on (cheaper than a text per day).
+ */
+export async function seriesBook(seriesId: string, offerIds: string[]) {
+  const { supabase, profile } = await requireStaff();
+  if (!offerIds.length) return { ok: false, error: 'Tick the days you want to book first.' };
+  const { data: days } = await supabase.from('shifts').select('*').eq('series_id', seriesId).order('shift_date');
+  const dayById = new Map((days ?? []).map((d) => [d.id, d]));
+  const { data: offers } = await supabase.from('offers')
+    .select('id,shift_id,temp_id,status,temps(first_name,last_name,mobile,status,registered_at,bank_on_file,reg_token)')
+    .in('shift_id', [...dayById.keys()]);
+  const count = new Map<string, number>();
+  for (const o of offers ?? []) if (o.status === 'accepted') count.set(o.shift_id, (count.get(o.shift_id) ?? 0) + 1);
+  const chosen = (offers ?? []).filter((o) => offerIds.includes(o.id) && o.status !== 'accepted')
+    .sort((a, b) => (dayById.get(a.shift_id)!.shift_date).localeCompare(dayById.get(b.shift_id)!.shift_date));
+  const skipped: string[] = [];
+  const bookedFor = new Map<string, { t: { first_name: string; last_name: string; mobile: string; registered_at: string | null; bank_on_file: boolean; reg_token: string }; days: string[]; offerId: string }>();
+  for (const o of chosen) {
+    const d = dayById.get(o.shift_id)!;
+    const t = o.temps as unknown as { first_name: string; last_name: string; mobile: string; status: string; registered_at: string | null; bank_on_file: boolean; reg_token: string };
+    if (d.status === 'cancelled') { skipped.push(`${dayLabel(d.shift_date)} is cancelled`); continue; }
+    if ((count.get(d.id) ?? 0) >= d.heads) { skipped.push(`${dayLabel(d.shift_date)} is full`); continue; }
+    if (t.status !== 'active') { skipped.push(`${t.first_name} isn’t active`); continue; }
+    const clash = (await bookingsNear(supabase, [o.temp_id], d.shift_date)).get(o.temp_id)?.find((b) => b.id !== d.id && overlaps(b, d));
+    if (clash) { skipped.push(`${t.first_name} is booked elsewhere on ${dayLabel(d.shift_date)}`); continue; }
+    await supabase.from('offers').update({ status: 'accepted', responded_at: new Date().toISOString(), standby_at: null }).eq('id', o.id);
+    count.set(d.id, (count.get(d.id) ?? 0) + 1);
+    if ((count.get(d.id) ?? 0) >= d.heads) await supabase.from('shifts').update({ status: 'filled' }).eq('id', d.id);
+    const cur = bookedFor.get(o.temp_id) ?? { t, days: [] as string[], offerId: o.id };
+    cur.days.push(d.id);
+    bookedFor.set(o.temp_id, cur);
+  }
+  const s0 = days![0];
+  const res = await sendMany([...bookedFor.entries()], ([tempId, b]) => {
+    const when = seriesWhen((days ?? []).filter((d) => b.days.includes(d.id)));
+    return sendToTemp({ db: supabase, temp: { id: tempId, mobile: b.t.mobile }, kind: 'system', offerId: b.offerId, sentBy: profile.id,
+      body: seriesBookedText(b.t.first_name, s0.client, when, `${s0.site}, ${s0.site_postcode}`, b.t.registered_at && !b.t.bank_on_file ? b.t.reg_token : null) });
+  });
+  const people = [...bookedFor.values()];
+  await audit(supabase, profile.id, 'shift.series_booked', `Booked ${people.map((p) => `${p.t.first_name} ${p.t.last_name} (${p.days.length} day${p.days.length === 1 ? '' : 's'})`).join(', ') || 'nobody'} on ${s0.client} weekly shift`);
+  revalidatePath(`/shifts/series/${seriesId}`);
+  return {
+    ok: true,
+    message: `${people.length} ${people.length === 1 ? 'person' : 'people'} booked and texted${res.failed ? ` (${res.failed} texts failed)` : ''}.${skipped.length ? ` Not booked: ${[...new Set(skipped)].join('; ')}.` : ''}`,
+  };
 }

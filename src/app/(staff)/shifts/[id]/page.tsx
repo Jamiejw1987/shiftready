@@ -39,7 +39,7 @@ export default async function ShiftBoard({ params, searchParams }: { params: { i
     <>
       <AutoRefresh seconds={15} />
       <section className="panel">
-        <p className="note" style={{ margin: '0 0 6px' }}><Link href="/shifts">← All shifts</Link></p>
+        <p className="note" style={{ margin: '0 0 6px' }}><Link href="/shifts">← All shifts</Link>{s.series_id && <> · <Link href={`/shifts/series/${s.series_id}`}>Back to the week view</Link></>}</p>
         <h1>{s.client}</h1>
         <p className="lede" style={{ marginBottom: 8 }}>
           {shiftWhen(s)} · {shiftHours(s).toFixed(1)} hrs · £{Number(s.pay_rate).toFixed(2)}/hr · {s.job_type} · {s.site}, {s.site_postcode} · within {Number(s.radius_miles)} mi
@@ -57,7 +57,7 @@ export default async function ShiftBoard({ params, searchParams }: { params: { i
               <div className="col"><h3>Declined <span className="count">{declined.length}</span></h3>
                 {declined.length ? declined.map((o) => <div key={o.id} className="slot"><span>{name(o)}</span>{o.decline_reason && <span className="pill mute">{o.decline_reason}</span>}</div>) : <div className="slot empty">None</div>}</div>
             </div>}
-        {!cancelled && confirmed.length < s.heads && s.shift_date >= new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' }) && <SendMore id={s.id} radius={Number(s.radius_miles)} />}
+        {!cancelled && !s.series_id && confirmed.length < s.heads && s.shift_date >= new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' }) && <SendMore id={s.id} radius={Number(s.radius_miles)} />}
         {!cancelled && confirmed.length < s.heads && <AddToShift id={s.id} />}
         {!cancelled && <div className="bar"><span className="note">Duties: {s.duties.join('; ') || 'none listed'}{s.ppe.length ? ` · Must have: ${s.ppe.join(', ')}` : ''}</span><span className="btnrow"><EditShift id={s.id} heads={s.heads} pay={Number(s.pay_rate)} start={s.start_time} end={s.end_time} duties={s.duties ?? []} ppe={s.ppe ?? []} booked={confirmed.length} /><BoardActions kind="cancel" id={s.id} /></span></div>}
       </section>
