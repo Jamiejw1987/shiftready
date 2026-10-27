@@ -15,6 +15,13 @@ const STATUS: Record<string, [string, string]> = {
   active: ['ok', 'Active'], hold: ['mute', 'On hold'], out: ['bad', 'Opted out'],
 };
 const OFFER: Record<string, string> = { sent: 'No reply', accepted: 'Booked', declined: 'Declined', standby: 'Standby', alerts: 'Alerts', noshow: 'No-show' };
+const ageOf = (dob: string | null) => {
+  if (!dob) return null;
+  const b = new Date(dob + 'T12:00:00Z'), n = new Date();
+  let a = n.getUTCFullYear() - b.getUTCFullYear();
+  if (n.getUTCMonth() < b.getUTCMonth() || (n.getUTCMonth() === b.getUTCMonth() && n.getUTCDate() < b.getUTCDate())) a--;
+  return a;
+};
 const day = (d: string | null) => (d ? new Date(d.length === 10 ? d + 'T12:00:00Z' : d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '-');
 
 export default async function TempRecordPage({ params }: { params: { id: string } }) {
@@ -71,7 +78,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
           <section className="panel">
             <h2>Details</h2>
             <dl className="kv">
-              <dt>Date of birth</dt><dd>{day(p?.dob ?? null)}</dd>
+              <dt>Date of birth</dt><dd>{day(p?.dob ?? null)}{p?.dob ? ` (age ${ageOf(p.dob)})` : ''}</dd>
               <dt>Email</dt><dd>{p?.email || '-'}</dd>
               <dt>Address</dt><dd>{[p?.address1, p?.address2, p?.town, t.postcode].filter(Boolean).join(', ')}</dd>
               <dt>NI number</dt><dd>{p?.ni_enc ? <Reveal id={t.id} field="ni" /> : 'Not given'}</dd>
@@ -90,7 +97,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
 
           <section className="panel">
             <h2>Right to work</h2>
-            <dl className="kv" style={{ marginBottom: 10 }}><dt>Nationality</dt><dd>{p?.nationality || 'Not given'}</dd></dl>
+            <dl className="kv" style={{ marginBottom: 10 }}><dt>Nationality</dt><dd>{p?.nationality || 'Not given'}</dd><dt>Date of birth</dt><dd>{p?.dob ? `${day(p.dob)} (age ${ageOf(p.dob)})` : 'Not given'}</dd></dl>
             {t.rtw_checked_at ? (
               <dl className="kv" style={{ marginBottom: 14 }}>
                 <dt>Checked</dt><dd>{fmtDateTime(t.rtw_checked_at)} by {name(t.rtw_checked_by)}</dd>
