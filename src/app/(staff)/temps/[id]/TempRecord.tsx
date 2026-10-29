@@ -8,8 +8,8 @@ import { updateDetails, sendMyLink, approve, messageTemp, recordRtwCheck, record
 type Msg = { ok: boolean; text: string } | null;
 const Note = ({ m }: { m: Msg }) => (m ? <p className={m.ok ? 'okmsg' : 'err'} style={{ marginTop: 10 }}>{m.text}</p> : null);
 
-export function RecordActions({ id, firstName, status, registered, canApprove, approveBlock }: {
-  id: string; firstName: string; status: string; registered: boolean; canApprove: boolean; approveBlock: string;
+export function RecordActions({ id, firstName, status, registered, canApprove, approveBlock, bankOnFile = true }: {
+  id: string; firstName: string; status: string; registered: boolean; canApprove: boolean; approveBlock: string; bankOnFile?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -26,6 +26,7 @@ export function RecordActions({ id, firstName, status, registered, canApprove, a
         <div className="btnrow">
           {!registered && status !== 'out' && <button className="btn ghost" disabled={pending} onClick={() => run(() => resendRegistration(id))}>{status === 'invited' ? 'Resend registration link' : 'Send registration form'}</button>}
           {status !== 'out' && <button className="btn ghost" onClick={() => { setCompose(!compose); setMsg(null); }}>Text {firstName}</button>}
+          {status !== 'invited' && status !== 'review' && status !== 'out' && !bankOnFile && <button className="btn ghost" disabled={pending} onClick={() => run(() => sendBankLink(id))}>Request bank details</button>}
           {status !== 'invited' && status !== 'review' && <button className="btn ghost" disabled={pending} onClick={() => run(() => sendMyLink(id))}>Text holiday/P45 link</button>}
           {status === 'review' && <button className="btn blue" disabled={!canApprove || pending} onClick={() => run(() => approve(id))}>Approve</button>}
         </div>

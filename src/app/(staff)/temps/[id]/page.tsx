@@ -63,6 +63,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
           firstName={t.first_name}
           status={t.status}
           registered={!!t.registered_at}
+          bankOnFile={!!t.bank_on_file}
           canApprove={t.status === 'review' && !!t.rtw_checked_at && !rtwExpired && (!t.needs_admin_review || admin)}
           approveBlock={t.status !== 'review' ? '' : !t.rtw_checked_at ? 'Record the right to work check below before approving.' : rtwExpired ? 'Right to work has expired.' : t.needs_admin_review && !admin ? 'An admin needs to approve this candidate.' : ''}
         />
@@ -72,6 +73,11 @@ export default async function TempRecordPage({ params }: { params: { id: string 
         <section className="panel">
           <h2>Not registered yet</h2>
           <p className="lede" style={{ margin: 0 }}>{t.reg_requested_at ? `Registration link sent ${fmtDateTime(t.reg_requested_at)}. Their details appear here once they’ve filled it in.` : 'This temp was added before online registration. Send them the registration form to collect their details, right to work and agreements.'}</p>
+          {t.status !== 'invited' && (
+            <dl className="kv" style={{ marginTop: 14 }}>
+              <dt>Bank</dt><dd>{p?.bank_last4 ? <>Account ending {p.bank_last4} · added {day(p.bank_added_at)}{admin && <><br /><Reveal id={t.id} field="bank" /></>}</> : 'Not added yet. Use Request bank details above.'}</dd>
+            </dl>
+          )}
         </section>
       ) : (
         <div className="rec">

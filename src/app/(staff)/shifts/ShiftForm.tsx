@@ -15,6 +15,7 @@ export function ShiftForm() {
     jobType: 'Warehouse', duties: '', pay: '', heads: '1', radius: '15', ppe: ['Safety boots', 'Hi-vis vest'] as string[],
   });
   const [multi, setMulti] = useState(false);
+  const [noSend, setNoSend] = useState(false);
   const [days, setDays] = useState<string[]>([]);
   const [err, setErr] = useState('');
   const [reach, setReach] = useState<string>('');
@@ -32,9 +33,9 @@ export function ShiftForm() {
 
   function send() {
     setErr('');
-    if (!confirming) return setConfirming(true);
+    if (!confirming && !noSend) return setConfirming(true);
     start(async () => {
-      const r = await createAndSendShift({ ...f, date: multi && days.length ? days[0] : f.date, pay: parseFloat(f.pay), heads: parseInt(f.heads), radius: parseFloat(f.radius), dates: multi ? days : undefined });
+      const r = await createAndSendShift({ ...f, date: multi && days.length ? days[0] : f.date, pay: parseFloat(f.pay), heads: parseInt(f.heads), radius: parseFloat(f.radius), dates: multi ? days : undefined, noSend });
       if (r && !r.ok) { setErr(r.error); setConfirming(false); }
     });
   }
@@ -71,11 +72,14 @@ export function ShiftForm() {
               onChange={(e) => setF({ ...f, ppe: e.target.checked ? [...f.ppe, p] : f.ppe.filter((x) => x !== p) })} /> {p}</label>))}</div></div>
       </div>
       <div className="bar">
-        <span className="note">{reach}</span>
+        <span className="note" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label className="chip" style={{ alignSelf: 'flex-start' }}><input type="checkbox" checked={noSend} onChange={(e) => { setNoSend(e.target.checked); setConfirming(false); }} /> Don’t send it out: I’ll add people myself</label>
+          {!noSend && reach}
+        </span>
         <div className="btnrow" style={{ alignItems: 'center' }}>
           {err && <p className="err">{err}</p>}
           {confirming && <button className="btn ghost" onClick={() => setConfirming(false)}>Back</button>}
-          <button className="btn blue" disabled={pending || (multi && !days.length)} onClick={send}>{pending ? 'Sending…' : confirming ? 'Confirm and send texts' : multi ? `Send ${days.length}-day shift offer` : 'Send shift offer'}</button>
+          <button className="btn blue" disabled={pending || (multi && !days.length)} onClick={send}>{pending ? (noSend ? 'Creating…' : 'Sending…') : noSend ? (multi ? `Create ${days.length}-day shift` : 'Create shift') : confirming ? 'Confirm and send texts' : multi ? `Send ${days.length}-day shift offer` : 'Send shift offer'}</button>
         </div>
       </div>
     </section>

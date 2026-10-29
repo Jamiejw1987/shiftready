@@ -17,6 +17,8 @@ export type ShiftInput = {
   jobType: string; duties: string; pay: number; heads: number; radius: number; ppe: string[];
   /** Several days: one offer covers them all and temps say which days they can do. */
   dates?: string[];
+  /** Create the shift without texting anyone: people are added by hand. */
+  noSend?: boolean;
 };
 
 type Temp = { id: string; first_name: string; mobile: string; lat: number | null; lng: number | null; job_types: string[] };
@@ -74,6 +76,11 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
     .single();
   if (error || !shift) return { ok: false, error: 'Couldn’t save the shift. Try again.' };
 
+  if (input.noSend) {
+    await audit(supabase, profile.id, 'shift.created', `Created ${shift.client} shift (${shiftWhen(shift)}, ${shift.heads} needed) without sending it out`);
+    revalidatePath('/shifts');
+    redirect(`/shifts/${shift.id}?manual=1`);
+  }
   const matched = await matchTemps(supabase, point, input.jobType, input.radius);
   // Skip anyone already booked on a shift at the same time.
   const booked = await bookingsNear(supabase, matched.map((t) => t.id), shift.shift_date);
@@ -405,6 +412,11 @@ async function createSeries(supabase: Db, profile: Me, input: ShiftInput, dates:
   };
   const { data: days, error } = await supabase.from('shifts').insert(dates.map((shift_date) => ({ ...base, shift_date }))).select().order('shift_date');
   if (error || !days?.length) return { ok: false, error: 'Couldn’t save the shifts. Try again.' };
+  if (input.noSend) {
+    await audit(supabase, profile.id, 'shift.created', `Created ${base.client} weekly shift (${seriesWhen(days)}) without sending it out`);
+    revalidatePath('/shifts');
+    redirect(`/shifts/series/${seriesId}?manual=1`);
+  }
   const temps = await matchTemps(supabase, point, input.jobType, input.radius);
   const res = await offerSeries(supabase, profile, days, temps);
   await audit(supabase, profile.id, 'shift.sent', `Sent ${base.client} weekly shift (${seriesWhen(days)}, ${base.heads} a day) to ${res.sent} temps${res.failed ? `, ${res.failed} texts failed` : ''}`);

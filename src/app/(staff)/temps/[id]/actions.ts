@@ -113,8 +113,9 @@ export async function messageTemp(tempId: string, body: string): Promise<Result>
 
 export async function sendBankLink(tempId: string): Promise<Result> {
   const { supabase, profile } = await requireStaff();
-  const { data: t } = await supabase.from('temps').select('id,first_name,last_name,mobile,reg_token,registered_at,bank_on_file').eq('id', tempId).single();
-  if (!t?.registered_at) return { ok: false, error: 'They need to register first.' };
+  const { data: t } = await supabase.from('temps').select('id,first_name,last_name,mobile,reg_token,status,bank_on_file').eq('id', tempId).single();
+  if (!t) return { ok: false, error: 'Not found.' };
+  if (t.status === 'invited' || t.status === 'review') return { ok: false, error: 'They need to finish registering first.' };
   if (t.bank_on_file) return { ok: false, error: 'Bank details are already on file.' };
   const r = await sendToTemp({ db: supabase, temp: t, kind: 'system', sentBy: profile.id, body: bankLinkText(t.first_name, t.reg_token) });
   await audit(supabase, profile.id, 'temp.bank_link_sent', `Sent bank details link to ${t.first_name} ${t.last_name}`);

@@ -10,7 +10,7 @@ const UUID = /^[0-9a-f-]{36}$/i;
 export default async function BankPage({ params }: { params: { token: string } }) {
   if (!UUID.test(params.token)) notFound();
   const db = createAdminClient();
-  const { data: t } = await db.from('temps').select('id,first_name,registered_at,bank_on_file').eq('reg_token', params.token).maybeSingle();
+  const { data: t } = await db.from('temps').select('id,first_name,status,bank_on_file').eq('reg_token', params.token).maybeSingle();
   if (!t) notFound();
   let last4: string | null = null;
   if (t.bank_on_file) {
@@ -21,7 +21,7 @@ export default async function BankPage({ params }: { params: { token: string } }
     <main className="tpage">
       <div className="tbar"><Logo small /></div>
       <div className="tbody">
-        {!t.registered_at ? (
+        {t.status === 'invited' || t.status === 'review' ? (
           <div className="state"><div className="badge mute">–</div><div className="big">Register first</div><p>Please finish your registration using the link we texted you, then add your bank details.</p>
             <a className="btn blue" href={`/r/${params.token}`}>Go to registration</a></div>
         ) : t.bank_on_file ? (

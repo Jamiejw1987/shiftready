@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 
 type Offer = { id: string; shift_id: string; temp_id: string; status: string; available: boolean | null; distance_miles: number | null; temps: { first_name: string; last_name: string; mobile: string } | null };
 
-export default async function SeriesBoard({ params, searchParams }: { params: { id: string }; searchParams: { sent?: string; failed?: string } }) {
+export default async function SeriesBoard({ params, searchParams }: { params: { id: string }; searchParams: { sent?: string; failed?: string; manual?: string } }) {
   const { supabase, profile } = await requireStaff();
   const { data: days } = await supabase.from('shifts').select('*').eq('series_id', params.id).order('shift_date');
   if (!days?.length) notFound();
@@ -50,6 +50,7 @@ export default async function SeriesBoard({ params, searchParams }: { params: { 
         <p className="lede" style={{ marginBottom: 8 }}>
           {seriesWhen(days)} · {shiftHours(s0).toFixed(1)} hrs · £{Number(s0.pay_rate).toFixed(2)}/hr · {s0.job_type} · {s0.site}, {s0.site_postcode} · {s0.heads} a day
         </p>
+        {searchParams.manual && <p className="okmsg">Shifts created. Nobody has been texted: open each day below to add people by hand, or use Send to more temps.</p>}
         {searchParams.sent && <p className="okmsg">Offer sent to {searchParams.sent} temps (one text each for all the days){Number(searchParams.failed) ? `. ${searchParams.failed} failed` : ''}. Their days appear below as they reply.</p>}
         <p className="note">{repliedTemps.size} of {askedTemps.size} temps have replied{waiting ? `, ${waiting} still to reply` : ''}. Tick the days you want each person on, then book them: each person gets one text listing their days.</p>
         <WeekGrid seriesId={params.id} cols={cols} rows={rows} />

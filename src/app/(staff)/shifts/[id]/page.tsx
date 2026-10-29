@@ -19,7 +19,7 @@ const LABEL: Record<string, [string, string]> = {
   sent: ['mute', 'No reply yet'], accepted: ['ok', 'Accepted'], declined: ['mute', 'Declined'], standby: ['warn', 'Standby'], alerts: ['mute', 'Wants alerts'], noshow: ['bad', 'No-show'],
 };
 
-export default async function ShiftBoard({ params, searchParams }: { params: { id: string }; searchParams: { sent?: string; failed?: string; busy?: string } }) {
+export default async function ShiftBoard({ params, searchParams }: { params: { id: string }; searchParams: { sent?: string; failed?: string; busy?: string; manual?: string } }) {
   const { supabase } = await requireStaff();
   const { data: s } = await supabase.from('shifts').select('*').eq('id', params.id).maybeSingle();
   if (!s) notFound();
@@ -44,6 +44,7 @@ export default async function ShiftBoard({ params, searchParams }: { params: { i
         <p className="lede" style={{ marginBottom: 8 }}>
           {shiftWhen(s)} · {shiftHours(s).toFixed(1)} hrs · £{Number(s.pay_rate).toFixed(2)}/hr · {s.job_type} · {s.site}, {s.site_postcode} · within {Number(s.radius_miles)} mi
         </p>
+        {searchParams.manual && <p className="okmsg">Shift created. Nobody has been texted: use Add someone by hand below to book people on, or Send to more temps if you change your mind.</p>}
         {searchParams.sent && <p className="okmsg">Offer texted to {searchParams.sent} temps{Number(searchParams.failed) ? `. ${searchParams.failed} texts failed` : ''}{Number(searchParams.busy) ? `. ${searchParams.busy} already booked at that time were skipped` : ''}. This page updates every 15 seconds.</p>}
         {cancelled
           ? <p className="err">This shift was cancelled. Booked temps were texted.</p>
