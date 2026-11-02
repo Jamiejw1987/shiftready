@@ -115,3 +115,21 @@ export function BulkInvite({ disabled, known }: { disabled: boolean; known: stri
     </>
   );
 }
+
+export function PublicLink({ url }: { url: string }) {
+  const msg = `Thanks for applying for this role. It has now been filled, but if you'd like to hear about future jobs and shifts with Staff Selection UK, you can register with us here: ${url}`;
+  const [copied, setCopied] = useState('');
+  const copy = (what: string, text: string) => navigator.clipboard?.writeText(text).then(() => { setCopied(what); setTimeout(() => setCopied(''), 2000); }).catch(() => {});
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="btnrow">
+        <span className="secret" style={{ flex: '1 1 260px' }}>{url}</span>
+        <button className="btn ghost" onClick={() => copy('link', url)}>{copied === 'link' ? 'Copied' : 'Copy link'}</button>
+      </div>
+      <div className="f"><span className="l">Ready-made message for applicants</span>
+        <div className="secret" style={{ fontFamily: 'var(--f-body)', fontSize: 14 }}>{msg}</div></div>
+      <div className="btnrow"><button className="btn ghost" onClick={() => copy('msg', msg)}>{copied === 'msg' ? 'Copied' : 'Copy message'}</button>
+        <span className="note">Tip: add ?from=indeed (or facebook, etc.) to the end of the link to see where sign-ups came from in the audit trail.</span></div>
+    </div>
+  );
+}

@@ -4,7 +4,8 @@ import { currentDocs, docProblems } from '@/lib/docs';
 import { encryptionReady } from '@/lib/crypto';
 import { displayMobile } from '@/lib/phone';
 import { fmtDateTime } from '@/lib/format';
-import { InviteForm, ResendButton, BulkInvite } from './RegClient';
+import { InviteForm, ResendButton, BulkInvite, PublicLink } from './RegClient';
+import { appUrl } from '@/lib/texts';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +39,12 @@ export default async function RegistrationsPage() {
           <p className="alert" style={{ marginBottom: 14 }}>Registration links are switched off until: {problems.join('; ')}.{profile.role === 'admin' ? <> <Link href="/team/documents">Open Documents</Link></> : ' Ask an admin.'}</p>
         )}
         <InviteForm disabled={problems.length > 0} />
+      </section>
+
+      <section className="panel">
+        <h2>Public sign-up link</h2>
+        <p className="lede">One link anyone can use to register: put it in replies to job applicants, adverts or social posts. They enter their name and mobile, we text them their own registration link, and they appear under Ready to check when they’ve finished.</p>
+        <PublicLink url={`${appUrl()}/join`} />
       </section>
 
       <section className="panel">
