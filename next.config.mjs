@@ -2,6 +2,13 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Friendlier addresses for the public sign-up page.
+  async redirects() {
+    return [
+      { source: '/register', destination: '/join', permanent: false },
+      { source: '/apply', destination: '/join', permanent: false },
+    ];
+  },
   async headers() {
     return [
       {
