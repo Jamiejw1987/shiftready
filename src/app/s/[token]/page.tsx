@@ -15,7 +15,7 @@ export default async function OfferPage({ params }: { params: { token: string } 
   const db = createAdminClient();
   const { data: o } = await db
     .from('offers')
-    .select('id,temp_id,status,decline_reason,distance_miles,standby_at,shift_id,temps(first_name,status,optin_token,reg_token,registered_at,bank_on_file),shifts(*)')
+    .select('id,temp_id,status,decline_reason,awaiting_confirm,distance_miles,standby_at,shift_id,temps(first_name,status,optin_token,reg_token,registered_at,bank_on_file),shifts(*)')
     .eq('token', params.token)
     .maybeSingle();
   if (!o) notFound();
@@ -27,12 +27,12 @@ export default async function OfferPage({ params }: { params: { token: string } 
   const series = (o.shifts as unknown as { series_id: string | null }).series_id;
   if (series) {
     const { data: days } = await db.from('shifts').select('id,shift_date,start_time,end_time,status,heads').eq('series_id', series).order('shift_date');
-    const { data: mine } = await db.from('offers').select('id,shift_id,status,available,decline_reason').eq('temp_id', (o as unknown as { temp_id?: string }).temp_id ?? '').in('shift_id', (days ?? []).map((d) => d.id));
+    const { data: mine } = await db.from('offers').select('id,shift_id,status,available,decline_reason,awaiting_confirm').eq('temp_id', (o as unknown as { temp_id?: string }).temp_id ?? '').in('shift_id', (days ?? []).map((d) => d.id));
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
     const rows = (days ?? []).flatMap((d) => {
       const m = (mine ?? []).find((x) => x.shift_id === d.id);
       if (!m) return [];
-      return [{ offerId: m.id, date: d.shift_date, booked: m.status === 'accepted', available: m.available as boolean | null,
+      return [{ offerId: m.id, date: d.shift_date, booked: m.status === 'accepted', awaiting: m.status === 'accepted' && !!m.awaiting_confirm, available: m.available as boolean | null,
         closed: d.status === 'cancelled' || d.shift_date < today || (m.status === 'declined' && m.decline_reason === 'Removed by office') || m.status === 'noshow' }];
     });
     return (
@@ -65,7 +65,7 @@ export default async function OfferPage({ params }: { params: { token: string } 
           firstName={t.first_name}
           tempActive={t.status === 'active'}
           bankUrl={t.registered_at && !t.bank_on_file ? `/b/${t.reg_token}` : null}
-          offerStatus={o.status === 'declined' && o.decline_reason === 'Removed by office' ? 'removed' : o.status}
+          offerStatus={o.status === 'declined' && o.decline_reason === 'Removed by office' ? 'removed' : o.status === 'accepted' && o.awaiting_confirm ? 'awaiting' : o.status}
           standbyPos={standbyPos}
           shiftState={s.status === 'cancelled' ? 'cancelled' : past ? 'past' : (filled ?? 0) >= s.heads ? 'full' : 'open'}
           placesLeft={Math.max(0, s.heads - (filled ?? 0))}

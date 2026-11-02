@@ -5,13 +5,14 @@ import { useRouter } from 'next/navigation';
 import { seriesBook, seriesSendMore, seriesPreviewMore } from '../../actions';
 
 type Col = { id: string; label: string; heads: number; booked: number; cancelled: boolean; past: boolean };
-type Row = { id: string; name: string; mobile: string; miles: number | null; cells: Record<string, { offerId: string; status: string; available: boolean | null }> };
+type Row = { id: string; name: string; mobile: string; miles: number | null; cells: Record<string, { offerId: string; status: string; available: boolean | null; awaiting: boolean }> };
 
 export function WeekGrid({ seriesId, cols, rows }: { seriesId: string; cols: Col[]; rows: Row[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [ask, setAsk] = useState(true);
   const toggle = (id: string) => setSel((x) => { const n = new Set(x); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const people = new Set(rows.filter((r) => Object.values(r.cells).some((c) => sel.has(c.offerId))).map((r) => r.id)).size;
   const pickRow = (r: Row) => setSel((x) => {
@@ -43,7 +44,7 @@ export function WeekGrid({ seriesId, cols, rows }: { seriesId: string; cols: Col
                 {cols.map((c) => {
                   const cell = r.cells[c.id];
                   if (!cell) return <td key={c.id} className="wk-no">–</td>;
-                  if (cell.status === 'accepted') return <td key={c.id} className="wk-cell"><span className="pill ok">Booked</span></td>;
+                  if (cell.status === 'accepted') return <td key={c.id} className="wk-cell">{cell.awaiting ? <span className="pill warn" title="Booked, waiting for them to confirm">To confirm</span> : <span className="pill ok">Confirmed</span>}</td>;
                   if (c.cancelled || c.past) return <td key={c.id} className="wk-no">–</td>;
                   return (
                     <td key={c.id} className="wk-cell">
@@ -61,9 +62,10 @@ export function WeekGrid({ seriesId, cols, rows }: { seriesId: string; cols: Col
       <div className="bar">
         {msg ? <p className={msg.ok ? 'okmsg' : 'err'}>{msg.text}</p> : <span className="note">{sel.size ? `${sel.size} day${sel.size === 1 ? '' : 's'} ticked for ${people} ${people === 1 ? 'person' : 'people'}` : 'Tick the days to book'}</span>}
         <div className="btnrow">
+          <label className="chip"><input type="checkbox" checked={ask} onChange={(e) => setAsk(e.target.checked)} /> Ask them to confirm</label>
           {sel.size > 0 && <button className="btn ghost" onClick={() => setSel(new Set())}>Clear</button>}
           <button className="btn blue" disabled={!sel.size || pending} onClick={() => start(async () => {
-            const r = await seriesBook(seriesId, [...sel]);
+            const r = await seriesBook(seriesId, [...sel], ask);
             setMsg({ ok: r.ok, text: r.ok ? r.message! : r.error! });
             if (r.ok) setSel(new Set());
             router.refresh();

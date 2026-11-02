@@ -11,7 +11,7 @@ export function AddToShift({ id }: { id: string }) {
   const [pending, start] = useTransition();
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<Hit[]>([]);
-  const [textThem, setTextThem] = useState(true);
+  const [mode, setMode] = useState<'ask' | 'tell' | 'silent'>('ask');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
@@ -34,7 +34,7 @@ export function AddToShift({ id }: { id: string }) {
                 <span><b>{h.name}</b> <span className="note">{h.mobile}{h.postcode ? ` · ${h.postcode}` : ''}</span></span>
                 {block ? <span className="pill mute">{block}</span> : (
                   <button className="btn blue small" disabled={pending} onClick={() => start(async () => {
-                    const r = await addToShift(id, h.id, textThem);
+                    const r = await addToShift(id, h.id, mode);
                     setMsg({ ok: r.ok, text: r.ok ? r.message! : r.error! });
                     if (r.ok) { setQ(''); setHits([]); router.refresh(); }
                   })}>Book on</button>
@@ -45,7 +45,12 @@ export function AddToShift({ id }: { id: string }) {
         </div>
       )}
       {q.trim().length >= 2 && !hits.length && <span className="note">No temps found.</span>}
-      <label className="chip" style={{ alignSelf: 'flex-start' }}><input type="checkbox" checked={textThem} onChange={(e) => setTextThem(e.target.checked)} /> Text them a booking confirmation</label>
+      <div className="f" style={{ maxWidth: 420 }}><label className="l" htmlFor="bookMode">When you book them on</label>
+        <select id="bookMode" value={mode} onChange={(e) => setMode(e.target.value as 'ask' | 'tell' | 'silent')}>
+          <option value="ask">Text and ask them to confirm</option>
+          <option value="tell">Text to say they’re booked (already agreed)</option>
+          <option value="silent">Don’t text them</option>
+        </select></div>
       {msg && <p className={msg.ok ? 'okmsg' : 'err'}>{msg.text}</p>}
     </div>
   );

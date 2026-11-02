@@ -1,9 +1,9 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { setAvailability } from './actions';
+import { setAvailability, confirmBooking } from './actions';
 
-type Day = { offerId: string; date: string; booked: boolean; available: boolean | null; closed: boolean };
+type Day = { offerId: string; date: string; booked: boolean; awaiting: boolean; available: boolean | null; closed: boolean };
 type Props = {
   token: string; firstName: string; tempActive: boolean; bankUrl: string | null; days: Day[];
   shift: { client: string; site: string; when: string; time: string; hours: number; pay: number; role: string; duties: string[]; ppe: string[] };
@@ -54,8 +54,14 @@ export function SeriesPanel(p: Props) {
 
         {booked.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <h3>You’re booked on</h3>
-            {booked.map((d) => <div key={d.offerId} className="slot" style={{ marginTop: 0 }}><span>{label(d.date)}</span><span className="pill ok">Booked</span></div>)}
+            <h3>{booked.some((d) => d.awaiting) ? 'We’ve booked you on these days' : 'You’re booked on'}</h3>
+            {booked.map((d) => <div key={d.offerId} className="slot" style={{ marginTop: 0 }}><span>{label(d.date)}</span><span className={`pill ${d.awaiting ? 'warn' : 'ok'}`}>{d.awaiting ? 'Please confirm' : 'Confirmed'}</span></div>)}
+            {booked.some((d) => d.awaiting) && (
+              <div className="actions">
+                <button className="btn ghost" disabled={pending} onClick={() => start(async () => { await confirmBooking(p.token, false); router.refresh(); })}>I can’t do these</button>
+                <button className="btn blue" disabled={pending} onClick={() => start(async () => { await confirmBooking(p.token, true); router.refresh(); })}>Confirm my days</button>
+              </div>
+            )}
             {p.bankUrl && <a className="btn blue" href={p.bankUrl}>Add bank details before your first shift</a>}
           </div>
         )}

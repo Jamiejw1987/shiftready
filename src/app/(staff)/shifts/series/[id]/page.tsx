@@ -10,19 +10,19 @@ import { WeekActions } from './WeekActions';
 
 export const dynamic = 'force-dynamic';
 
-type Offer = { id: string; shift_id: string; temp_id: string; status: string; available: boolean | null; distance_miles: number | null; temps: { first_name: string; last_name: string; mobile: string } | null };
+type Offer = { id: string; shift_id: string; temp_id: string; status: string; available: boolean | null; awaiting_confirm: boolean; distance_miles: number | null; temps: { first_name: string; last_name: string; mobile: string } | null };
 
 export default async function SeriesBoard({ params, searchParams }: { params: { id: string }; searchParams: { sent?: string; failed?: string; manual?: string } }) {
   const { supabase, profile } = await requireStaff();
   const { data: days } = await supabase.from('shifts').select('*').eq('series_id', params.id).order('shift_date');
   if (!days?.length) notFound();
-  const { data: raw } = await supabase.from('offers').select('id,shift_id,temp_id,status,available,distance_miles,temps(first_name,last_name,mobile)').in('shift_id', days.map((d) => d.id));
+  const { data: raw } = await supabase.from('offers').select('id,shift_id,temp_id,status,available,awaiting_confirm,distance_miles,temps(first_name,last_name,mobile)').in('shift_id', days.map((d) => d.id));
   const offers = (raw ?? []) as unknown as Offer[];
   const s0 = days[0];
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
 
   // One row per temp who's said they're free on at least one day, or is booked.
-  const people = new Map<string, { id: string; name: string; mobile: string; miles: number | null; cells: Record<string, { offerId: string; status: string; available: boolean | null }> }>();
+  const people = new Map<string, { id: string; name: string; mobile: string; miles: number | null; cells: Record<string, { offerId: string; status: string; available: boolean | null; awaiting: boolean }> }>();
   let waiting = 0;
   const askedTemps = new Set<string>(), repliedTemps = new Set<string>();
   for (const o of offers) {
@@ -30,7 +30,7 @@ export default async function SeriesBoard({ params, searchParams }: { params: { 
     if (o.available !== null || o.status === 'accepted') repliedTemps.add(o.temp_id);
     if (!(o.available || o.status === 'accepted')) continue;
     const p = people.get(o.temp_id) ?? { id: o.temp_id, name: o.temps ? `${o.temps.first_name} ${o.temps.last_name}` : 'Deleted temp', mobile: o.temps ? displayMobile(o.temps.mobile) : '', miles: o.distance_miles, cells: {} };
-    p.cells[o.shift_id] = { offerId: o.id, status: o.status, available: o.available };
+    p.cells[o.shift_id] = { offerId: o.id, status: o.status, available: o.available, awaiting: o.awaiting_confirm };
     people.set(o.temp_id, p);
   }
   waiting = askedTemps.size - repliedTemps.size;

@@ -2,6 +2,7 @@
 import { revalidatePath } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { respondToOffer, type OfferAction } from '@/lib/offerFlow';
+import { awaitingFor, answerBooking } from '@/lib/confirm';
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
@@ -40,6 +41,26 @@ export async function setAvailability(token: string, offerIds: string[]) {
     await db.from('offers').update({ available, available_at: now, ppe_confirmed: available || undefined, responded_at: now }).eq('id', m.id);
   }
   await db.from('audit_log').insert({ actor: null, action: 'offer.availability', detail: `${t.first_name} ${t.last_name} said they can do ${yes} day${yes === 1 ? '' : 's'} of ${series.client}` });
+  revalidatePath(`/s/${token}`);
+  return { ok: true };
+}
+
+/** The temp confirms or turns down a booking the office made. For weekly shifts this covers all their unconfirmed days. */
+export async function confirmBooking(token: string, yes: boolean) {
+  if (!UUID.test(token)) return { ok: false };
+  const db = createAdminClient();
+  const { data: o } = await db.from('offers').select('id,temp_id,temps(id,first_name,last_name),shifts(series_id)').eq('token', token).maybeSingle();
+  if (!o) return { ok: false };
+  const t = o.temps as unknown as { id: string; first_name: string; last_name: string };
+  const series = (o.shifts as unknown as { series_id: string | null }).series_id;
+  let ids: string[] = [o.id];
+  if (series) {
+    const { data: days } = await db.from('shifts').select('id').eq('series_id', series);
+    const { data: mine } = await db.from('offers').select('id').eq('temp_id', o.temp_id).in('shift_id', (days ?? []).map((d) => d.id));
+    ids = (mine ?? []).map((m) => m.id);
+  }
+  const items = await awaitingFor(db, o.temp_id, ids);
+  await answerBooking(db, t, items, yes);
   revalidatePath(`/s/${token}`);
   return { ok: true };
 }

@@ -1,7 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { respond } from './actions';
+import { respond, confirmBooking } from './actions';
 
 type Props = {
   token: string; firstName: string; tempActive: boolean; bankUrl: string | null; offerStatus: string; standbyPos: number;
@@ -42,6 +42,13 @@ export function OfferPanel(p: Props) {
   }
 
   if (p.shiftState === 'cancelled') return <State badge="✕" kind="mute" title="Shift cancelled" text={`Sorry, the ${s.client} shift on ${s.whenShort} was cancelled. You don't need to attend.`} />;
+  if (p.offerStatus === 'awaiting')
+    return <State badge="?" kind="blue" title="Please confirm" text={`We’ve booked you on ${s.client}, ${s.when}, at ${s.site}. Can you do it?`}>
+      {err && <p className="err">{err}</p>}
+      <div className="stack">
+        <button className="btn blue" disabled={pending} onClick={() => start(async () => { const r = await confirmBooking(p.token, true); if (!r.ok) setErr('Something went wrong. Please call the office.'); router.refresh(); })}>Yes, I’ll be there</button>
+        <button className="btn ghost" disabled={pending} onClick={() => start(async () => { const r = await confirmBooking(p.token, false); if (!r.ok) setErr('Something went wrong. Please call the office.'); router.refresh(); })}>I can’t do it</button>
+      </div></State>;
   if (p.offerStatus === 'removed') return <State badge="–" kind="mute" title="Taken off this shift" text="The office has taken you off this shift, so you don’t need to attend. Call the office if you have any questions." />;
   if (p.offerStatus === 'noshow') return <State badge="!" kind="mute" title="Marked as no-show" text="Your consultant recorded you as not attending this shift. Call the office if this is wrong." />;
   if (p.offerStatus === 'accepted')

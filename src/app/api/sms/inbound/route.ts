@@ -2,10 +2,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { sendSms, sendToTemp } from '@/lib/sms';
 import { respondToOffer, type OfferAction } from '@/lib/offerFlow';
+import { awaitingFor, answerBooking } from '@/lib/confirm';
 import { validTwilioRequest } from '@/lib/twilioSignature';
 import { shiftWhen } from '@/lib/format';
 import {
-  appUrl, OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD, REPLY_ATTENDED, replyClash,
+  appUrl, OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD, REPLY_ATTENDED, replyClash, confirmedReply,
 } from '@/lib/texts';
 
 /**
@@ -101,6 +102,16 @@ export async function POST(req: NextRequest) {
           if (p?.mobile) await sendSms({ db, to: p.mobile, kind: 'system', body: `ShiftReady URGENT: ${name} can't make ${s.client} at ${s.start_time.slice(0, 5)}. Open the shift to take them off and fill the place.` });
         }
       }
+      return twiml();
+    }
+  }
+
+  // Confirming (or turning down) bookings a consultant made for them.
+  if (ciYes || ciNo) {
+    const pending = await awaitingFor(db, t.id);
+    if (pending.length) {
+      const what = await answerBooking(db, t, pending, ciYes);
+      await reply(ciYes ? confirmedReply(t.first_name, what) : `Thanks for letting us know, ${t.first_name}. We've taken you off ${what}. - Staff Selection`);
       return twiml();
     }
   }

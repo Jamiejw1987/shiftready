@@ -5,7 +5,7 @@ import { requireStaff, audit } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { geocodePostcode, looksLikePostcode, milesBetween, normalisePostcode } from '@/lib/geo';
 import { sendMany, sendToTemp } from '@/lib/sms';
-import { offerText, offerWa, promotedText, promotedWa, noShowText, replyAccepted, appUrl, seriesOfferText, seriesBookedText } from '@/lib/texts';
+import { offerText, offerWa, promotedText, promotedWa, noShowText, replyAccepted, appUrl, seriesOfferText, seriesBookedText, confirmAskText } from '@/lib/texts';
 import { displayMobile } from '@/lib/phone';
 import { shiftWhen, JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
 import { bookingsNear, overlaps } from '@/lib/clash';
@@ -270,7 +270,11 @@ export async function findTempsForShift(shiftId: string, q: string) {
 }
 
 /** Books a temp onto a shift by hand, e.g. they rang or texted the office to confirm. */
-export async function addToShift(shiftId: string, tempId: string, textThem: boolean) {
+export type BookMode = 'ask' | 'tell' | 'silent';
+
+/** Books a temp onto a shift by hand. 'ask' texts them to confirm (they hold the place until they reply); 'tell' just tells them they're booked. */
+export async function addToShift(shiftId: string, tempId: string, mode: BookMode) {
+  const textThem = mode !== 'silent';
   const { supabase, profile } = await requireStaff();
   const { data: s } = await supabase.from('shifts').select('*').eq('id', shiftId).maybeSingle();
   const { data: t } = await supabase.from('temps').select('id,first_name,last_name,mobile,status,registered_at,bank_on_file,reg_token').eq('id', tempId).maybeSingle();
@@ -283,14 +287,15 @@ export async function addToShift(shiftId: string, tempId: string, textThem: bool
   if (clash) return { ok: false, error: `${t.first_name} is already booked on ${clash.client} at that time.` };
   const now = new Date().toISOString();
   const { data: o, error } = await supabase.from('offers')
-    .upsert({ shift_id: s.id, temp_id: t.id, status: 'accepted', responded_at: now, standby_at: null, decline_reason: null }, { onConflict: 'shift_id,temp_id' })
-    .select('id').single();
+    .upsert({ shift_id: s.id, temp_id: t.id, status: 'accepted', responded_at: now, standby_at: null, decline_reason: null, awaiting_confirm: mode === 'ask', confirm_asked_at: mode === 'ask' ? now : null }, { onConflict: 'shift_id,temp_id' })
+    .select('id,token').single();
   if (error || !o) return { ok: false, error: 'Couldn’t book them on. Try again.' };
   if ((count ?? 0) + 1 >= s.heads) await supabase.from('shifts').update({ status: 'filled' }).eq('id', s.id);
-  if (textThem) await sendToTemp({ db: supabase, temp: t, kind: 'system', offerId: o.id, sentBy: profile.id, body: replyAccepted(s.client, shiftWhen(s), `${s.site}, ${s.site_postcode}`, t.registered_at && !t.bank_on_file ? t.reg_token : null) });
-  await audit(supabase, profile.id, 'shift.added_manually', `Booked ${t.first_name} ${t.last_name} onto ${s.client} (${shiftWhen(s)}) by hand${textThem ? ' and texted them' : ''}`);
+  if (mode === 'ask') await sendToTemp({ db: supabase, temp: t, kind: 'confirm', offerId: o.id, sentBy: profile.id, body: confirmAskText(t.first_name, s.client, shiftWhen(s), `${s.site}, ${s.site_postcode}`, o.token) });
+  else if (mode === 'tell') await sendToTemp({ db: supabase, temp: t, kind: 'system', offerId: o.id, sentBy: profile.id, body: replyAccepted(s.client, shiftWhen(s), `${s.site}, ${s.site_postcode}`, t.registered_at && !t.bank_on_file ? t.reg_token : null) });
+  await audit(supabase, profile.id, 'shift.added_manually', `Booked ${t.first_name} ${t.last_name} onto ${s.client} (${shiftWhen(s)}) by hand${mode === 'ask' ? ' and asked them to confirm' : textThem ? ' and texted them' : ''}`);
   revalidatePath(`/shifts/${s.id}`);
-  return { ok: true, message: `${t.first_name} is booked on${textThem ? ' and has been texted' : ''}.` };
+  return { ok: true, message: mode === 'ask' ? `${t.first_name} is booked on and has been asked to confirm. The board shows when they reply.` : `${t.first_name} is booked on${textThem ? ' and has been texted' : ''}.` };
 }
 
 export type ShiftEdit = { heads: number; pay: number; start: string; end: string; duties: string; ppe: string[]; notify: boolean };
@@ -458,20 +463,20 @@ export async function seriesPreviewMore(seriesId: string, radius: number) {
  * Books temps onto the days they said they're available, from the week grid. Each person gets one text listing
  * all the days they've been booked on (cheaper than a text per day).
  */
-export async function seriesBook(seriesId: string, offerIds: string[]) {
+export async function seriesBook(seriesId: string, offerIds: string[], ask = true) {
   const { supabase, profile } = await requireStaff();
   if (!offerIds.length) return { ok: false, error: 'Tick the days you want to book first.' };
   const { data: days } = await supabase.from('shifts').select('*').eq('series_id', seriesId).order('shift_date');
   const dayById = new Map((days ?? []).map((d) => [d.id, d]));
   const { data: offers } = await supabase.from('offers')
-    .select('id,shift_id,temp_id,status,temps(first_name,last_name,mobile,status,registered_at,bank_on_file,reg_token)')
+    .select('id,shift_id,temp_id,status,token,temps(first_name,last_name,mobile,status,registered_at,bank_on_file,reg_token)')
     .in('shift_id', [...dayById.keys()]);
   const count = new Map<string, number>();
   for (const o of offers ?? []) if (o.status === 'accepted') count.set(o.shift_id, (count.get(o.shift_id) ?? 0) + 1);
   const chosen = (offers ?? []).filter((o) => offerIds.includes(o.id) && o.status !== 'accepted')
     .sort((a, b) => (dayById.get(a.shift_id)!.shift_date).localeCompare(dayById.get(b.shift_id)!.shift_date));
   const skipped: string[] = [];
-  const bookedFor = new Map<string, { t: { first_name: string; last_name: string; mobile: string; registered_at: string | null; bank_on_file: boolean; reg_token: string }; days: string[]; offerId: string }>();
+  const bookedFor = new Map<string, { t: { first_name: string; last_name: string; mobile: string; registered_at: string | null; bank_on_file: boolean; reg_token: string }; days: string[]; offerId: string; token: string }>();
   for (const o of chosen) {
     const d = dayById.get(o.shift_id)!;
     const t = o.temps as unknown as { first_name: string; last_name: string; mobile: string; status: string; registered_at: string | null; bank_on_file: boolean; reg_token: string };
@@ -480,25 +485,27 @@ export async function seriesBook(seriesId: string, offerIds: string[]) {
     if (t.status !== 'active') { skipped.push(`${t.first_name} isn’t active`); continue; }
     const clash = (await bookingsNear(supabase, [o.temp_id], d.shift_date)).get(o.temp_id)?.find((b) => b.id !== d.id && overlaps(b, d));
     if (clash) { skipped.push(`${t.first_name} is booked elsewhere on ${dayLabel(d.shift_date)}`); continue; }
-    await supabase.from('offers').update({ status: 'accepted', responded_at: new Date().toISOString(), standby_at: null }).eq('id', o.id);
+    await supabase.from('offers').update({ status: 'accepted', responded_at: new Date().toISOString(), standby_at: null, awaiting_confirm: ask, confirm_asked_at: ask ? new Date().toISOString() : null }).eq('id', o.id);
     count.set(d.id, (count.get(d.id) ?? 0) + 1);
     if ((count.get(d.id) ?? 0) >= d.heads) await supabase.from('shifts').update({ status: 'filled' }).eq('id', d.id);
-    const cur = bookedFor.get(o.temp_id) ?? { t, days: [] as string[], offerId: o.id };
+    const cur = bookedFor.get(o.temp_id) ?? { t, days: [] as string[], offerId: o.id, token: o.token };
     cur.days.push(d.id);
     bookedFor.set(o.temp_id, cur);
   }
   const s0 = days![0];
   const res = await sendMany([...bookedFor.entries()], ([tempId, b]) => {
     const when = seriesWhen((days ?? []).filter((d) => b.days.includes(d.id)));
-    return sendToTemp({ db: supabase, temp: { id: tempId, mobile: b.t.mobile }, kind: 'system', offerId: b.offerId, sentBy: profile.id,
-      body: seriesBookedText(b.t.first_name, s0.client, when, `${s0.site}, ${s0.site_postcode}`, b.t.registered_at && !b.t.bank_on_file ? b.t.reg_token : null) });
+    return sendToTemp({ db: supabase, temp: { id: tempId, mobile: b.t.mobile }, kind: ask ? 'confirm' : 'system', offerId: b.offerId, sentBy: profile.id,
+      body: ask
+        ? confirmAskText(b.t.first_name, s0.client, when, `${s0.site}, ${s0.site_postcode}`, b.token)
+        : seriesBookedText(b.t.first_name, s0.client, when, `${s0.site}, ${s0.site_postcode}`, b.t.registered_at && !b.t.bank_on_file ? b.t.reg_token : null) });
   });
   const people = [...bookedFor.values()];
   await audit(supabase, profile.id, 'shift.series_booked', `Booked ${people.map((p) => `${p.t.first_name} ${p.t.last_name} (${p.days.length} day${p.days.length === 1 ? '' : 's'})`).join(', ') || 'nobody'} on ${s0.client} weekly shift`);
   revalidatePath(`/shifts/series/${seriesId}`);
   return {
     ok: true,
-    message: `${people.length} ${people.length === 1 ? 'person' : 'people'} booked and texted${res.failed ? ` (${res.failed} texts failed)` : ''}.${skipped.length ? ` Not booked: ${[...new Set(skipped)].join('; ')}.` : ''}`,
+    message: `${people.length} ${people.length === 1 ? 'person' : 'people'} booked and ${ask ? 'asked to confirm' : 'texted'}${res.failed ? ` (${res.failed} texts failed)` : ''}.${skipped.length ? ` Not booked: ${[...new Set(skipped)].join('; ')}.` : ''}`,
   };
 }
 

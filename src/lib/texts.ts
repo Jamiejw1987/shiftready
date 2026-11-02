@@ -85,5 +85,11 @@ export const seriesOfferText = (o: SeriesInfo) =>
 export const seriesBookedText = (first: string, client: string, days: string, site: string, bankToken?: string | null) =>
   `Hi ${first}, you're booked: ${client}, ${days}, ${site}. Please arrive 10 minutes early. We'll check in with you before each shift.${bankToken ? ` Before your first shift, add your bank details: ${appUrl()}/b/${bankToken}` : ''} - Staff Selection`;
 
+// Booked by a consultant: ask the temp to confirm
+export const confirmAskText = (first: string, client: string, when: string, site: string, token: string) =>
+  `Hi ${first}, we've booked you on ${client}, ${when}, ${site}. Please confirm you can do it: reply YES, or NO if you can't. Details: ${appUrl()}/s/${token} - Staff Selection`;
+export const confirmedReply = (first: string, what: string) =>
+  `Thanks ${first}, you're confirmed for ${what}. Please arrive 10 minutes early. - Staff Selection`;
+
 export const OPTED_IN_REPLY = "Thanks, you're all set. We'll message you when shifts come up near you. Reply STOP at any time to opt out. - Staff Selection";
 export const OPTED_OUT_REPLY = "You've been opted out and won't get shift messages from Staff Selection. Reply START to opt back in.";
