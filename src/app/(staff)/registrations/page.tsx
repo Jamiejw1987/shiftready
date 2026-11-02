@@ -6,6 +6,20 @@ import { displayMobile } from '@/lib/phone';
 import { fmtDateTime } from '@/lib/format';
 import { InviteForm, ResendButton, BulkInvite, PublicLink } from './RegClient';
 import { appUrl } from '@/lib/texts';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { applyEndpoint, applyMessage } from '@/lib/applications';
+import { ApplyAddress, ApplyMessage, RetryButton } from './ApplyClient';
+
+const OUTCOME: Record<string, [string, string]> = {
+  texted: ['ok', 'Link texted'],
+  resent: ['ok', 'Link texted again'],
+  already_registered: ['blue', 'Already registered'],
+  opted_out: ['mute', 'Opted out'],
+  no_mobile: ['warn', 'No UK mobile'],
+  not_sent: ['warn', 'Not sent'],
+  failed: ['bad', 'Text failed'],
+  saved: ['mute', 'Saved'],
+};
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +41,11 @@ export default async function RegistrationsPage() {
     supabase.from('profiles').select('id,full_name'),
   ]);
   const { data: allMobiles } = await supabase.from('temps').select('mobile');
+  const [{ data: apps }, applyText, { data: keyRow }] = await Promise.all([
+    supabase.from('job_applications').select('id,source,job_title,job_ref,first_name,last_name,email,mobile,phone_raw,postcode,town,cv_path,temp_id,outcome,detail,created_at').order('created_at', { ascending: false }).limit(50),
+    applyMessage(supabase),
+    profile.role === 'admin' ? createAdminClient().from('app_secrets').select('value').eq('name', 'apply_key').maybeSingle() : Promise.resolve({ data: null }),
+  ]);
   const problems = [...(encryptionReady() ? [] : ['the encryption key (FIELD_ENCRYPTION_KEY) hasn’t been added in Vercel']), ...docProblems(docs)];
   const by = (id: string | null) => users?.find((u) => u.id === id)?.full_name ?? '-';
 
@@ -45,6 +64,36 @@ export default async function RegistrationsPage() {
         <h2>Public sign-up link</h2>
         <p className="lede">One link anyone can use to register: put it in replies to job applicants, adverts or social posts. They enter their name and mobile, we text them their own registration link, and they appear under Ready to check when they’ve finished.</p>
         <PublicLink url={`${appUrl()}/join`} />
+      </section>
+
+      <section className="panel">
+        <h2>CV-Library applications</h2>
+        <p className="lede">Applications from CV-Library come straight in here. Each applicant is added to ShiftReady and texted their own registration link with the message below, then appears under Ready to check when they’ve finished.</p>
+        <ApplyMessage current={applyText} base={appUrl()} canEdit={profile.role === 'admin'} />
+        {keyRow?.value && <div style={{ marginTop: 14 }}><ApplyAddress url={applyEndpoint(keyRow.value)} /></div>}
+        <div className="tablewrap" style={{ marginTop: 14 }}><table className="cards">
+          <thead><tr><th>Applicant</th><th>Job</th><th>Mobile</th><th>Applied</th><th>What happened</th><th></th></tr></thead>
+          <tbody>
+            {(apps ?? []).map((a) => {
+              const [tone, label] = OUTCOME[a.outcome] ?? ['mute', a.outcome];
+              return (
+                <tr key={a.id}>
+                  <td><b>{[a.first_name, a.last_name].filter(Boolean).join(' ') || 'No name'}</b>{(a.town || a.postcode) && <><br /><span className="note">{[a.town, a.postcode].filter(Boolean).join(', ')}</span></>}{a.email && <><br /><span className="note">{a.email}</span></>}</td>
+                  <td data-l="Job">{a.job_title || a.job_ref || '-'}</td>
+                  <td className="num" data-l="Mobile">{a.mobile ? displayMobile(a.mobile) : a.phone_raw || '-'}</td>
+                  <td data-l="Applied" title={fmtDateTime(a.created_at)}>{ago(a.created_at)}</td>
+                  <td data-l="What happened"><span className={`pill ${tone}`}>{label}</span>{a.detail && <><br /><span className="note">{a.detail}</span></>}</td>
+                  <td><div className="btnrow">
+                    {a.cv_path && <a className="btn ghost small" href={`/api/applications/${a.id}/cv`} target="_blank" rel="noreferrer">CV</a>}
+                    {['not_sent', 'failed'].includes(a.outcome) && <RetryButton id={a.id} />}
+                    {a.temp_id && <Link className="btn ghost small" href={`/temps/${a.temp_id}`}>Open</Link>}
+                  </div></td>
+                </tr>
+              );
+            })}
+            {!apps?.length && <tr><td colSpan={6} className="note">No applications yet. Once CV-Library switches on DirectApply for your jobs, they’ll appear here.</td></tr>}
+          </tbody>
+        </table></div>
       </section>
 
       <section className="panel">
