@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { displayMobile, toE164 } from '@/lib/phone';
 import { looksLikePostcode, milesBetween, type Point } from '@/lib/geo';
@@ -130,6 +130,11 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
     }).sort((x, y) => (nearPoint ? (dist(x) ?? 999) - (dist(y) ?? 999) : 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [temps, q, area, nearPoint, miles, type, status, by]);
+  // Show the latest 10 until someone searches or filters, then up to 50 at a time.
+  const filtering = Boolean(q.trim() || area.trim() || (nearPoint && miles) || type || status || by !== 'all');
+  const [limit, setLimit] = useState(10);
+  useEffect(() => setLimit(filtering ? 50 : 10), [filtering, q, area, nearPoint, miles, type, status, by]);
+  const visible = shown.slice(0, limit);
   function clearFilters() { setQ(''); setArea(''); setNear(''); setNearPoint(null); setMiles(''); setType(''); setStatus(''); setBy('all'); }
 
   // ---------- selection & bulk text ----------
@@ -248,7 +253,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
         </div>
 
         <div className="selbar">
-          <span><b>{shown.length} temp{shown.length === 1 ? '' : 's'} shown</b> <span className="note">{sel.size ? `· ${sel.size} selected` : '· tick temps, or the top box to select all shown'}</span></span>
+          <span><b>{filtering ? `${shown.length} match${shown.length === 1 ? '' : 'es'}` : `Latest ${visible.length} of ${temps.length}`}</b> <span className="note">{sel.size ? `· ${sel.size} selected` : filtering ? '· tick temps, or the top box to select every match' : '· search or filter to find anyone else'}</span></span>
           <div className="btnrow">
             <button className="btn small" style={{ background: 'transparent', border: '1px solid #3a414c' }} onClick={clearFilters}>Clear filters</button>
             <button className="btn blue small" disabled={!sel.size} onClick={() => { setCompose(true); setBulkMsg(null); if (!body) setBody(TEMPLATES[0][1]); }}>Text selected{sel.size ? ` (${sel.size})` : ''}</button>
@@ -276,10 +281,10 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
 
         <div className="tablewrap"><table className="cards">
           <thead><tr>
-            <th className="sel"><input type="checkbox" className="rowsel" checked={allShown} onChange={toggleAll} aria-label="Select all shown" /></th>
+            <th className="sel"><input type="checkbox" className="rowsel" checked={allShown} onChange={toggleAll} aria-label="Select every match" /></th>
             <th>Temp</th><th>Mobile</th><th>Postcode</th>{nearPoint && <th>Miles</th>}<th>Cleared for</th><th>Status</th><th>Added by</th><th></th></tr></thead>
           <tbody>
-            {shown.map((t) => {
+            {visible.map((t) => {
               const [k, l] = STATUS[t.status]; const d = dist(t);
               return (
                 <tr key={t.id}>
@@ -307,6 +312,13 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
             {!shown.length && <tr><td colSpan={9} className="note">{temps.length ? 'No temps match these filters.' : 'No temps yet. Send registration links from Sign-ups, or add existing temps above.'}</td></tr>}
           </tbody>
         </table></div>
+        {shown.length > visible.length && (
+          <div className="btnrow" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <span className="note">Showing {visible.length} of {shown.length}{filtering ? '' : ' temps'}</span>
+            <button className="btn ghost small" onClick={() => setLimit((n) => n + 50)}>Show 50 more</button>
+            {!filtering && <span className="note">or use Search to find someone</span>}
+          </div>
+        )}
       </section>
     </>
   );
