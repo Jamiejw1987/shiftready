@@ -100,3 +100,17 @@ With no Twilio keys, texts are recorded but not sent. That's safe for testing.
 4. **Test:** Sign-ups > send a registration link to your own mobile and fill it in.
 
 How it works: consultant sends a link > candidate registers on their phone (details, right to work, emergency contact, health, convictions, 48-hour choice, signs the documents) > appears under Sign-ups > consultant checks right to work on GOV.UK and uploads the result > approves > temp gets shifts. Bank details are asked for when they accept their first shift. Right to work with an end date shows under Sign-ups 28 days before, and the temp is put on hold automatically when it expires.
+
+## CV-Library applications by email (Postmark inbound)
+
+CV-Library won't push applications to ShiftReady directly, so their application emails are forwarded in instead. Each one adds the applicant and sends them their registration link: by text if a UK mobile is on their CV, otherwise by email.
+
+1. **Vercel → Environment Variables:** `POSTMARK_SERVER_TOKEN` (Postmark → Servers → your server → API Tokens). Optional: `EMAIL_FROM`, e.g. `Staff Selection UK <noreply@staffselectionuk.com>`. Redeploy.
+2. **Postmark → Servers → your server → Default Inbound Stream → Settings:** set the **Webhook URL** to
+   `APP_URL/api/inbound/cv-library?key=APPLY_KEY`
+   (APPLY_KEY is the `key=` part of the DirectApply address on the Registrations page). Tick **Include raw email content** off. Save, then copy the **inbound email address** shown there.
+3. **Each consultant's Outlook → Settings → Mail → Rules → Add new rule:** From `admin@cv-library.co.uk` → **Redirect to** the Postmark inbound address. Keep "stop processing more rules" off so they still get their copy.
+   If nothing arrives, your Microsoft 365 admin must allow automatic external forwarding (Defender → Policies → Anti-spam → Outbound policy → Automatic forwarding: On).
+4. Test: forward one CV-Library application email to the inbound address. It appears on **Registrations** within a minute as "Link texted" or "Link emailed".
+
+Only CV-Library application emails are acted on; anything else sent to the address is ignored, so nobody is contacted by mistake.

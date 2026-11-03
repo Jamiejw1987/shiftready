@@ -13,6 +13,7 @@ import { ApplyAddress, ApplyMessage, RetryButton } from './ApplyClient';
 const OUTCOME: Record<string, [string, string]> = {
   texted: ['ok', 'Link texted'],
   resent: ['ok', 'Link texted again'],
+  emailed: ['ok', 'Link emailed'],
   already_registered: ['blue', 'Already registered'],
   opted_out: ['mute', 'Opted out'],
   no_mobile: ['warn', 'No UK mobile'],

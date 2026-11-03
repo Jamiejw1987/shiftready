@@ -6,6 +6,7 @@ import { appUrl } from './texts';
 import { currentDocs, docProblems } from './docs';
 import { encryptionReady } from './crypto';
 import { DEFAULT_APPLY_MESSAGE, APPLY_MESSAGE_KEY, renderApplyMessage } from './applyMessage';
+import { sendEmail, applyEmail } from './email';
 
 type Json = Record<string, unknown>;
 const str = (v: unknown, max = 200) => (typeof v === 'string' || typeof v === 'number' ? String(v).replace(/\s+/g, ' ').trim().slice(0, max) : '');
@@ -123,20 +124,33 @@ export async function takeApplication(db: SupabaseClient, source: string, a: Par
     const up = await db.storage.from('documents').upload(path, a.cv.bytes, { contentType: a.cv.type, upsert: true });
     if (!up.error) await db.from('job_applications').update({ cv_path: path, cv_name: a.cv.name }).eq('id', app.id);
   }
-  const outcome = await inviteApplicant(db, { id: app.id, source, first: a.first, last: a.last, mobile: a.mobile, phoneRaw: a.phoneRaw, jobTitle: a.jobTitle });
+  const outcome = await inviteApplicant(db, { id: app.id, source, first: a.first, last: a.last, mobile: a.mobile, phoneRaw: a.phoneRaw, jobTitle: a.jobTitle, email: a.email });
   return { id: app.id as string, outcome };
 }
 
 /** Adds an applicant to ShiftReady and texts them their registration link, recording what happened. */
 export async function inviteApplicant(
   db: SupabaseClient,
-  a: { id: string; source: string; first: string; last: string; mobile: string | null; phoneRaw: string; jobTitle: string },
+  a: { id: string; source: string; first: string; last: string; mobile: string | null; phoneRaw: string; jobTitle: string; email?: string | null },
 ): Promise<string> {
   const done = async (outcome: string, extra: Json = {}) => {
     await db.from('job_applications').update({ outcome, detail: null, ...extra }).eq('id', a.id);
     return outcome;
   };
-  if (!a.mobile) return done('no_mobile', { detail: a.phoneRaw ? 'Not a UK mobile number' : 'No phone number given' });
+  if (!a.mobile) {
+    // No UK mobile to text: email them the public registration link instead (they applied, so this is fine to send).
+    if (a.email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a.email)) {
+      const { data: prev } = await db.from('job_applications').select('id').eq('email', a.email).eq('outcome', 'emailed')
+        .gte('created_at', new Date(Date.now() - 600e3).toISOString()).neq('id', a.id).limit(1).maybeSingle();
+      if (prev) return done('emailed', { detail: 'Emailed in the last 10 minutes, so not emailed again' });
+      const src = a.source.replace(/[^a-z0-9-]/gi, '');
+      const m = applyEmail({ first: a.first, job: a.jobTitle, link: `${appUrl()}/join?from=${src}` });
+      const r = await sendEmail({ to: a.email, ...m, tag: 'apply-invite' });
+      await db.from('audit_log').insert({ actor: null, action: 'temp.applied', detail: `${a.first} ${a.last} applied on ${a.source === 'cv-library' ? 'CV-Library' : a.source}${a.jobTitle ? ` for ${a.jobTitle}` : ''}${r.ok ? ' and was emailed the registration link (no UK mobile found)' : ' - email failed'}` });
+      return r.ok ? done('emailed', { detail: r.status === 'dry-run' ? 'Email not configured (dry run)' : null }) : done('failed', { detail: `Email failed: ${r.error}` });
+    }
+    return done('no_mobile', { detail: a.phoneRaw ? 'Not a UK mobile number' : 'No phone number given' });
+  }
   if (!a.first) return done('not_sent', { detail: 'No name given' });
 
   const { data: existing } = await db.from('temps').select('id,first_name,mobile,status,reg_token,registered_at,reg_requested_at').eq('mobile', a.mobile).maybeSingle();

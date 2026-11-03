@@ -28,9 +28,9 @@ export async function retryApplication(id: string): Promise<Result> {
   if (!a) return { ok: false, error: 'Not found.' };
   if (!['not_sent', 'failed'].includes(a.outcome)) return { ok: false, error: 'This one doesn’t need sending again.' };
   const outcome = await inviteApplicant(createAdminClient(), {
-    id: a.id, source: a.source, first: a.first_name ?? '', last: a.last_name ?? '', mobile: a.mobile, phoneRaw: a.phone_raw ?? '', jobTitle: a.job_title ?? '',
+    id: a.id, source: a.source, first: a.first_name ?? '', last: a.last_name ?? '', mobile: a.mobile, phoneRaw: a.phone_raw ?? '', jobTitle: a.job_title ?? '', email: a.email,
   });
   await audit(supabase, profile.id, 'application.retried', `Tried again to text ${a.first_name} ${a.last_name} their registration link`);
   revalidatePath('/registrations');
-  return outcome === 'texted' || outcome === 'resent' ? { ok: true, message: 'Sent.' } : { ok: false, error: 'Still couldn’t send. See the note on the row.' };
+  return ['texted', 'resent', 'emailed'].includes(outcome) ? { ok: true, message: 'Sent.' } : { ok: false, error: 'Still couldn’t send. See the note on the row.' };
 }
