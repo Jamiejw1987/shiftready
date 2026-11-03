@@ -124,7 +124,13 @@ export async function takeApplication(db: SupabaseClient, source: string, a: Par
     const up = await db.storage.from('documents').upload(path, a.cv.bytes, { contentType: a.cv.type, upsert: true });
     if (!up.error) await db.from('job_applications').update({ cv_path: path, cv_name: a.cv.name }).eq('id', app.id);
   }
-  const outcome = await inviteApplicant(db, { id: app.id, source, first: a.first, last: a.last, mobile: a.mobile, phoneRaw: a.phoneRaw, jobTitle: a.jobTitle, email: a.email });
+  let outcome: string;
+  try {
+    outcome = await inviteApplicant(db, { id: app.id, source, first: a.first, last: a.last, mobile: a.mobile, phoneRaw: a.phoneRaw, jobTitle: a.jobTitle, email: a.email });
+  } catch (e) {
+    outcome = 'failed';
+    await db.from('job_applications').update({ outcome, detail: `Couldn’t send the link: ${e instanceof Error ? e.message : 'unknown error'}` }).eq('id', app.id);
+  }
   return { id: app.id as string, outcome };
 }
 

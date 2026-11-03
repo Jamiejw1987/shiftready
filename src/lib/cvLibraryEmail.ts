@@ -55,9 +55,18 @@ async function cvText(cv: { type: string; bytes: Buffer }): Promise<string> {
   try {
     if (cv.type === 'application/pdf') {
       const { getDocumentProxy, extractText } = await import('unpdf');
-      const pdf = await getDocumentProxy(new Uint8Array(cv.bytes));
-      const { text } = await extractText(pdf, { mergePages: true });
-      return String(text || '');
+      const read = (async () => {
+        const pdf = await getDocumentProxy(new Uint8Array(cv.bytes));
+        try {
+          const { text } = await extractText(pdf, { mergePages: true });
+          return String(text || '');
+        } finally {
+          await (pdf as unknown as { destroy?: () => Promise<void> }).destroy?.().catch(() => {});
+        }
+      })();
+      read.catch(() => {});
+      // Never let a slow or odd PDF hold up the applicant: give up after 8 seconds and email them instead.
+      return await Promise.race([read, new Promise<string>((r) => setTimeout(() => r(''), 8000))]);
     }
     if (cv.type === 'text/plain') return cv.bytes.toString('utf8');
   } catch {

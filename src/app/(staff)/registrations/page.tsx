@@ -86,7 +86,7 @@ export default async function RegistrationsPage() {
                   <td data-l="What happened"><span className={`pill ${tone}`}>{label}</span>{a.detail && <><br /><span className="note">{a.detail}</span></>}</td>
                   <td><div className="btnrow">
                     {a.cv_path && <a className="btn ghost small" href={`/api/applications/${a.id}/cv`} target="_blank" rel="noreferrer">CV</a>}
-                    {['not_sent', 'failed'].includes(a.outcome) && <RetryButton id={a.id} />}
+                    {(['not_sent', 'failed', 'saved'].includes(a.outcome) || (a.outcome === 'no_mobile' && a.email)) && <RetryButton id={a.id} />}
                     {a.temp_id && <Link className="btn ghost small" href={`/temps/${a.temp_id}`}>Open</Link>}
                   </div></td>
                 </tr>

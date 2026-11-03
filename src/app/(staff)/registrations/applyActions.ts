@@ -26,7 +26,7 @@ export async function retryApplication(id: string): Promise<Result> {
   const { supabase, profile } = await requireStaff();
   const { data: a } = await supabase.from('job_applications').select('*').eq('id', id).maybeSingle();
   if (!a) return { ok: false, error: 'Not found.' };
-  if (!['not_sent', 'failed'].includes(a.outcome)) return { ok: false, error: 'This one doesn’t need sending again.' };
+  if (!(['not_sent', 'failed', 'saved'].includes(a.outcome) || (a.outcome === 'no_mobile' && a.email))) return { ok: false, error: 'This one doesn’t need sending again.' };
   const outcome = await inviteApplicant(createAdminClient(), {
     id: a.id, source: a.source, first: a.first_name ?? '', last: a.last_name ?? '', mobile: a.mobile, phoneRaw: a.phone_raw ?? '', jobTitle: a.job_title ?? '', email: a.email,
   });
