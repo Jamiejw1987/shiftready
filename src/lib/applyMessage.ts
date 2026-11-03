@@ -4,6 +4,10 @@ import { appUrl } from './texts';
 export const DEFAULT_APPLY_MESSAGE =
   'Hi {first}, thanks for applying for {job} with Staff Selection UK. To be considered please register using your personal link: {link} It takes about 10 minutes. Have your share code or passport ready. Reply STOP to opt out. - Staff Selection';
 
+/** The plain registration invite, as a template (same wording as regInviteText). */
+export const STANDARD_INVITE_MESSAGE =
+  'Hi {first}, Staff Selection UK here. Please register for temp work using your personal link: {link} It takes about 10 minutes. Have your share code or passport ready. Reply STOP to opt out. - Staff Selection';
+
 export const APPLY_MESSAGE_KEY = 'apply_message';
 
 /** Problems that would make the message unlawful or useless; empty when it's fine to save. */

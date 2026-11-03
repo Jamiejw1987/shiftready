@@ -97,6 +97,7 @@ select:disabled, input:disabled { opacity: .55; }
 .chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line-strong); padding: 8px 14px; font-size: 15px; cursor: pointer; user-select: none; background: #fff; border-radius: 999px; min-height: 40px; transition: background .15s, border-color .15s; }
 .chip input { accent-color: var(--blue); margin: 0; width: 18px; height: 18px; }
 .chip:has(input:checked) { border-color: var(--blue); background: var(--blue-soft); color: var(--blue-deep); }
+.chip.on { border-color: var(--blue); background: var(--blue-soft); color: var(--blue-deep); }
 .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
 @media (max-width: 520px) { .bar > .btnrow, .bar > .btn { width: 100%; } .bar > .btnrow > .btn.blue { flex: 1; } }
 

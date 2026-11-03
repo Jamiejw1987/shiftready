@@ -1,18 +1,60 @@
 'use client';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { sendRegistrationLink, resendRegistration, bulkInvite } from './actions';
 import { parseApplicants, type Applicant } from './applicants';
 import { displayMobile } from '@/lib/phone';
+import { applyMessageProblems, STANDARD_INVITE_MESSAGE } from '@/lib/applyMessage';
+import { plainText, segmentInfo } from '@/lib/smsText';
 
-export function InviteForm({ disabled }: { disabled: boolean }) {
+type MsgProps = { base: string; applicantTemplate: string };
+const STORE = 'ssuk.inviteMessage';
+const load = (fallback: string) => { try { return localStorage.getItem(STORE) || fallback; } catch { return fallback; } };
+const keep = (t: string) => { try { localStorage.setItem(STORE, t); } catch { /* not available */ } };
+
+/** The text an invite goes out with: standard, job-applicant, or written here. Remembered on this computer. */
+function InviteMessage({ text, setText, job, setJob, base, applicantTemplate, sampleFirst, sampleJob, perRowJobs }: MsgProps & {
+  text: string; setText: (t: string) => void; job: string; setJob: (j: string) => void; sampleFirst?: string; sampleJob?: string; perRowJobs?: boolean;
+}) {
+  const shownJob = (sampleJob || job).trim() || 'one of our jobs';
+  const preview = text.replace(/\{first\}/g, sampleFirst || 'Sarah').replace(/\{job\}/g, shownJob).replace(/\{link\}/g, `${base}/r/00000000-0000-0000-0000-000000000000`).replace(/\s+/g, ' ').trim();
+  const seg = segmentInfo(plainText(preview));
+  const problems = text.trim() ? applyMessageProblems(text) : ['Write a message'];
+  const set = (t: string) => { setText(t); keep(t); };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+      <div className="btnrow">
+        <span className="note">Message:</span>
+        <button type="button" className={`chip${text.trim() === STANDARD_INVITE_MESSAGE ? ' on' : ''}`} onClick={() => set(STANDARD_INVITE_MESSAGE)}>Standard registration</button>
+        <button type="button" className={`chip${text.trim() === applicantTemplate.trim() ? ' on' : ''}`} onClick={() => set(applicantTemplate)}>Applied for a job</button>
+      </div>
+      <label className="f"><span className="l">Text they’ll get</span>
+        <textarea rows={4} value={text} onChange={(e) => set(e.target.value)} /></label>
+      {text.includes('{job}') && (
+        <label className="f"><span className="l">Job they applied for{perRowJobs ? ' (used when the list has no job column)' : ''}</span>
+          <input type="text" placeholder="e.g. Warehouse Operative" value={job} onChange={(e) => setJob(e.target.value)} /></label>
+      )}
+      <p className="note" style={{ margin: 0 }}><b>{'{first}'}</b> = their first name, <b>{'{job}'}</b> = the job they applied for, <b>{'{link}'}</b> = their personal registration link.</p>
+      <div className="f"><span className="l">How it looks</span>
+        <div className="secret" style={{ fontFamily: 'var(--f-body)', fontSize: 14 }}>{preview}</div>
+        <span className="note">{seg.chars} characters, {seg.segments} text{seg.segments === 1 ? '' : 's'} each{seg.unicode ? ' (a special character makes each text shorter: check for curly quotes or emoji)' : ''}.</span></div>
+      {problems.length > 0 && <p className="alert" style={{ margin: 0 }}>{problems.join('. ')}.</p>}
+    </div>
+  );
+}
+
+export function InviteForm({ disabled, base, applicantTemplate }: { disabled: boolean } & MsgProps) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [f, setF] = useState({ first: '', last: '', mobile: '' });
+  const [text, setText] = useState(STANDARD_INVITE_MESSAGE);
+  const [job, setJob] = useState('');
+  useEffect(() => setText(load(STANDARD_INVITE_MESSAGE)), []);
+  const bad = applyMessageProblems(text).length > 0;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   function send() {
     start(async () => {
-      const r = await sendRegistrationLink(f);
+      const r = await sendRegistrationLink({ ...f, message: text, job });
       setMsg({ ok: r.ok, text: r.ok ? r.message! : r.error! });
       if (r.ok) { setF({ first: '', last: '', mobile: '' }); router.refresh(); }
     });
@@ -24,9 +66,10 @@ export function InviteForm({ disabled }: { disabled: boolean }) {
         <div className="f"><label className="l" htmlFor="iLast">Surname</label><input id="iLast" type="text" value={f.last} onChange={(e) => setF({ ...f, last: e.target.value })} /></div>
         <div className="f w2"><label className="l" htmlFor="iMob">Mobile</label><input id="iMob" type="tel" placeholder="07…" value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value })} /></div>
       </div>
+      <InviteMessage text={text} setText={setText} job={job} setJob={setJob} base={base} applicantTemplate={applicantTemplate} sampleFirst={f.first.trim() || undefined} />
       <div className="bar">
-        {msg ? <p className={msg.ok ? 'okmsg' : 'err'}>{msg.text}</p> : <span className="note">They’ll get a text with their personal link.</span>}
-        <button className="btn blue" disabled={disabled || pending} onClick={send}>{pending ? 'Sending…' : 'Send registration link'}</button>
+        {msg ? <p className={msg.ok ? 'okmsg' : 'err'}>{msg.text}</p> : <span className="note">They’ll get this text with their personal link.</span>}
+        <button className="btn blue" disabled={disabled || pending || bad} onClick={send}>{pending ? 'Sending…' : 'Send registration link'}</button>
       </div>
     </>
   );
@@ -44,9 +87,13 @@ export function ResendButton({ id }: { id: string }) {
   );
 }
 
-export function BulkInvite({ disabled, known }: { disabled: boolean; known: string[] }) {
+export function BulkInvite({ disabled, known, base, applicantTemplate }: { disabled: boolean; known: string[] } & MsgProps) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [body, setBody] = useState(STANDARD_INVITE_MESSAGE);
+  const [job, setJob] = useState('');
+  useEffect(() => setBody(load(STANDARD_INVITE_MESSAGE)), []);
+  const bad = applyMessageProblems(body).length > 0;
   const [text, setText] = useState('');
   const [rows, setRows] = useState<(Applicant & { issue: string })[] | null>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -72,7 +119,7 @@ export function BulkInvite({ disabled, known }: { disabled: boolean; known: stri
 
   function send() {
     start(async () => {
-      const r = await bulkInvite(good.map(({ first, last, mobile }) => ({ first, last, mobile })), confirmed);
+      const r = await bulkInvite(good.map(({ first, last, mobile, job: j }) => ({ first, last, mobile, job: j })), confirmed, body, job);
       setMsg({ ok: r.ok, text: r.ok ? r.message! : r.error! });
       if (r.ok) { setRows(null); setText(''); setConfirmed(false); router.refresh(); }
     });
@@ -93,21 +140,23 @@ export function BulkInvite({ disabled, known }: { disabled: boolean; known: stri
       {rows && rows.length > 0 && (
         <>
           <div className="summary"><span className="pill ok">{good.length} ready</span>{rows.length - good.length > 0 && <span className="pill bad">{rows.length - good.length} will be skipped</span>}</div>
-          <div className="tablewrap" style={{ maxHeight: 320, overflowY: 'auto' }}><table className="cards"><thead><tr><th>Name</th><th>Mobile</th><th>Check</th></tr></thead><tbody>
+          <div className="tablewrap" style={{ maxHeight: 320, overflowY: 'auto' }}><table className="cards"><thead><tr><th>Name</th><th>Mobile</th>{rows.some((r) => r.job) && <th>Job</th>}<th>Check</th></tr></thead><tbody>
             {rows.map((r, i) => (
               <tr key={i} className={r.issue ? 'bad' : ''}>
                 <td><b>{r.first} {r.last}</b></td>
                 <td className="num" data-l="Mobile">{r.e164 ? displayMobile(r.e164) : r.mobile || '-'}</td>
+                {rows.some((x) => x.job) && <td data-l="Job">{r.job || '-'}</td>}
                 <td>{r.issue ? <span className="err">{r.issue}</span> : <span className="pill ok">OK</span>}</td>
               </tr>))}
           </tbody></table></div>
+          <InviteMessage text={body} setText={setBody} job={job} setJob={setJob} base={base} applicantTemplate={applicantTemplate} sampleFirst={good[0]?.first} sampleJob={good[0]?.job} perRowJobs={good.some((g) => g.job)} />
           <label className="tick" style={{ marginTop: 12 }}>
             <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
             Everyone on this list applied to one of our roles or asked us about work. (We can’t text bought lists, scraped numbers or people who’ve opted out.)
           </label>
           <div className="bar">
-            <span className="note">Each person gets their own registration link. Every text says “Reply STOP to opt out”.</span>
-            <button className="btn blue" disabled={disabled || !good.length || !confirmed || pending} onClick={send}>{pending ? 'Sending…' : `Send ${good.length} registration link${good.length === 1 ? '' : 's'}`}</button>
+            <span className="note">Each person gets this text with their own name and registration link.</span>
+            <button className="btn blue" disabled={disabled || !good.length || !confirmed || pending || bad} onClick={send}>{pending ? 'Sending…' : `Text ${good.length} ${good.length === 1 ? 'person' : 'people'}`}</button>
           </div>
         </>
       )}

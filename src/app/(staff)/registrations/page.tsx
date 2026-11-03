@@ -57,7 +57,7 @@ export default async function RegistrationsPage() {
         {problems.length > 0 && (
           <p className="alert" style={{ marginBottom: 14 }}>Registration links are switched off until: {problems.join('; ')}.{profile.role === 'admin' ? <> <Link href="/team/documents">Open Documents</Link></> : ' Ask an admin.'}</p>
         )}
-        <InviteForm disabled={problems.length > 0} />
+        <InviteForm disabled={problems.length > 0} base={appUrl()} applicantTemplate={applyText} />
       </section>
 
       <section className="panel">
@@ -99,7 +99,7 @@ export default async function RegistrationsPage() {
       <section className="panel">
         <h2>Invite applicants in bulk</h2>
         <p className="lede">For people who applied to your roles online or asked about work. Paste a list or upload an export and everyone gets their own registration link.</p>
-        <BulkInvite disabled={problems.length > 0} known={(allMobiles ?? []).map((m) => m.mobile)} />
+        <BulkInvite disabled={problems.length > 0} known={(allMobiles ?? []).map((m) => m.mobile)} base={appUrl()} applicantTemplate={applyText} />
       </section>
 
       <section className="panel">

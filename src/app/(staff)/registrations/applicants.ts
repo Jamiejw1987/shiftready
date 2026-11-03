@@ -1,11 +1,12 @@
 import { parseCSV } from '../temps/csv';
 import { toE164 } from '@/lib/phone';
 
-export type Applicant = { first: string; last: string; mobile: string; e164: string | null };
+export type Applicant = { first: string; last: string; mobile: string; e164: string | null; job?: string };
 
 const MOB = ['mobile', 'mobile number', 'mobile phone', 'phone', 'phone number', 'telephone', 'tel', 'mobile no', 'contact number'];
 const FIRST = ['first name', 'firstname', 'forename', 'first'];
 const LAST = ['surname', 'last name', 'lastname', 'last'];
+const JOB = ['job', 'job title', 'role', 'position', 'vacancy', 'vacancy title', 'job applied for', 'applied for', 'job name', 'advert', 'advert title'];
 const FULL = ['name', 'full name', 'candidate name', 'candidate', 'applicant', 'applicant name'];
 
 const split = (full: string) => {
@@ -25,11 +26,11 @@ export function parseApplicants(text: string): Applicant[] {
   const head = rows[0].map((h) => h.trim().toLowerCase().replace(/^﻿/, ''));
   const iMob = head.findIndex((h) => MOB.includes(h));
   if (iMob >= 0) {
-    const iF = head.findIndex((h) => FIRST.includes(h)), iL = head.findIndex((h) => LAST.includes(h)), iN = head.findIndex((h) => FULL.includes(h));
+    const iF = head.findIndex((h) => FIRST.includes(h)), iL = head.findIndex((h) => LAST.includes(h)), iN = head.findIndex((h) => FULL.includes(h)), iJ = head.findIndex((h) => JOB.includes(h));
     return rows.slice(1).map((r) => {
       const g = (i: number) => (i >= 0 ? (r[i] || '').trim() : '');
       const n = g(iF) ? { first: g(iF), last: g(iL) } : split(g(iN));
-      return { ...n, mobile: g(iMob), e164: toE164(g(iMob)) };
+      return { ...n, mobile: g(iMob), e164: toE164(g(iMob)), job: g(iJ).slice(0, 80) };
     });
   }
   // No header: each line is a name and a mobile, in any order, separated by commas, tabs or spaces.
