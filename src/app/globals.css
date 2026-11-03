@@ -259,3 +259,17 @@ table.week td.wk-no { text-align: center; color: var(--line-strong); }
 .pl-fill { display: block; padding: 12px 4px; font-weight: 700; text-decoration: none; }
 .pl-cell.full .pl-fill { color: var(--ok); } .pl-cell.short .pl-fill { color: var(--bad); }
 .pl-sub { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
+
+/* ---------- Reports ---------- */
+.rp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 18px 0 8px; }
+.rp-stats > div { background: var(--bg); border-radius: var(--r); padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.rp-stats span { font-size: 13px; color: var(--muted); }
+.rp-stats b { font: 800 30px/1.1 var(--f-display); } .rp-stats b small { font-size: 18px; color: var(--muted); }
+.rp-stats b.ok { color: var(--ok); } .rp-stats b.warn { color: var(--warn); } .rp-stats b.bad { color: var(--bad); }
+.rp-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.rp-day { display: flex; flex-direction: column; align-items: center; gap: 4px; text-decoration: none; color: var(--ink); }
+.rp-bar { width: 100%; max-width: 46px; display: flex; flex-direction: column; justify-content: flex-end; background: var(--bg); border-radius: 6px; overflow: hidden; }
+.rp-bar i, .rp-legend i { display: block; } .rp-bar .fill, .rp-legend .fill { background: var(--ok); } .rp-bar .miss, .rp-legend .miss { background: var(--bad); }
+.rp-num { font-weight: 700; font-size: 13px; } .rp-lbl { font-size: 12px; color: var(--muted); }
+.rp-legend { display: flex; gap: 14px; justify-content: center; margin-top: 8px; }
+.rp-legend span { display: inline-flex; align-items: center; gap: 6px; } .rp-legend i { width: 10px; height: 10px; border-radius: 2px; }

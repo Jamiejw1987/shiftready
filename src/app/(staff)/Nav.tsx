@@ -10,7 +10,7 @@ export function Nav({ admin, waiting = 0, toCheck = 0 }: { admin: boolean; waiti
     { href: '/planner', label: 'Planner' },
     { href: '/shifts', label: 'Shifts' },
     { href: '/requests', label: 'Requests' },
-    ...(admin ? [{ href: '/team', label: 'Team' }] : []),
+    ...(admin ? [{ href: '/reports', label: 'Reports' }, { href: '/team', label: 'Team' }] : []),
   ];
   return (
     <nav className="nav">
