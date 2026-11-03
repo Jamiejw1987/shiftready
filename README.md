@@ -11,6 +11,7 @@ Staff Selection UK's shift offer app. Consultants add compliant temps (singly or
 - **Shifts**: create with duties, pay, PPE, heads and radius; see how many temps it reaches before sending; live board (confirmed, standby, declined) that refreshes every 15 seconds; mark no-show (first person on standby is promoted and texted); cancel shift (booked temps are texted).
 - **Temps' pages** (no login, private links in texts): opt in / opt out, view shift, tick PPE, accept or decline, standby, alerts.
 - **Texts**: Twilio. Replies YES/START and STOP are handled automatically. Day-before reminders run every evening. Without Twilio keys the app runs in dry-run mode and logs texts without sending.
+- **Client portal** (`/portal`): clients sign in with an emailed link, request shifts, see who's confirmed (name and induction flag only), mark attendance and rate temps. Office: Clients (sites, users, view as client, report, contacts export) and Client requests. See SETUP.md.
 - **Team (admin)**: invite consultants by email, switch off access, set roles and alert mobiles, full audit trail.
 
 ## Tech
@@ -26,6 +27,9 @@ src/app/s/[token]          temp shift offer page
 src/app/api/sms/inbound    Twilio reply webhook
 src/app/api/cron/reminders day-before reminder job
 src/lib/texts.ts           wording of every automatic text
+src/app/portal/            client portal (sign-in, requests, attendance, ratings)
+src/app/(staff)/clients    client accounts, sites, users, report
+src/lib/clients.ts         office alerts, client emails, ratings
 ```
 
 ## Running locally

@@ -18,12 +18,15 @@ export const nice = (s: string, o: Intl.DateTimeFormatOptions) => new Date(`${s}
  */
 export async function weekReport(db: SupabaseClient, weekStart: string) {
   const to = addDays(weekStart, 6);
-  const [{ data }, { data: users }] = await Promise.all([
-    db.from('shifts').select('id,client,site_postcode,job_type,shift_date,start_time,end_time,heads,status,sent_by,offers(status)')
+  const [{ data }, { data: users }, { data: tests }] = await Promise.all([
+    db.from('shifts').select('id,client,client_id,site_postcode,job_type,shift_date,start_time,end_time,heads,status,sent_by,offers(status)')
       .gte('shift_date', weekStart).lte('shift_date', to).order('shift_date').order('start_time'),
     db.from('profiles').select('id,full_name'),
+    db.from('clients').select('id').eq('is_test', true),
   ]);
-  const shifts = (data ?? []) as ReportShift[];
+  // Demo clients set up to try the portal are left out.
+  const test = new Set((tests ?? []).map((c) => c.id));
+  const shifts = ((data ?? []) as (ReportShift & { client_id: string | null })[]).filter((s) => !s.client_id || !test.has(s.client_id));
   const now = new Date();
   const today = now.toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
   const nowTime = now.toLocaleTimeString('en-GB', { timeZone: 'Europe/London', hour12: false }).slice(0, 5);

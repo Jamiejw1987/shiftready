@@ -6,6 +6,8 @@ import { respond, confirmBooking } from './actions';
 type Props = {
   token: string; firstName: string; tempActive: boolean; bankUrl: string | null; offerStatus: string; standbyPos: number;
   shiftState: 'open' | 'full' | 'cancelled' | 'past'; placesLeft: number;
+  /** Client-requested shift: saying yes puts them on the list for the office to confirm, it doesn't book them. */
+  interestOnly?: boolean;
   shift: { client: string; site: string; when: string; whenShort: string; hours: number; pay: number; role: string; duties: string[]; ppe: string[]; miles: number | null };
 };
 
@@ -30,12 +32,13 @@ export function OfferPanel(p: Props) {
 
   function act(action: Parameters<typeof respond>[1], reason?: string) {
     setErr('');
-    if (action === 'accept' && ticked.some((t) => !t)) return setErr('Tick each item above to confirm, then accept.');
+    if (action === 'accept' && ticked.some((t) => !t)) return setErr(`Tick each item above to confirm, then ${p.interestOnly ? 'reply' : 'accept'}.`);
     start(async () => {
       const r = await respond(p.token, action, { ppeTicked: ticked.filter(Boolean).length, reason });
       if (r.result === 'error') setErr('Something went wrong. Please try again, or call the office.');
       if (r.result === 'not_active') setErr('Your profile is on hold. Please call the office.');
       if (r.result === 'clash') setErr('You’re already booked on another shift at this time, so you can’t take this one. Call the office if you need to swap.');
+      if (r.result === 'closed') setErr('Sorry, this shift isn’t available to you. Please call the office if you have any questions.');
       setDeclining(false);
       router.refresh();
     });
@@ -59,12 +62,15 @@ export function OfferPanel(p: Props) {
   if (p.offerStatus === 'declined')
     return <State badge="–" kind="mute" title="Shift declined" text="Thanks for letting us know. We'll keep sending shifts that suit you.">
       {p.shiftState === 'open' && <button className="btn ghost" disabled={pending} onClick={() => act('reset')}>Change my answer</button>}</State>;
+  if (p.offerStatus === 'interested')
+    return <State badge="✓" kind="blue" title="You’re on the list" text={`Thanks ${p.firstName}, we’ve told the office you can do ${s.client}, ${s.when}. You’re not booked yet: we’ll text you if you’re confirmed.`}>
+      {p.shiftState === 'open' || p.shiftState === 'full' ? <button className="btn ghost" disabled={pending} onClick={() => act('reset')}>I can’t do it now</button> : null}</State>;
   if (p.offerStatus === 'standby')
     return <State badge={`#${p.standbyPos}`} kind="blue" title="You’re on standby" text="If someone drops out you're offered the place in this order. We'll text you straight away.">
       <button className="btn ghost" disabled={pending} onClick={() => act('reset')}>Leave standby</button></State>;
   if (p.offerStatus === 'alerts')
     return <State badge="✓" kind="ok" title="Alerts on" text={`We'll text you when similar ${s.role.toLowerCase()} shifts come up near you.`} />;
-  if (p.shiftState === 'full')
+  if (p.shiftState === 'full' && !p.interestOnly)
     return <State badge="✕" kind="mute" title="Shift covered" text="Sorry, all places on this shift have been filled.">
       <div className="stack">
         <button className="btn blue" disabled={pending} onClick={() => act('standby')}>Put me on standby</button>
@@ -75,10 +81,12 @@ export function OfferPanel(p: Props) {
     <div className="card">
       <div className="top">
         <div className="pay">£{s.pay.toFixed(2)}<small> /hr</small></div>
-        <span className={`pill ${p.placesLeft <= 1 ? 'warn' : 'ok'}`}>{p.placesLeft} place{p.placesLeft === 1 ? '' : 's'} left</span>
+        {p.interestOnly
+          ? <span className="pill blue">{p.shiftState === 'full' ? 'Reserve list' : `${p.placesLeft} place${p.placesLeft === 1 ? '' : 's'}`}</span>
+          : <span className={`pill ${p.placesLeft <= 1 ? 'warn' : 'ok'}`}>{p.placesLeft} place{p.placesLeft === 1 ? '' : 's'} left</span>}
       </div>
       <div className="in">
-        <p style={{ margin: 0 }}>Hi {p.firstName}, here’s a shift for you.</p>
+        <p style={{ margin: 0 }}>Hi {p.firstName}, here’s a shift for you.{p.interestOnly ? ' Let us know if you can do it and the office will confirm your place.' : ''}</p>
         <div className="note">{s.hours.toFixed(1)} hrs · about £{(s.hours * s.pay).toFixed(2)} before tax</div>
         <dl className="meta">
           <dt>Role</dt><dd>{s.role}</dd>
@@ -99,7 +107,7 @@ export function OfferPanel(p: Props) {
           <>
             {s.ppe.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <h3>Confirm before accepting</h3>
+                <h3>Confirm before {p.interestOnly ? 'replying' : 'accepting'}</h3>
                 {s.ppe.map((item, i) => (
                   <label key={item} className="tick">
                     <input type="checkbox" checked={ticked[i]} onChange={(e) => setTicked(ticked.map((v, j) => (j === i ? e.target.checked : v)))} />
@@ -111,7 +119,7 @@ export function OfferPanel(p: Props) {
             {err && <p className="err">{err}</p>}
             <div className="actions">
               <button className="btn ghost" disabled={pending} onClick={() => setDeclining(true)}>Decline</button>
-              <button className="btn blue" disabled={pending} onClick={() => act('accept')}>{pending ? 'Accepting…' : 'Accept shift'}</button>
+              <button className="btn blue" disabled={pending} onClick={() => act('accept')}>{pending ? 'Sending…' : p.interestOnly ? 'I can do this shift' : 'Accept shift'}</button>
             </div>
           </>
         )}

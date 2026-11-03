@@ -60,6 +60,17 @@ export async function updateMember(id: string, input: { role: 'admin' | 'consult
   return { ok: true };
 }
 
+/** Whether this person gets a text for every new, changed or cancelled client request (admins decide). */
+export async function setClientSms(id: string, on: boolean): Promise<Result> {
+  const { supabase, profile } = await requireStaff({ admin: true });
+  const admin = createAdminClient();
+  const { data: p } = await admin.from('profiles').select('full_name,mobile').eq('id', id).single();
+  await admin.from('profiles').update({ client_sms_alerts: on }).eq('id', id);
+  await audit(supabase, profile.id, 'team.client_sms', `${on ? 'Switched on' : 'Switched off'} client request texts for ${p?.full_name}`);
+  revalidatePath('/team');
+  return { ok: true, message: on && !p?.mobile ? `Switched on. Add ${p?.full_name}'s mobile so the texts reach them.` : undefined };
+}
+
 /** Re-runs replies Twilio received but ShiftReady never got (e.g. while the webhook was failing). Admins only. */
 export async function recoverReplies(sinceIso: string): Promise<Result & { found?: number; alreadyHad?: number; recovered?: { at: string; from: string; name: string | null; body: string }[] }> {
   const { supabase, profile } = await requireStaff({ admin: true });

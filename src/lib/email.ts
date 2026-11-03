@@ -12,7 +12,14 @@ export function emailConfigured(): boolean {
   return Boolean(process.env.POSTMARK_SERVER_TOKEN);
 }
 
-export async function sendEmail(m: { to: string; subject: string; text: string; html?: string; tag?: string }) {
+/**
+ * Client portal emails (sign-in links, shift filled) and office alerts go through their own Postmark message
+ * stream, kept apart from candidate emails. Set POSTMARK_CLIENT_STREAM to the stream's ID (e.g. "clients").
+ * Until it's set they use the default transactional stream.
+ */
+export const clientStream = () => process.env.POSTMARK_CLIENT_STREAM || 'outbound';
+
+export async function sendEmail(m: { to: string; subject: string; text: string; html?: string; tag?: string; stream?: string }) {
   if (!emailConfigured()) return { ok: true, status: 'dry-run', error: null as string | null };
   try {
     const res = await fetch('https://api.postmarkapp.com/email', {
@@ -29,7 +36,7 @@ export async function sendEmail(m: { to: string; subject: string; text: string; 
         TextBody: m.text,
         HtmlBody: m.html,
         Tag: m.tag,
-        MessageStream: 'outbound',
+        MessageStream: m.stream || 'outbound',
       }),
       cache: 'no-store',
     });
@@ -41,7 +48,7 @@ export async function sendEmail(m: { to: string; subject: string; text: string; 
   }
 }
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+export const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 /** The email applicants get when we couldn't find a UK mobile to text them. */
 export function applyEmail(v: { first: string; job: string; link: string }) {

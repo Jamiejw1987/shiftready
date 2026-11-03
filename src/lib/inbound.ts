@@ -5,7 +5,7 @@ import { respondToOffer, type OfferAction } from './offerFlow';
 import { awaitingFor, answerBooking } from './confirm';
 import { shiftWhen } from './format';
 import {
-  appUrl, OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD, REPLY_ATTENDED, replyClash, confirmedReply,
+  appUrl, replyInterested, REPLY_CLOSED, OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD, REPLY_ATTENDED, replyClash, confirmedReply,
 } from './texts';
 
 /**
@@ -148,7 +148,7 @@ export async function handleInbound(params: Record<string, string>): Promise<voi
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
   let q = db.from('offers').select('id,token,status,shifts!inner(client,site,site_postcode,shift_date,start_time,end_time,status,series_id)').eq('temp_id', t.id);
   q = offerId ? q.eq('id', offerId) : q.gte('shifts.shift_date', today).neq('shifts.status', 'cancelled')
-    .in('status', ['sent', 'standby', 'declined', 'alerts', 'accepted']);
+    .in('status', ['sent', 'standby', 'declined', 'alerts', 'accepted', 'interested']);
   const { data: offers } = await q.order('created_at', { ascending: false }).limit(1);
   const o = offers?.[0];
   if (!o) { await reply(REPLY_NO_OFFER); return; }
@@ -173,6 +173,8 @@ export async function handleInbound(params: Record<string, string>): Promise<voi
   const result = await respondToOffer(db, o.token, action, null);
   if (result === 'accepted' && action !== 'accept') await reply(`You're booked on ${s.client} ${when}. To cancel, please call the office. - Staff Selection`);
   else if (result === 'accepted') await reply(replyAccepted(s.client, when, `${s.site}, ${s.site_postcode}`, t.registered_at && !t.bank_on_file ? t.reg_token : null));
+  else if (result === 'interested') await reply(replyInterested(t.first_name, s.client, when));
+  else if (result === 'closed') await reply(REPLY_CLOSED);
   else if (result === 'full') await reply(replyFull(s.client, when));
   else if (result === 'clash') await reply(replyClash(s.client, when));
   else if (result === 'removed') await reply(`You were taken off ${s.client} ${when}. Please call the office if you have any questions. - Staff Selection`);

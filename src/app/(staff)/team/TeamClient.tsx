@@ -2,9 +2,9 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { displayMobile } from '@/lib/phone';
-import { inviteConsultant, setAccess, updateMember, setPayroll } from './actions';
+import { inviteConsultant, setAccess, updateMember, setPayroll, setClientSms } from './actions';
 
-type Member = { id: string; full_name: string; email: string; role: 'admin' | 'consultant'; mobile: string | null; active: boolean; payroll?: boolean; temps: number; shifts: number };
+type Member = { id: string; full_name: string; email: string; role: 'admin' | 'consultant'; mobile: string | null; active: boolean; payroll?: boolean; client_sms_alerts?: boolean; temps: number; shifts: number };
 
 export function TeamClient({ members, meId }: { members: Member[]; meId: string }) {
   const router = useRouter();
@@ -28,7 +28,7 @@ export function TeamClient({ members, meId }: { members: Member[]; meId: string 
       <p className="lede">Each consultant has their own login, protected by an authenticator app. Every temp added and shift sent is recorded against their name.</p>
       {msg && <p className={msg.ok ? 'okmsg' : 'err'} style={{ marginBottom: 10 }}>{msg.text}</p>}
       <div className="tablewrap"><table className="cards">
-        <thead><tr><th>Consultant</th><th>Role</th><th>Accept alerts to</th><th>Temps added</th><th>Shifts sent</th><th>Access</th></tr></thead>
+        <thead><tr><th>Consultant</th><th>Role</th><th>Alerts to</th><th>Temps added</th><th>Shifts sent</th><th>Access</th></tr></thead>
         <tbody>
           {members.map((m) => (
             <tr key={m.id} style={m.active ? undefined : { opacity: 0.6 }}>
@@ -60,6 +60,7 @@ export function TeamClient({ members, meId }: { members: Member[]; meId: string 
                     <button className="btn ghost small" disabled={pending} onClick={() => run(() => setAccess(m.id, !m.active))}>{m.active ? 'Switch off access' : 'Restore access'}</button>
                   )}
                   <button className="btn ghost small" disabled={pending} onClick={() => run(() => setPayroll(m.id, !m.payroll))}>{m.payroll ? 'Remove payroll' : 'Make payroll contact'}</button>
+                  <button className="btn ghost small" disabled={pending} onClick={() => run(() => setClientSms(m.id, m.client_sms_alerts === false))}>{m.client_sms_alerts === false ? 'Turn on client request texts' : 'Turn off client request texts'}</button>
                   {m.payroll && <span className="pill blue">Payroll</span>}
                   {!m.active && <span className="pill bad">Off</span>}
                 </div>
@@ -74,7 +75,7 @@ export function TeamClient({ members, meId }: { members: Member[]; meId: string 
         <div className="form">
           <div className="f"><label className="l" htmlFor="iName">Full name</label><input id="iName" type="text" value={inv.name} onChange={(e) => setInv({ ...inv, name: e.target.value })} /></div>
           <div className="f"><label className="l" htmlFor="iEmail">Work email</label><input id="iEmail" type="email" value={inv.email} onChange={(e) => setInv({ ...inv, email: e.target.value })} /></div>
-          <div className="f"><label className="l" htmlFor="iMob">Mobile for alerts: shift accepted, registration finished (optional)</label><input id="iMob" type="tel" placeholder="07…" value={inv.mobile} onChange={(e) => setInv({ ...inv, mobile: e.target.value })} /></div>
+          <div className="f"><label className="l" htmlFor="iMob">Mobile for alerts: client requests, shift accepted, registration finished</label><input id="iMob" type="tel" placeholder="07…" value={inv.mobile} onChange={(e) => setInv({ ...inv, mobile: e.target.value })} /></div>
           <div className="f"><label className="l" htmlFor="iRole">Role</label>
             <select id="iRole" value={inv.role} onChange={(e) => setInv({ ...inv, role: e.target.value as Member['role'] })}><option value="consultant">Consultant</option><option value="admin">Admin</option></select></div>
         </div>

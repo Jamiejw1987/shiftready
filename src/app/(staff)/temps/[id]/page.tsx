@@ -14,7 +14,7 @@ const STATUS: Record<string, [string, string]> = {
   invited: ['warn', 'Link sent'], review: ['blue', 'Ready to check'], pending: ['warn', 'Awaiting opt-in'],
   active: ['ok', 'Active'], hold: ['mute', 'On hold'], out: ['bad', 'Opted out'],
 };
-const OFFER: Record<string, string> = { sent: 'No reply', accepted: 'Booked', declined: 'Declined', standby: 'Standby', alerts: 'Alerts', noshow: 'No-show' };
+const OFFER: Record<string, string> = { sent: 'No reply', interested: 'Interested', accepted: 'Booked', declined: 'Declined', standby: 'Standby', alerts: 'Alerts', noshow: 'No-show' };
 const ageOf = (dob: string | null) => {
   if (!dob) return null;
   const b = new Date(dob + 'T12:00:00Z'), n = new Date();
@@ -38,6 +38,14 @@ export default async function TempRecordPage({ params }: { params: { id: string 
     supabase.from('profiles').select('id,full_name'),
   ]);
   const name = (id: string | null) => (id ? users?.find((u) => u.id === id)?.full_name ?? 'Former consultant' : 'Candidate');
+  // What clients said about them: attendance, ratings and anyone who asked not to have them back.
+  const [{ data: feedback }, { data: blocks }] = await Promise.all([
+    supabase.from('client_feedback').select('offer_id,attended,stars,return_to_site,comment,rated_at,marked_at,clients(name),offers(shifts(id,shift_date,start_time,end_time))').eq('temp_id', t.id).order('updated_at', { ascending: false }).limit(30),
+    supabase.from('client_blocks').select('id,client_id,reason,created_at,lifted_at,clients(name)').eq('temp_id', t.id).order('created_at', { ascending: false }),
+  ]);
+  const rated = (feedback ?? []).filter((f) => f.stars);
+  const avgStars = rated.length ? rated.reduce((n, f) => n + (f.stars ?? 0), 0) / rated.length : null;
+  const clientNoShows = (feedback ?? []).filter((f) => f.attended === false).length;
   const admin = profile.role === 'admin';
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
   const [sk, sl] = STATUS[t.status] ?? ['mute', t.status];
@@ -68,6 +76,34 @@ export default async function TempRecordPage({ params }: { params: { id: string 
           approveBlock={t.status !== 'review' ? '' : !t.rtw_checked_at ? 'Record the right to work check below before approving.' : rtwExpired ? 'Right to work has expired.' : ''}
         />
       </section>
+
+      {(feedback?.length || blocks?.length) ? (
+        <section className="panel">
+          <h2>Client feedback</h2>
+          <div className="btnrow" style={{ marginBottom: 10 }}>
+            {avgStars != null && <span className="pill blue">★ {avgStars.toFixed(1)} average from {rated.length} rating{rated.length === 1 ? '' : 's'}</span>}
+            {clientNoShows > 0 && <span className="pill bad">{clientNoShows} no-show{clientNoShows === 1 ? '' : 's'} reported by clients</span>}
+            {(blocks ?? []).filter((b) => !b.lifted_at).map((b) => <span key={b.id} className="pill bad">Not wanted back at {(b.clients as unknown as { name: string }).name}</span>)}
+          </div>
+          <div className="tablewrap"><table>
+            <tbody>
+              {(feedback ?? []).map((f) => {
+                const sh = (f.offers as unknown as { shifts: { id: string; shift_date: string; start_time: string; end_time: string } | null } | null)?.shifts;
+                return (
+                  <tr key={f.offer_id}>
+                    <td><b>{(f.clients as unknown as { name: string }).name}</b>{sh && <> · <Link href={`/shifts/${sh.id}`}>{shiftWhen(sh)}</Link></>}{f.comment && <div className="note">“{f.comment}”</div>}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      {f.attended === false ? <span className="pill bad">No-show</span> : f.stars ? <span className="pill blue">★ {f.stars}</span> : f.attended ? <span className="pill ok">Attended</span> : null}
+                      {f.return_to_site === false && <> <span className="pill bad">Don’t send back</span></>}
+                    </td>
+                  </tr>
+                );
+              })}
+              {(blocks ?? []).filter((b) => b.lifted_at).map((b) => <tr key={b.id}><td className="note" colSpan={2}>Block by {(b.clients as unknown as { name: string }).name} lifted {day(b.lifted_at)}</td></tr>)}
+            </tbody>
+          </table></div>
+        </section>
+      ) : null}
 
       {!t.registered_at ? (
         <section className="panel">

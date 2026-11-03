@@ -114,3 +114,18 @@ CV-Library won't push applications to ShiftReady directly, so their application 
 4. Test: forward one CV-Library application email to the inbound address. It appears on **Registrations** within a minute as "Link texted" or "Link emailed".
 
 Only CV-Library application emails are acted on; anything else sent to the address is ignored, so nobody is contacted by mistake.
+
+## Client portal
+
+Clients sign in with an emailed link (no password), post the shifts they need, see who's confirmed (first name, surname and whether they need an induction, nothing else), mark attendance and rate people. Your team decides who is booked: on a client-requested shift, temps who reply YES are only marked **Interested** until a consultant confirms them.
+
+1. **Database:** Supabase > SQL Editor > New query. Paste all of `supabase/2026-11-03-client-portal.sql` and click **Run**. Safe to run again.
+2. **Sign-in link lifetime:** Supabase > Authentication > Sign In / Providers > Email > **Email OTP Expiration**: set it to `86400` (24 hours) so invites don't expire before people open them. Clients can always get a fresh link at `APP_URL/portal/login`.
+3. **Separate email stream:** Postmark > Servers > your server > **Create message stream** > Transactional, ID `clients`. In Vercel add `POSTMARK_CLIENT_STREAM` = `clients` and redeploy. Client sign-in links, "shift filled" emails and office alerts then go through it, apart from candidate emails. (Until it's set they use the normal stream.)
+4. **Office alerts:** every active consultant with a mobile on the **Team** page gets a text when a client adds, changes or cancels a shift ("ShiftReady: Steve Jones at DHL added a new shift for 6 people, tomorrow (Wed 4 Nov), 14:00 to 22:00, Bradford site."), using your existing Twilio number. Admins can switch texts off per person on the Team page; each person can mute the emails on the **Alerts** page (bell icon). In-app alerts always show.
+5. **Try it yourself:** **Clients > Add a client**, tick **Test client** (left out of reports), add a site, then **Invite a user** with an address that isn't your staff login, e.g. `jamie+test@staffselectionuk.com`. Open the link on your phone, fill in your details, request a shift. It appears under **Client requests**. Use **View as client** on the client page to see exactly what they see.
+6. **Privacy:** add the client portal to your privacy notice and client terms: clients see booked temps' names and induction status; client users' names, work emails, mobiles and job titles are kept to run bookings and for business communications. Export contacts from the client page into your CRM and send business development from there, never from ShiftReady.
+
+How a client request flows: client posts > every consultant is alerted (app, text, email) > open it under **Client requests**, press **I'm on it** (client sees Acknowledged) > fill in pay and send the shift (temps can only say they're interested) > confirm people from the **Interested** column, best rated for that client first > client sees "4 of 6 filled" and names > client is emailed when it's full > after the start time the client marks attended / no-show and rates 1-5 stars. 1 or 2 stars asks "Do you want this person to return to site?"; **No** keeps that temp off that client's shifts until an admin lifts it on the client page.
+
+Client reports (**Clients > a client > Report**) are internal: pick the dates, check the figures, then download the spreadsheet or Print / Save as PDF and send it yourself. Nothing goes to clients automatically.

@@ -66,6 +66,7 @@ export default async function OfferPage({ params }: { params: { token: string } 
           tempActive={t.status === 'active'}
           bankUrl={t.registered_at && !t.bank_on_file ? `/b/${t.reg_token}` : null}
           offerStatus={o.status === 'declined' && o.decline_reason === 'Removed by office' ? 'removed' : o.status === 'accepted' && o.awaiting_confirm ? 'awaiting' : o.status}
+          interestOnly={!!(s as unknown as { confirm_first?: boolean }).confirm_first}
           standbyPos={standbyPos}
           shiftState={s.status === 'cancelled' ? 'cancelled' : past ? 'past' : (filled ?? 0) >= s.heads ? 'full' : 'open'}
           placesLeft={Math.max(0, s.heads - (filled ?? 0))}

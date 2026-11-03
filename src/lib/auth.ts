@@ -1,6 +1,7 @@
 import 'server-only';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export type Profile = {
   id: string;
@@ -9,6 +10,9 @@ export type Profile = {
   role: 'admin' | 'consultant';
   mobile: string | null;
   active: boolean;
+  notif_seen_at?: string | null;
+  client_email_alerts?: boolean;
+  client_sms_alerts?: boolean;
 };
 
 /**
@@ -21,7 +25,12 @@ export async function requireStaff(opts: { admin?: boolean } = {}) {
   if (!auth.user) redirect('/login');
 
   const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-  if (aal?.currentLevel !== 'aal2') redirect('/login?step=2fa');
+  if (aal?.currentLevel !== 'aal2') {
+    // Client users sign in by email link and never set up two-step sign-in: send them to their portal.
+    const { data: cu } = await createAdminClient().from('client_users').select('id').eq('auth_user_id', auth.user.id).maybeSingle();
+    if (cu) redirect('/portal');
+    redirect('/login?step=2fa');
+  }
 
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', auth.user.id).maybeSingle();
   if (!profile || !profile.active) redirect('/login?error=access');

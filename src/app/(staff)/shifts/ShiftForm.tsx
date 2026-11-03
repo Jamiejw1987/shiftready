@@ -8,11 +8,15 @@ const addDays = (iso: string, n: number) => new Date(Date.parse(iso + 'T12:00:00
 const label = (iso: string) => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 const weekdaysFrom = (iso: string) => Array.from({ length: 7 }, (_, i) => addDays(iso, i)).filter((x) => ![0, 6].includes(new Date(x + 'T12:00:00Z').getUTCDay()));
 
-export function ShiftForm() {
+type Prefill = { client: string; site: string; sitePostcode: string; date: string; start: string; end: string; jobType: string; duties: string; heads: string };
+
+/** Create a shift. With a requestId it's made from a client's request: filled in from it, one day only. */
+export function ShiftForm({ prefill, requestId }: { prefill?: Prefill; requestId?: string } = {}) {
   const [pending, start] = useTransition();
   const [f, setF] = useState({
     client: '', site: '', sitePostcode: '', date: tomorrow(), start: '06:00', end: '14:00',
     jobType: 'Warehouse', duties: '', pay: '', heads: '1', radius: '15', ppe: ['Safety boots', 'Hi-vis vest'] as string[],
+    ...(prefill ?? {}),
   });
   const [multi, setMulti] = useState(false);
   const [noSend, setNoSend] = useState(false);
@@ -25,7 +29,7 @@ export function ShiftForm() {
   useEffect(() => {
     const t = setTimeout(async () => {
       if (!f.sitePostcode.trim()) return setReach('');
-      const r = await previewReach(f.sitePostcode, f.jobType, parseFloat(f.radius) || 0);
+      const r = await previewReach(f.sitePostcode, f.jobType, parseFloat(f.radius) || 0, requestId);
       setReach(r.ok ? `Goes to ${r.count} active temp${r.count === 1 ? '' : 's'} cleared for ${f.jobType} within ${f.radius} miles` : r.error);
     }, 500);
     return () => clearTimeout(t);
@@ -35,15 +39,17 @@ export function ShiftForm() {
     setErr('');
     if (!confirming && !noSend) return setConfirming(true);
     start(async () => {
-      const r = await createAndSendShift({ ...f, date: multi && days.length ? days[0] : f.date, pay: parseFloat(f.pay), heads: parseInt(f.heads), radius: parseFloat(f.radius), dates: multi ? days : undefined, noSend });
+      const r = await createAndSendShift({ ...f, date: multi && days.length ? days[0] : f.date, pay: parseFloat(f.pay), heads: parseInt(f.heads), radius: parseFloat(f.radius), dates: multi ? days : undefined, noSend, requestId });
       if (r && !r.ok) { setErr(r.error); setConfirming(false); }
     });
   }
 
   return (
     <section className="panel">
-      <h1>Create shift</h1>
-      <p className="lede">Offers go by text to active temps cleared for the job type, within the radius of the site.</p>
+      {requestId ? <h2>Create the shift</h2> : <h1>Create shift</h1>}
+      <p className="lede">{requestId
+        ? 'Filled in from the client’s request. Add the pay rate, check the details and send it. Temps can only say they’re interested: nobody is booked until you confirm them on the board.'
+        : 'Offers go by text to active temps cleared for the job type, within the radius of the site.'}</p>
       <div className="form">
         <div className="f w2"><label className="l" htmlFor="client">Client</label><input id="client" type="text" value={f.client} onChange={set('client')} /></div>
         <div className="f"><label className="l" htmlFor="site">Site address</label><input id="site" type="text" placeholder="Unit 4, Euroway Estate" value={f.site} onChange={set('site')} /></div>
@@ -53,7 +59,7 @@ export function ShiftForm() {
         <div className="f"><label className="l" htmlFor="end">Finish</label><input id="end" type="time" value={f.end} onChange={set('end')} /></div>
         <div className="f"><label className="l" htmlFor="jobType">Job type</label>
           <select id="jobType" value={f.jobType} onChange={set('jobType')}>{JOB_TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>
-        <div className="f w4">
+        {!requestId && <div className="f w4">
           <label className="chip" style={{ alignSelf: 'flex-start' }}><input type="checkbox" checked={multi} onChange={(e) => { setMulti(e.target.checked); setDays(e.target.checked ? weekdaysFrom(f.date) : []); setConfirming(false); }} /> Same shift on several days (one text, temps choose their days)</label>
           {multi && (
             <div className="chips" style={{ marginTop: 8 }}>{Array.from({ length: 7 }, (_, i) => addDays(f.date, i)).map((x) => (
@@ -61,7 +67,7 @@ export function ShiftForm() {
             ))}</div>
           )}
           {multi && <span className="note">Heads needed is per day. Temps reply with the days they can do, then you book people from the week view.</span>}
-        </div>
+        </div>}
         <div className="f w4"><label className="l" htmlFor="duties">Duties (one per line)</label><textarea id="duties" value={f.duties} onChange={set('duties')} /></div>
         <div className="f"><label className="l" htmlFor="pay">Pay (£/hr)</label><input id="pay" type="number" step="0.05" min="0" value={f.pay} onChange={set('pay')} /></div>
         <div className="f"><label className="l" htmlFor="heads">Heads needed</label><input id="heads" type="number" min="1" value={f.heads} onChange={set('heads')} /></div>

@@ -11,6 +11,7 @@ import { shiftWhen, JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
 import { bookingsNear, overlaps } from '@/lib/clash';
 import { seriesWhen, dayLabel } from '@/lib/series';
 import { randomUUID } from 'crypto';
+import { afterBookingChange, blockedFor, clientAudit, scoresFor } from '@/lib/clients';
 
 export type ShiftInput = {
   client: string; site: string; sitePostcode: string; date: string; start: string; end: string;
@@ -19,26 +20,31 @@ export type ShiftInput = {
   dates?: string[];
   /** Create the shift without texting anyone: people are added by hand. */
   noSend?: boolean;
+  /** Made from a client's request: linked to it, and temps can only say they're interested until the office confirms them. */
+  requestId?: string;
 };
 
 type Temp = { id: string; first_name: string; mobile: string; lat: number | null; lng: number | null; job_types: string[] };
 
-async function matchTemps(supabase: Awaited<ReturnType<typeof requireStaff>>['supabase'], point: { lat: number; lng: number }, jobType: string, radius: number) {
+async function matchTemps(supabase: Awaited<ReturnType<typeof requireStaff>>['supabase'], point: { lat: number; lng: number }, jobType: string, radius: number, clientId: string | null = null) {
   const { data } = await supabase.from('temps').select('id,first_name,mobile,lat,lng,job_types').eq('status', 'active').contains('job_types', [jobType]);
+  // Never offer a client's shift to someone that client asked not to have back.
+  const blocked = await blockedFor(supabase, clientId);
   return ((data ?? []) as Temp[])
-    .filter((t) => t.lat != null && t.lng != null)
+    .filter((t) => t.lat != null && t.lng != null && !blocked.has(t.id))
     .map((t) => ({ ...t, miles: milesBetween(point, { lat: t.lat!, lng: t.lng! }) }))
     .filter((t) => t.miles <= radius)
     .sort((a, b) => a.miles - b.miles);
 }
 
 /** How many temps a shift would go to, before sending. */
-export async function previewReach(sitePostcode: string, jobType: string, radius: number) {
+export async function previewReach(sitePostcode: string, jobType: string, radius: number, requestId?: string) {
   const { supabase } = await requireStaff();
   if (!looksLikePostcode(sitePostcode)) return { ok: false as const, error: 'Enter the site’s full postcode to see who it goes to.' };
   const point = await geocodePostcode(sitePostcode);
   if (!point) return { ok: false as const, error: 'Site postcode not found.' };
-  const list = await matchTemps(supabase, point, jobType, radius);
+  const clientId = requestId ? (await supabase.from('client_requests').select('client_id').eq('id', requestId).maybeSingle()).data?.client_id ?? null : null;
+  const list = await matchTemps(supabase, point, jobType, radius, clientId);
   return { ok: true as const, count: list.length };
 }
 
@@ -56,7 +62,20 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
   if (!(input.radius > 0 && input.radius <= 100)) problems.push('radius (1 to 100 miles)');
   if (problems.length) return { ok: false, error: 'Check the ' + problems.join(', ') + '.' };
   if (input.date < new Date().toISOString().slice(0, 10)) return { ok: false, error: 'That date is in the past.' };
-  const dates = [...new Set((input.dates ?? []).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)))].sort();
+
+  // Made from a client request: one day, linked to the request and its client and site.
+  let link: { client_id: string; site_id: string; request_id: string; confirm_first: true } | null = null;
+  let req: { id: string; status: string; client_id: string; site_id: string } | null = null;
+  if (input.requestId) {
+    const { data: r } = await supabase.from('client_requests').select('id,status,client_id,site_id').eq('id', input.requestId).maybeSingle();
+    if (!r) return { ok: false, error: 'Request not found.' };
+    if (r.status === 'cancelled') return { ok: false, error: 'The client cancelled this request.' };
+    const { data: already } = await supabase.from('shifts').select('id').eq('request_id', r.id).neq('status', 'cancelled').maybeSingle();
+    if (already) return { ok: false, error: 'There’s already a shift for this request. Refresh the page.' };
+    req = r;
+    link = { client_id: r.client_id, site_id: r.site_id, request_id: r.id, confirm_first: true };
+  }
+  const dates = link ? [] : [...new Set((input.dates ?? []).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)))].sort();
   if (dates.length > 1) return createSeries(supabase, profile, input, dates);
 
   const pc = normalisePostcode(input.sitePostcode);
@@ -71,17 +90,24 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
       duties: input.duties.split('\n').map((s) => s.trim()).filter(Boolean),
       pay_rate: Math.round(input.pay * 100) / 100, heads: Math.round(input.heads), radius_miles: input.radius,
       ppe: input.ppe.filter((p) => (PPE_OPTIONS as readonly string[]).includes(p)), sent_by: profile.id,
+      ...(link ?? {}),
     })
     .select()
     .single();
   if (error || !shift) return { ok: false, error: 'Couldn’t save the shift. Try again.' };
+  if (req) {
+    const now = new Date().toISOString();
+    await supabase.from('client_requests').update({ status: 'acknowledged', acknowledged_by: profile.id, acknowledged_at: now, updated_at: now }).eq('id', req.id).eq('status', 'submitted');
+    await clientAudit(supabase, { actor: profile.id, action: 'request.shift_created', clientId: req.client_id, entity: 'request', entityId: req.id,
+      detail: `${profile.full_name} made a shift from ${shift.client}'s request (${shiftWhen(shift)}, ${shift.heads} needed, £${Number(shift.pay_rate).toFixed(2)}/hr)${input.noSend ? '' : ' and sent it out'}` });
+  }
 
   if (input.noSend) {
     await audit(supabase, profile.id, 'shift.created', `Created ${shift.client} shift (${shiftWhen(shift)}, ${shift.heads} needed) without sending it out`);
     revalidatePath('/shifts');
     redirect(`/shifts/${shift.id}?manual=1`);
   }
-  const matched = await matchTemps(supabase, point, input.jobType, input.radius);
+  const matched = await matchTemps(supabase, point, input.jobType, input.radius, shift.client_id ?? null);
   // Skip anyone already booked on a shift at the same time.
   const booked = await bookingsNear(supabase, matched.map((t) => t.id), shift.shift_date);
   const temps = matched.filter((t) => !(booked.get(t.id) ?? []).some((b) => overlaps(b, shift)));
@@ -95,7 +121,7 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
     const byTemp = new Map(temps.map((t) => [t.id, t]));
     const res = await sendMany(offers ?? [], (o) => {
       const t = byTemp.get(o.temp_id)!;
-      const info = { first: t.first_name, client: shift.client, when: shiftWhen(shift), site: `${shift.site}, ${shift.site_postcode}`, pay: Number(shift.pay_rate), duties: shift.duties ?? [], ppe: shift.ppe ?? [], token: o.token };
+      const info = { first: t.first_name, client: shift.client, when: shiftWhen(shift), site: `${shift.site}, ${shift.site_postcode}`, pay: Number(shift.pay_rate), duties: shift.duties ?? [], ppe: shift.ppe ?? [], token: o.token, interestOnly: !!shift.confirm_first };
       return sendToTemp({ db: supabase, temp: t, kind: 'offer', offerId: o.id, sentBy: profile.id, body: offerText(info), wa: { template: 'offer', vars: offerWa(info) } });
     });
     sent = res.sent; failed = res.failed;
@@ -129,6 +155,7 @@ export async function noShow(offerId: string) {
     }
   } else detail += '. Nobody on standby, slot reopened';
   await audit(supabase, profile.id, 'shift.noshow', detail);
+  await afterBookingChange(supabase, o.shift_id, { first: t.first_name, last: t.last_name });
   revalidatePath(`/shifts/${o.shift_id}`);
   return { ok: true };
 }
@@ -144,6 +171,13 @@ export async function cancelShift(shiftId: string) {
     return sendToTemp({ db: supabase, temp: { id: b.temp_id, mobile: t.mobile }, kind: 'system', sentBy: profile.id, body: `Hi ${t.first_name}, sorry, the ${s.client} shift on ${shiftWhen(s)} has been cancelled by the client. You don't need to attend. - Staff Selection` });
   });
   await audit(supabase, profile.id, 'shift.cancelled', `Cancelled ${s.client} shift (${shiftWhen(s)}). ${res.sent} booked temps texted`);
+  if (s.request_id) {
+    // The client sees it as cancelled in their portal (unless they cancelled it themselves).
+    const now = new Date().toISOString();
+    const { data: r } = await supabase.from('client_requests').update({ status: 'cancelled', cancelled_at: now, cancelled_by_client: false, cancel_reason: 'Cancelled by Staff Selection', updated_at: now })
+      .eq('id', s.request_id).neq('status', 'cancelled').select('id').maybeSingle();
+    if (r) await clientAudit(supabase, { actor: profile.id, action: 'request.cancelled_by_office', clientId: s.client_id, entity: 'request', entityId: s.request_id, detail: `${profile.full_name} cancelled ${s.client}'s shift (${shiftWhen(s)})` });
+  }
   revalidatePath(`/shifts/${shiftId}`);
   revalidatePath('/shifts');
   return { ok: true };
@@ -196,6 +230,7 @@ export async function removeFromShift(offerId: string) {
     detail += '. Place reopened';
   }
   await audit(supabase, profile.id, 'shift.removed', detail);
+  await afterBookingChange(db, s.id, { first: t.first_name, last: t.last_name });
   revalidatePath(`/shifts/${s.id}`);
   return { ok: true };
 }
@@ -204,7 +239,7 @@ export async function removeFromShift(offerId: string) {
 async function newTempsFor(supabase: Awaited<ReturnType<typeof requireStaff>>['supabase'], shiftId: string, radius: number) {
   const { data: s } = await supabase.from('shifts').select('*').eq('id', shiftId).maybeSingle();
   if (!s || s.lat == null || s.lng == null) return { s: null, temps: [] as (Temp & { miles: number })[], busy: 0 };
-  const matched = await matchTemps(supabase, { lat: s.lat, lng: s.lng }, s.job_type, radius);
+  const matched = await matchTemps(supabase, { lat: s.lat, lng: s.lng }, s.job_type, radius, s.client_id ?? null);
   const { data: already } = await supabase.from('offers').select('temp_id').eq('shift_id', shiftId);
   const sent = new Set((already ?? []).map((o) => o.temp_id));
   const fresh = matched.filter((t) => !sent.has(t.id));
@@ -237,7 +272,7 @@ export async function sendToMore(shiftId: string, radius: number) {
   const byTemp = new Map(temps.map((t) => [t.id, t]));
   const res = await sendMany(offers ?? [], (o) => {
     const t = byTemp.get(o.temp_id)!;
-    const info = { first: t.first_name, client: s.client, when: shiftWhen(s), site: `${s.site}, ${s.site_postcode}`, pay: Number(s.pay_rate), duties: s.duties ?? [], ppe: s.ppe ?? [], token: o.token };
+    const info = { first: t.first_name, client: s.client, when: shiftWhen(s), site: `${s.site}, ${s.site_postcode}`, pay: Number(s.pay_rate), duties: s.duties ?? [], ppe: s.ppe ?? [], token: o.token, interestOnly: !!s.confirm_first };
     return sendToTemp({ db: supabase, temp: t, kind: 'offer', offerId: o.id, sentBy: profile.id, body: offerText(info), wa: { template: 'offer', vars: offerWa(info) } });
   });
   if (radius > Number(s.radius_miles)) await supabase.from('shifts').update({ radius_miles: radius }).eq('id', s.id);
@@ -259,10 +294,14 @@ export async function findTempsForShift(shiftId: string, q: string) {
     const mob = displayMobile(t.mobile).replace(/\D/g, '');
     return (digits.length >= 4 && mob.includes(digits.replace(/^44/, '0'))) || (words.length && words.every((w) => name.includes(w)));
   }).slice(0, 8);
-  const { data: s } = await supabase.from('shifts').select('id,shift_date,start_time,end_time').eq('id', shiftId).maybeSingle();
+  const { data: s } = await supabase.from('shifts').select('id,shift_date,start_time,end_time,client_id').eq('id', shiftId).maybeSingle();
   const { data: mine } = await supabase.from('offers').select('temp_id,status').eq('shift_id', shiftId).in('temp_id', hits.map((h) => h.id));
   const booked = s ? await bookingsNear(supabase, hits.map((h) => h.id), s.shift_date) : new Map();
+  const scores = await scoresFor(supabase, hits.map((h) => h.id), s?.client_id ?? null);
   return hits.map((t) => ({
+    blocked: !!scores.get(t.id)?.blocked,
+    clientStars: scores.get(t.id)?.client ?? null,
+    stars: scores.get(t.id)?.overall ?? null,
     id: t.id, name: `${t.first_name} ${t.last_name}`, mobile: displayMobile(t.mobile), postcode: t.postcode, status: t.status,
     onShift: (mine ?? []).some((o) => o.temp_id === t.id && o.status === 'accepted'),
     clash: s ? (booked.get(t.id) ?? []).some((b: { id: string }) => b.id !== s.id && overlaps(b as never, s)) : false,
@@ -285,6 +324,7 @@ export async function addToShift(shiftId: string, tempId: string, mode: BookMode
   if ((count ?? 0) >= s.heads) return { ok: false, error: 'This shift is already full. Take someone off first, or increase the heads.' };
   const clash = (await bookingsNear(supabase, [t.id], s.shift_date)).get(t.id)?.find((b) => b.id !== s.id && overlaps(b, s));
   if (clash) return { ok: false, error: `${t.first_name} is already booked on ${clash.client} at that time.` };
+  if ((await blockedFor(supabase, s.client_id ?? null)).has(t.id)) return { ok: false, error: `${s.client} asked for ${t.first_name} not to return, so they can’t be booked on. An admin can lift this on the client’s page.` };
   const now = new Date().toISOString();
   const { data: o, error } = await supabase.from('offers')
     .upsert({ shift_id: s.id, temp_id: t.id, status: 'accepted', responded_at: now, standby_at: null, decline_reason: null, awaiting_confirm: mode === 'ask', confirm_asked_at: mode === 'ask' ? now : null }, { onConflict: 'shift_id,temp_id' })
@@ -294,6 +334,7 @@ export async function addToShift(shiftId: string, tempId: string, mode: BookMode
   if (mode === 'ask') await sendToTemp({ db: supabase, temp: t, kind: 'confirm', offerId: o.id, sentBy: profile.id, body: confirmAskText(t.first_name, s.client, shiftWhen(s), `${s.site}, ${s.site_postcode}`, o.token) });
   else if (mode === 'tell') await sendToTemp({ db: supabase, temp: t, kind: 'system', offerId: o.id, sentBy: profile.id, body: replyAccepted(s.client, shiftWhen(s), `${s.site}, ${s.site_postcode}`, t.registered_at && !t.bank_on_file ? t.reg_token : null) });
   await audit(supabase, profile.id, 'shift.added_manually', `Booked ${t.first_name} ${t.last_name} onto ${s.client} (${shiftWhen(s)}) by hand${mode === 'ask' ? ' and asked them to confirm' : textThem ? ' and texted them' : ''}`);
+  await afterBookingChange(supabase, s.id);
   revalidatePath(`/shifts/${s.id}`);
   return { ok: true, message: mode === 'ask' ? `${t.first_name} is booked on and has been asked to confirm. The board shows when they reply.` : `${t.first_name} is booked on${textThem ? ' and has been texted' : ''}.` };
 }
@@ -360,6 +401,7 @@ export async function updateShift(shiftId: string, e: ShiftEdit) {
     told = res.sent;
   }
   await audit(supabase, profile.id, 'shift.edited', `Edited ${s.client} shift (${shiftWhen(updated)}): ${changes.join(', ')}${promoted ? `. ${promoted} moved up from standby` : ''}${told ? `. ${told} booked temps texted` : ''}`);
+  await afterBookingChange(supabase, s.id);
   revalidatePath(`/shifts/${s.id}`);
   revalidatePath('/shifts');
   return { ok: true, message: `Saved.${promoted ? ` ${promoted} moved up from standby and texted.` : ''}${told ? ` ${told} booked temp${told === 1 ? '' : 's'} texted about the change.` : ''}${free - promoted > 0 ? ` ${free - promoted} place${free - promoted === 1 ? '' : 's'} still to fill: use Send to more temps or Add someone by hand.` : ''}` };
