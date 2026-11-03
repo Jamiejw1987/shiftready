@@ -59,3 +59,20 @@ export async function updateMember(id: string, input: { role: 'admin' | 'consult
   revalidatePath('/team');
   return { ok: true };
 }
+
+/** Re-runs replies Twilio received but ShiftReady never got (e.g. while the webhook was failing). Admins only. */
+export async function recoverReplies(sinceIso: string): Promise<Result & { found?: number; alreadyHad?: number; recovered?: { at: string; from: string; name: string | null; body: string }[] }> {
+  const { supabase, profile } = await requireStaff({ admin: true });
+  const since = new Date(sinceIso);
+  if (Number.isNaN(since.getTime())) return { ok: false, error: 'Pick a date and time.' };
+  if (Date.now() - since.getTime() > 14 * 864e5) return { ok: false, error: 'You can go back up to 14 days.' };
+  try {
+    const { recoverMissedReplies } = await import('@/lib/recover');
+    const r = await recoverMissedReplies(since);
+    await audit(supabase, profile.id, 'replies.recovered', `Recovered ${r.recovered.length} missed replies since ${since.toISOString().slice(0, 16).replace('T', ' ')} UTC`);
+    revalidatePath('/shifts');
+    return { ok: true, ...r };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Something went wrong.' };
+  }
+}

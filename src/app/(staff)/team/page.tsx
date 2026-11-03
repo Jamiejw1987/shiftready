@@ -2,8 +2,10 @@ import Link from 'next/link';
 import { requireStaff } from '@/lib/auth';
 import { fmtDateTime } from '@/lib/format';
 import { TeamClient } from './TeamClient';
+import { RecoverReplies } from './RecoverReplies';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 export default async function TeamPage() {
   const { supabase, profile } = await requireStaff({ admin: true });
@@ -22,6 +24,7 @@ export default async function TeamPage() {
         meId={profile.id}
         members={(users ?? []).map((u) => ({ ...u, temps: count(temps, 'added_by', u.id), shifts: count(shifts, 'sent_by', u.id) }))}
       />
+      <RecoverReplies />
       <section className="panel">
         <h2>Registration documents</h2>
         <p className="lede">The Key Information Document, terms of engagement, privacy notice and 48-hour opt-out wording candidates sign when they register.</p>
