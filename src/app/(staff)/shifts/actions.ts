@@ -133,7 +133,7 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
 
 export async function noShow(offerId: string) {
   const { supabase, profile } = await requireStaff();
-  const { data: o } = await supabase.from('offers').select('id,shift_id,temp_id,temps(first_name,last_name,mobile,status),shifts(client,shift_date,start_time,end_time)').eq('id', offerId).single();
+  const { data: o } = await supabase.from('offers').select('id,shift_id,temp_id,awaiting_confirm,temps(first_name,last_name,mobile,status),shifts(client,shift_date,start_time,end_time)').eq('id', offerId).single();
   const { data: promotedId, error } = await supabase.rpc('mark_no_show', { p_offer_id: offerId });
   if (error || !o) return { ok: false, error: 'Couldn’t mark this no-show. Refresh and try again.' };
   const t = o.temps as unknown as { first_name: string; last_name: string; mobile: string; status: string };
@@ -155,7 +155,7 @@ export async function noShow(offerId: string) {
     }
   } else detail += '. Nobody on standby, slot reopened';
   await audit(supabase, profile.id, 'shift.noshow', detail);
-  await afterBookingChange(supabase, o.shift_id, { first: t.first_name, last: t.last_name });
+  await afterBookingChange(supabase, o.shift_id, o.awaiting_confirm ? undefined : { first: t.first_name, last: t.last_name });
   revalidatePath(`/shifts/${o.shift_id}`);
   return { ok: true };
 }
@@ -207,7 +207,7 @@ export async function deleteShift(shiftId: string) {
 export async function removeFromShift(offerId: string) {
   const { supabase, profile } = await requireStaff();
   const db = createAdminClient();
-  const { data: o } = await db.from('offers').select('id,status,shift_id,temp_id,temps(first_name,last_name,mobile,status),shifts(id,client,shift_date,start_time,end_time,status)').eq('id', offerId).maybeSingle();
+  const { data: o } = await db.from('offers').select('id,status,awaiting_confirm,shift_id,temp_id,temps(first_name,last_name,mobile,status),shifts(id,client,shift_date,start_time,end_time,status)').eq('id', offerId).maybeSingle();
   if (!o || o.status !== 'accepted') return { ok: false, error: 'They’re not booked on this shift any more. Refresh the page.' };
   const t = o.temps as unknown as { first_name: string; last_name: string; mobile: string; status: string };
   const s = o.shifts as unknown as { id: string; client: string; shift_date: string; start_time: string; end_time: string; status: string };
@@ -230,7 +230,7 @@ export async function removeFromShift(offerId: string) {
     detail += '. Place reopened';
   }
   await audit(supabase, profile.id, 'shift.removed', detail);
-  await afterBookingChange(db, s.id, { first: t.first_name, last: t.last_name });
+  await afterBookingChange(db, s.id, o.awaiting_confirm ? undefined : { first: t.first_name, last: t.last_name });
   revalidatePath(`/shifts/${s.id}`);
   return { ok: true };
 }

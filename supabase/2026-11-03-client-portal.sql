@@ -262,6 +262,7 @@ language sql stable security definer set search_path = public as $$
   from public.client_requests r
   join public.shifts s on s.request_id = r.id and s.status <> 'cancelled'
   join public.offers o on o.shift_id = s.id and o.status in ('accepted', 'noshow')
+    and not o.awaiting_confirm
   join public.temps t on t.id = o.temp_id
   left join public.client_feedback f on f.offer_id = o.id
   where r.id = any (p_request_ids)

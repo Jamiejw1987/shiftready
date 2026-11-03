@@ -109,16 +109,17 @@ export function requestSentence(who: string, client: string, verb: string, r: Re
 /** People at the client who should hear about a request: whoever posted it, or everyone who looks after that site. */
 async function requestContacts(db: SupabaseClient, req: { client_id: string; site_id: string; created_by: string | null }) {
   if (req.created_by) {
-    const { data } = await db.from('client_users').select('id,email,full_name,status').eq('id', req.created_by).maybeSingle();
+    const { data } = await db.from('client_users').select('id,email,full_name,mobile,status').eq('id', req.created_by).maybeSingle();
     if (data && data.status !== 'removed') return [data];
   }
-  const { data: users } = await db.from('client_users').select('id,email,full_name,status,all_sites,client_user_sites(site_id)').eq('client_id', req.client_id).eq('status', 'active');
+  const { data: users } = await db.from('client_users').select('id,email,full_name,mobile,status,all_sites,client_user_sites(site_id)').eq('client_id', req.client_id).eq('status', 'active');
   return (users ?? []).filter((u) => u.all_sites || ((u.client_user_sites ?? []) as { site_id: string }[]).some((x) => x.site_id === req.site_id));
 }
 
 /**
- * Call after anyone is booked onto, or taken off, a shift. If the shift came from a client request it emails
- * the client once when every place is filled, and tells them if a confirmed person is taken off.
+ * Call after anyone is booked onto, taken off, or confirms a shift. If the shift came from a client request it
+ * tells the client (email and text) once every place is filled by people who have confirmed they're coming,
+ * and emails them if a confirmed person is taken off. People still waiting to confirm don't count.
  */
 export async function afterBookingChange(db: SupabaseClient, shiftId: string, removed?: { first: string; last: string }) {
   const { data: s } = await db.from('shifts').select('id,request_id,status').eq('id', shiftId).maybeSingle();
@@ -127,7 +128,7 @@ export async function afterBookingChange(db: SupabaseClient, shiftId: string, re
     .select('id,client_id,site_id,created_by,request_date,start_time,end_time,headcount,status,filled_notified_at,clients(name,is_test),client_sites(name)')
     .eq('id', s.request_id).maybeSingle();
   if (!r || r.status === 'cancelled' || hasStarted(r)) return;
-  const { count } = await db.from('offers').select('id', { count: 'exact', head: true }).eq('shift_id', s.id).eq('status', 'accepted');
+  const { count } = await db.from('offers').select('id', { count: 'exact', head: true }).eq('shift_id', s.id).eq('status', 'accepted').eq('awaiting_confirm', false);
   const filled = count ?? 0;
   const site = (r.client_sites as unknown as { name: string } | null)?.name ?? '';
   const when = `${whenWord(r.request_date)}, ${hhmm(r.start_time)} to ${hhmm(r.end_time)}`;
@@ -147,6 +148,11 @@ export async function afterBookingChange(db: SupabaseClient, shiftId: string, re
       to: c.email, stream: clientStream(), tag: 'client-filled',
       subject: `Fully booked: ${site} ${whenWord(r.request_date)}`,
       text: `Hi ${(c.full_name || '').split(' ')[0] || 'there'},\n\nAll ${r.headcount} places on your ${site} shift ${when} are now filled. You can see who's coming, and who needs an induction, here:\n${link}\n\nStaff Selection UK`,
+    }));
+    // And a text to their mobile.
+    await sendMany(contacts.filter((c) => c.mobile), (c) => sendSms({
+      db, to: c.mobile!, kind: 'client_filled',
+      body: `ShiftReady: your ${site} shift ${when} is fully booked, ${r.headcount} of ${r.headcount} confirmed. See who's coming: ${link} - Staff Selection`,
     }));
   } else if (filled < r.headcount && r.filled_notified_at) {
     // Someone dropped off after it was full: email again when it's full again.

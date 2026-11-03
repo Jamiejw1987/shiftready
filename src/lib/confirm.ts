@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { sendSms } from './sms';
 import { shiftWhen } from './format';
 import { seriesWhen } from './series';
+import { afterBookingChange } from './clients';
 
 type S = { id: string; client: string; shift_date: string; start_time: string; end_time: string; status: string; heads: number; sent_by: string | null };
 
@@ -29,6 +30,8 @@ export async function answerBooking(db: SupabaseClient, temp: { id: string; firs
   if (yes) {
     await db.from('offers').update({ awaiting_confirm: false, responded_at: now }).in('id', items.map((i) => i.id));
     await db.from('audit_log').insert({ actor: null, action: 'offer.confirmed', detail: `${temp.first_name} ${temp.last_name} confirmed ${what}` });
+    // Client-requested shifts: the client only sees them, and hears it's full, once they've confirmed.
+    for (const id of new Set(items.map((i) => i.shift.id))) await afterBookingChange(db, id);
     return what;
   }
   await db.from('offers').update({ status: 'declined', decline_reason: 'Turned down booking', awaiting_confirm: false, responded_at: now }).in('id', items.map((i) => i.id));
