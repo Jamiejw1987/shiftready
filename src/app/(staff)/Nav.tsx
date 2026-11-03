@@ -7,6 +7,7 @@ export function Nav({ admin, waiting = 0, toCheck = 0 }: { admin: boolean; waiti
   const items = [
     { href: '/temps', label: 'Temps' },
     { href: '/registrations', label: 'Sign-ups' },
+    { href: '/planner', label: 'Planner' },
     { href: '/shifts', label: 'Shifts' },
     { href: '/requests', label: 'Requests' },
     ...(admin ? [{ href: '/team', label: 'Team' }] : []),
