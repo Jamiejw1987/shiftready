@@ -111,7 +111,7 @@ export default async function RegistrationsPage() {
           <tbody>
             {(review ?? []).map((t) => (
               <tr key={t.id}>
-                <td><b>{t.first_name} {t.last_name}</b>{t.needs_admin_review && <><br /><span className="pill warn">Admin to approve</span></>}</td>
+                <td><b>{t.first_name} {t.last_name}</b>{t.needs_admin_review && <><br /><span className="pill warn">Call first: declared health or convictions</span></>}</td>
                 <td className="num" data-l="Mobile">{displayMobile(t.mobile)}</td>
                 <td className="mono" data-l="Postcode">{t.postcode}</td>
                 <td data-l="Right to work">{t.rtw_checked_at ? <span className="pill ok">Checked</span> : <span className="pill warn">{t.rtw_route === 'share_code' ? 'Share code to check' : 'Passport to see'}</span>}</td>

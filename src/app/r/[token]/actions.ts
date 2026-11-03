@@ -129,7 +129,7 @@ export async function submitRegistration(token: string, r: RegData, uploads: { k
   if (t.status === 'invited') update.status = 'review';
   else if (!r.messagesConsent && t.status !== 'out') { update.status = 'out'; update.opted_out_at = now; }
   await db.from('temps').update(update).eq('id', t.id);
-  await db.from('audit_log').insert({ actor: null, action: 'temp.registered', detail: `${first} ${last} completed their registration${needsAdmin ? ' (needs an admin to review)' : ''}` });
+  await db.from('audit_log').insert({ actor: null, action: 'temp.registered', detail: `${first} ${last} completed their registration${needsAdmin ? ' (declared health or convictions: call before approving)' : ''}` });
 
   // Tell whoever sent the registration link (the latest one, if it was resent), or else who added them.
   const { data: sent } = await db.from('messages').select('sent_by').eq('temp_id', t.id).eq('kind', 'registration').not('sent_by', 'is', null).order('created_at', { ascending: false }).limit(1);

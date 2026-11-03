@@ -14,9 +14,9 @@ type Result = { ok: boolean; error?: string; message?: string };
 type Field = 'ni' | 'health' | 'convictions' | 'bank';
 const LABEL: Record<Field, string> = { ni: 'National Insurance number', health: 'health information', convictions: 'convictions information', bank: 'bank details' };
 
-/** Shows one encrypted field. NI numbers: any staff. Health, convictions and bank: admins only. Every view is logged. */
+/** Shows one encrypted field. NI, health and convictions: any staff (consultants check these before approving). Bank: admins only. Every view is logged. */
 export async function reveal(tempId: string, field: Field): Promise<Result & { value?: string }> {
-  const { supabase, profile } = await requireStaff({ admin: field !== 'ni' });
+  const { supabase, profile } = await requireStaff({ admin: field === 'bank' });
   const col = { ni: 'ni_enc', health: 'health_enc', convictions: 'convictions_enc', bank: 'bank_enc' }[field];
   const { data: p } = await supabase.from('temp_profiles').select(`${col}, temps(first_name,last_name)`).eq('temp_id', tempId).maybeSingle();
   if (!p) return { ok: false, error: 'Nothing on file.' };
@@ -83,7 +83,6 @@ export async function approve(tempId: string): Promise<Result> {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
   if (!t.rtw_checked_at) return { ok: false, error: 'Record the right to work check first.' };
   if (t.rtw_expires && t.rtw_expires <= today) return { ok: false, error: 'Their right to work has expired.' };
-  if (t.needs_admin_review && profile.role !== 'admin') return { ok: false, error: 'This candidate declared something an admin needs to review. Ask an admin to approve.' };
   const { data: p } = await supabase.from('temp_profiles').select('messages_consent').eq('temp_id', tempId).maybeSingle();
   const now = new Date().toISOString();
   const willGetShifts = !!p?.messages_consent;

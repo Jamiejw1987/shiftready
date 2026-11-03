@@ -50,7 +50,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
         <h1>{t.first_name} {t.last_name}</h1>
         <div className="btnrow" style={{ marginBottom: 10 }}>
           <span className={`pill ${sk}`}>{sl}</span>
-          {t.needs_admin_review && t.status === 'review' && <span className="pill warn">Admin to review</span>}
+          {t.needs_admin_review && t.status === 'review' && <span className="pill warn">Declared health or convictions: call before approving</span>}
           {t.rtw_checked_at && !rtwExpired && <span className="pill ok">Right to work checked</span>}
           {rtwExpired && <span className="pill bad">Right to work expired</span>}
           {t.registered_at && (t.bank_on_file ? <span className="pill ok">Bank details on file</span> : <span className="pill warn">No bank details</span>)}
@@ -64,8 +64,8 @@ export default async function TempRecordPage({ params }: { params: { id: string 
           status={t.status}
           registered={!!t.registered_at}
           bankOnFile={!!t.bank_on_file}
-          canApprove={t.status === 'review' && !!t.rtw_checked_at && !rtwExpired && (!t.needs_admin_review || admin)}
-          approveBlock={t.status !== 'review' ? '' : !t.rtw_checked_at ? 'Record the right to work check below before approving.' : rtwExpired ? 'Right to work has expired.' : t.needs_admin_review && !admin ? 'An admin needs to approve this candidate.' : ''}
+          canApprove={t.status === 'review' && !!t.rtw_checked_at && !rtwExpired}
+          approveBlock={t.status !== 'review' ? '' : !t.rtw_checked_at ? 'Record the right to work check below before approving.' : rtwExpired ? 'Right to work has expired.' : ''}
         />
       </section>
 
@@ -152,8 +152,8 @@ export default async function TempRecordPage({ params }: { params: { id: string 
             <h2>Admin only</h2>
             <p className="note" style={{ marginTop: 0 }}>Encrypted. Each view is recorded in the audit trail.</p>
             <dl className="kv">
-              <dt>Health</dt><dd>{admin ? <Reveal id={t.id} field="health" /> : 'Admins only'}</dd>
-              <dt>Convictions</dt><dd>{admin ? <Reveal id={t.id} field="convictions" /> : 'Admins only'}</dd>
+              <dt>Health</dt><dd><Reveal id={t.id} field="health" /></dd>
+              <dt>Convictions</dt><dd><Reveal id={t.id} field="convictions" /></dd>
               <dt>Bank</dt><dd>{p?.bank_last4 ? <>Account ending {p.bank_last4} · added {day(p.bank_added_at)}{admin && <><br /><Reveal id={t.id} field="bank" /></>}</> : 'Not added yet'}</dd>
             </dl>
             <BankActions id={t.id} onFile={t.bank_on_file} admin={admin} />
