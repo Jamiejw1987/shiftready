@@ -23,13 +23,17 @@ export async function requireClient(opts: { allowIncomplete?: boolean } = {}) {
   const { data: cu } = await db.from('client_users')
     .select('id,client_id,auth_user_id,email,full_name,mobile,job_title,all_sites,status,joined_at,last_login_at,clients(id,name,active,cutoff_hours,is_test)')
     .eq('auth_user_id', auth.user.id).maybeSingle();
-  const client = cu?.clients as unknown as { id: string; name: string; active: boolean; cutoff_hours: number; is_test: boolean } | null;
+  const client = cu?.clients as unknown as { id: string; name: string; active: boolean; cutoff_hours: number; is_test: boolean; logo: string | null } | null;
   if (!cu || cu.status === 'removed' || !client?.active) {
     // Office staff who wander in here go back to their own screens.
     const { data: staff } = await db.from('profiles').select('id').eq('id', auth.user.id).maybeSingle();
     if (staff) redirect('/temps');
     redirect('/portal/login?error=access');
   }
+
+  // The logo is read on its own so the portal still works if it can't be loaded.
+  const { data: brand } = await db.from('clients').select('logo').eq('id', client.id).maybeSingle();
+  client.logo = (brand as { logo?: string | null } | null)?.logo ?? null;
 
   // First sign-in turns an invite into an active user. Last sign-in is recorded at most every 10 minutes.
   const now = new Date();

@@ -154,3 +154,18 @@ export async function liftBlock(blockId: string, note: string): Promise<Result> 
   revalidatePath(`/temps/${b.temp_id}`);
   return { ok: true, message: 'Block lifted.' };
 }
+
+/** The client's logo, shown in a circle at the top of their portal. Shrunk in the browser before it's sent. */
+export async function setClientLogo(id: string, dataUrl: string | null): Promise<Result> {
+  const { supabase, profile } = await requireStaff();
+  if (dataUrl !== null) {
+    if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(dataUrl)) return { ok: false, error: 'Use a PNG, JPG or WebP image.' };
+    if (dataUrl.length > 400_000) return { ok: false, error: 'That image is too big. Try a smaller file.' };
+  }
+  const { data: c, error } = await supabase.from('clients').update({ logo: dataUrl }).eq('id', id).select('name').maybeSingle();
+  if (error || !c) return { ok: false, error: error?.message.includes('logo') ? 'Run the logo database update in Supabase first.' : 'Couldn’t save the logo.' };
+  await clientAudit(supabase, { actor: profile.id, action: dataUrl ? 'client.logo_set' : 'client.logo_removed', clientId: id, entity: 'client', entityId: id, detail: `${profile.full_name} ${dataUrl ? 'updated' : 'removed'} ${c.name}'s logo` });
+  revalidatePath(`/clients/${id}`);
+  revalidatePath('/clients');
+  return { ok: true, message: dataUrl ? 'Logo saved. It now shows in their portal.' : 'Logo removed.' };
+}

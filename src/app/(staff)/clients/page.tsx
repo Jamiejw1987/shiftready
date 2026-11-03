@@ -1,13 +1,14 @@
 import Link from 'next/link';
 import { requireStaff } from '@/lib/auth';
 import { NewClient } from './ClientForms';
+import { ClientMark } from '@/components/ClientMark';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ClientsPage() {
   const { supabase } = await requireStaff();
   const [{ data: clients }, { data: users }, { data: sites }, { data: open }] = await Promise.all([
-    supabase.from('clients').select('id,name,active,is_test,cutoff_hours').order('name'),
+    supabase.from('clients').select('*').order('name'),
     supabase.from('client_users').select('client_id,status'),
     supabase.from('client_sites').select('client_id,active'),
     supabase.from('client_requests').select('client_id').eq('status', 'submitted'),
@@ -23,7 +24,7 @@ export default async function ClientsPage() {
           <tbody>
             {(clients ?? []).map((c) => (
               <tr key={c.id} style={c.active ? undefined : { opacity: 0.6 }}>
-                <td><Link href={`/clients/${c.id}`}><b>{c.name}</b></Link>{c.is_test && <> <span className="pill blue">Test</span></>}</td>
+                <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><ClientMark name={c.name} logo={c.logo} size={32} /><Link href={`/clients/${c.id}`}><b>{c.name}</b></Link></span>{c.is_test && <> <span className="pill blue">Test</span></>}</td>
                 <td className="num" data-l="Sites">{n((sites ?? []).filter((s) => s.active), c.id)}</td>
                 <td className="num" data-l="Portal users">{n((users ?? []).filter((u) => u.status !== 'removed'), c.id)}</td>
                 <td className="num" data-l="New requests">{n(open, c.id) || '-'}</td>

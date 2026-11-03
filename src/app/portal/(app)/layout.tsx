@@ -1,4 +1,4 @@
-import { Logo } from '@/components/Logo';
+import { ClientBrand } from '@/components/ClientMark';
 import { requireClient } from '@/lib/portalAuth';
 import { PortalNav } from '../ui/PortalNav';
 import { signOutPortal } from '../actions';
@@ -12,13 +12,13 @@ export default async function PortalLayout({ children }: { children: React.React
     <>
       <header className="band">
         <div className="band-in">
-          <div className="band-logo"><Logo /></div>
+          <div className="band-logo"><ClientBrand name={client.name} logo={client.logo} /></div>
           <div className="band-nav"><PortalNav /></div>
           <div className="user">
             <span className="avatar" aria-hidden="true">{initials}</span>
             <span className="who">
               <b>{user.full_name}</b>
-              <span className="role">{client.name}</span>
+              <span className="role">{user.job_title}</span>
             </span>
             <form action={signOutPortal}><button className="btn signout">Sign out</button></form>
           </div>

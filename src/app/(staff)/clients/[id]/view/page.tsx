@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { loadRequests } from '@/lib/portalData';
 import { clientAudit, today } from '@/lib/clients';
 import { RequestCard } from '@/app/portal/ui/RequestCard';
+import { ClientBrand } from '@/components/ClientMark';
 
 export const dynamic = 'force-dynamic';
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -13,7 +14,7 @@ const UUID = /^[0-9a-f-]{36}$/i;
 export default async function ViewAsClient({ params, searchParams }: { params: { id: string }; searchParams: { as?: string } }) {
   if (!UUID.test(params.id)) notFound();
   const { supabase, profile } = await requireStaff();
-  const { data: c } = await supabase.from('clients').select('id,name').eq('id', params.id).maybeSingle();
+  const { data: c } = await supabase.from('clients').select('*').eq('id', params.id).maybeSingle();
   if (!c) notFound();
   const [{ data: sites }, { data: users }] = await Promise.all([
     supabase.from('client_sites').select('id,name').eq('client_id', c.id).eq('active', true).order('name'),
@@ -36,6 +37,7 @@ export default async function ViewAsClient({ params, searchParams }: { params: {
     <>
       <section className="panel">
         <p className="note" style={{ margin: '0 0 6px' }}><Link href={`/clients/${c.id}`}>← {c.name}</Link></p>
+        <div style={{ margin: '6px 0 10px' }}><ClientBrand name={c.name} logo={c.logo} /></div>
         <h1>Viewing as {as ? as.full_name || as.email : c.name}</h1>
         <p className="alert" style={{ margin: '8px 0 12px' }}>Read-only preview of the client portal. Clients see names and the induction flag only: never phone numbers or other details.</p>
         <form className="btnrow">

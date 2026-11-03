@@ -324,3 +324,15 @@ table.week td.wk-no { text-align: center; color: var(--line-strong); }
   body { background: #fff; }
   .panel { box-shadow: none; border: 0; padding: 0; }
 }
+
+/* ---------- Client logo ---------- */
+.cmark { display: inline-grid; place-items: center; flex: none; border-radius: 50%; background: #fff; overflow: hidden;
+  box-shadow: 0 0 0 2px var(--blue), 0 2px 8px rgba(0,0,0,.25); color: var(--black); font-family: var(--f-display); font-weight: 800; letter-spacing: .5px; }
+.cmark img { width: 78%; height: 78%; object-fit: contain; display: block; }
+.cbrand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.cbrand-t { display: flex; flex-direction: column; min-width: 0; line-height: 1.05; }
+.cbrand-t b { font: 800 22px/1 var(--f-display); text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cbrand-t span { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--blue); font-weight: 700; margin-top: 4px; white-space: nowrap; }
+.lcard .cbrand-t b { color: var(--ink); }
+.phero { display: flex; align-items: center; gap: 16px; }
+@media (max-width: 420px) { .cbrand-t b { font-size: 18px; } .cbrand .cmark { width: 38px !important; height: 38px !important; } }

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { Logo } from '@/components/Logo';
+import { ClientBrand } from '@/components/ClientMark';
 import { requireClient } from '@/lib/portalAuth';
 import { displayMobile } from '@/lib/phone';
 import { ProfileForm } from '../ui/ProfileForm';
@@ -14,7 +14,7 @@ export default async function Welcome() {
   return (
     <main className="center">
       <div className="lcard">
-        <Logo />
+        <ClientBrand name={client.name} logo={client.logo} />
         <h1>Welcome to ShiftReady</h1>
         <p className="lede" style={{ margin: 0 }}>You’re set up for <b>{client.name}</b>. Add a few details so our team knows who they’re working with.</p>
         <ProfileForm first done="/portal" sites={sites} mySiteIds={sites.map((s) => s.id)}

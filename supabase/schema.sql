@@ -1130,3 +1130,6 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function public.portal_people(uuid[]) from public, anon;
 grant execute on function public.portal_people(uuid[]) to authenticated, service_role;
+
+-- ================= Client logos (also in 2026-11-03-client-logo.sql) =================
+alter table public.clients add column if not exists logo text;

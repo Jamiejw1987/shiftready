@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { displayMobile } from '@/lib/phone';
 import { fmtDate, fmtDateTime } from '@/lib/format';
 import { ClientSettings, SiteEditor, InviteUser, UserActions, LiftBlock } from '../ClientForms';
+import { LogoUpload } from '../LogoUpload';
 
 export const dynamic = 'force-dynamic';
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -69,6 +70,7 @@ export default async function ClientProfile({ params, searchParams }: { params: 
             <ClientSettings id={c.id} admin={isAdmin} initial={{ name: c.name, cutoff: c.cutoff_hours, isTest: c.is_test, active: c.active }} />
           </div>
         </div>
+        <div style={{ marginTop: 14 }}><LogoUpload id={c.id} name={c.name} logo={(c as { logo?: string | null }).logo ?? null} /></div>
       </section>
 
       <section className="panel">
