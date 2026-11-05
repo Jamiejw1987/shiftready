@@ -388,3 +388,9 @@ table.week td.wk-no { text-align: center; color: var(--line-strong); }
   .bank-details > div:first-child { grid-column: 1 / -1; }
   .bank-tools .btnrow { width: 100%; } .bank-tools .btnrow .btn { flex: 1; }
 }
+
+/* ---------- Copy buttons ---------- */
+.withcopy { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.btn.small.copybtn { min-height: 28px; padding: 3px 10px; font-size: 12px; }
+.copyrows { display: flex; flex-direction: column; gap: 6px; font-family: var(--f-mono); }
+.copyrows > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }

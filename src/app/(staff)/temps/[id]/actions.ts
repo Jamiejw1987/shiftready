@@ -195,3 +195,36 @@ export async function updateDetails(tempId: string, d: { first: string; last: st
   revalidatePath('/temps');
   return { ok: true, message: `Saved.${texted}` };
 }
+
+/**
+ * Everything payroll needs for one temp, as plain text ready to paste: name, DOB, NI, address, contact, bank.
+ * Admins only (it includes bank details and NI). Logged in the audit trail.
+ */
+export async function payrollDetails(tempId: string): Promise<Result & { text?: string }> {
+  const { supabase, profile } = await requireStaff({ admin: true });
+  const { data: t } = await supabase.from('temps').select('first_name,last_name,mobile,postcode').eq('id', tempId).single();
+  if (!t) return { ok: false, error: 'Temp not found.' };
+  const { data: p } = await supabase.from('temp_profiles').select('dob,email,address1,address2,town,ni_enc,bank_enc').eq('temp_id', tempId).maybeSingle();
+  let ni: string | null = null;
+  let bank: { name: string; sortCode: string; account: string } | null = null;
+  try {
+    ni = decrypt<string>(p?.ni_enc);
+    bank = decrypt<{ name: string; sortCode: string; account: string }>(p?.bank_enc);
+  } catch {
+    return { ok: false, error: 'Couldn’t decrypt. Check FIELD_ENCRYPTION_KEY in Vercel hasn’t changed.' };
+  }
+  const dob = p?.dob ? new Date(p.dob + 'T12:00:00Z').toLocaleDateString('en-GB') : '';
+  const lines = [
+    `Name: ${t.first_name} ${t.last_name}`,
+    dob && `Date of birth: ${dob}`,
+    ni && `NI number: ${ni}`,
+    `Address: ${[p?.address1, p?.address2, p?.town, t.postcode].filter(Boolean).join(', ')}`,
+    `Mobile: ${displayMobile(t.mobile)}`,
+    p?.email && `Email: ${p.email}`,
+    bank ? `Name on account: ${bank.name}` : 'Bank: not added yet',
+    bank && `Sort code: ${bank.sortCode.replace(/(\d{2})(\d{2})(\d{2})/, '$1-$2-$3')}`,
+    bank && `Account number: ${bank.account}`,
+  ].filter(Boolean);
+  await audit(supabase, profile.id, 'temp.viewed_sensitive', `Copied ${t.first_name} ${t.last_name}'s payroll details (incl. NI and bank details)`);
+  return { ok: true, text: lines.join('\n') };
+}

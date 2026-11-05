@@ -3,7 +3,8 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { prepareFile, uploadToSlot, OK_TYPES } from '@/lib/upload';
 import { resendRegistration } from '../../registrations/actions';
-import { updateDetails, sendMyLink, approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, staffUploadSlot, clearBank } from './actions';
+import { updateDetails, sendMyLink, approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, staffUploadSlot, clearBank, payrollDetails } from './actions';
+import { CopyButton } from '@/components/Copy';
 
 type Msg = { ok: boolean; text: string } | null;
 const Note = ({ m }: { m: Msg }) => (m ? <p className={m.ok ? 'okmsg' : 'err'} style={{ marginTop: 10 }}>{m.text}</p> : null);
@@ -136,7 +137,21 @@ export function Reveal({ id, field }: { id: string; field: 'ni' | 'health' | 'co
   const [pending, start] = useTransition();
   const [value, setValue] = useState<string | null>(null);
   const [err, setErr] = useState('');
-  if (value != null) return <div className="secret">{value} <button className="btn ghost small" onClick={() => setValue(null)}>Hide</button></div>;
+  if (value != null) {
+    if (field === 'bank') {
+      const [name = '', sortLine = '', accLine = ''] = value.split('\n');
+      const sort = sortLine.replace(/^Sort code\s*/, ''), acc = accLine.replace(/^Account\s*/, '');
+      return (
+        <div className="secret copyrows">
+          <div><span>{name}</span><CopyButton text={name} /></div>
+          <div><span>Sort code {sort}</span><CopyButton text={sort.replace(/-/g, '')} /></div>
+          <div><span>Account {acc}</span><CopyButton text={acc} /></div>
+          <div className="btnrow"><CopyButton text={`Name on account: ${name}\nSort code: ${sort}\nAccount number: ${acc}`} label="Copy all bank details" className="btn ghost small" /><button className="btn ghost small" onClick={() => setValue(null)}>Hide</button></div>
+        </div>
+      );
+    }
+    return <div className="secret">{value} <CopyButton text={value} /> <button className="btn ghost small" onClick={() => setValue(null)}>Hide</button></div>;
+  }
   return (
     <>
       <button className="btn ghost small" disabled={pending} onClick={() => start(async () => { const r = await reveal(id, field); if (r.ok) setValue(r.value!); else setErr(r.error!); })}>Show</button>
@@ -204,3 +219,15 @@ export function EditDetails({ id, first, last, mobile, postcode, jobTypes, allTy
     </div>
   );
 }
+
+/** One tap: name, DOB, NI, address, contact and bank details, ready to paste into payroll. Admins only. */
+export function CopyPayroll({ id }: { id: string }) {
+  const [err, setErr] = useState('');
+  return (
+    <>
+      <CopyButton className="btn blue small" label="Copy payroll details" text={async () => { setErr(''); const r = await payrollDetails(id); if (!r.ok) { setErr(r.error!); return null; } return r.text!; }} />
+      {err && <span className="err"> {err}</span>}
+    </>
+  );
+}
+

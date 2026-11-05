@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { displayMobile } from '@/lib/phone';
 import { revealBank, type BankDetails } from './actions';
 import { sendBankLink } from '../temps/[id]/actions';
+import { CopyButton } from '@/components/Copy';
 
-export type BankRow = { id: string; first: string; last: string; mobile: string; status: string; onFile: boolean; last4: string | null; addedAt: string | null };
+export type BankRow = { id: string; first: string; last: string; mobile: string; status: string; onFile: boolean; last4: string | null; addedAt: string | null; address: string[] };
 
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/London' }) : '');
 const csvCell = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
@@ -18,7 +19,6 @@ export function BankClient({ rows }: { rows: BankRow[] }) {
   const [view, setView] = useState<'on' | 'missing'>('on');
   const [shown, setShown] = useState<Record<string, BankDetails>>({});
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [copied, setCopied] = useState('');
 
   const onFile = rows.filter((r) => r.onFile);
   const missing = rows.filter((r) => !r.onFile);
@@ -67,10 +67,6 @@ export function BankClient({ rows }: { rows: BankRow[] }) {
     });
   }
 
-  async function copy(key: string, text: string) {
-    try { await navigator.clipboard.writeText(text); setCopied(key); setTimeout(() => setCopied(''), 1500); } catch { /* clipboard blocked */ }
-  }
-
   const anyHidden = list.some((r) => r.onFile && !shown[r.id]);
 
   return (
@@ -109,13 +105,14 @@ export function BankClient({ rows }: { rows: BankRow[] }) {
                 <div className="member-name">
                   <Link href={`/temps/${r.id}`}><b>{r.first} {r.last}</b></Link>
                   <div className="note">{displayMobile(r.mobile)}{r.status === 'hold' ? ' · on hold' : ''}</div>
+                  {r.address.length > 0 && <div className="note withcopy">{r.address.join(', ')}<CopyButton text={r.address.join('\n')} label="Copy address" /></div>}
                 </div>
                 {r.onFile ? (
                   d ? (
                     <dl className="bank-details">
-                      <div><dt>Name on account</dt><dd>{d.name}</dd></div>
-                      <div><dt>Sort code</dt><dd><button className="copy" onClick={() => copy(`${r.id}s`, d.sortCode.replace(/-/g, ''))}>{d.sortCode}{copied === `${r.id}s` ? ' ✓' : ''}</button></dd></div>
-                      <div><dt>Account</dt><dd><button className="copy" onClick={() => copy(`${r.id}a`, d.account)}>{d.account}{copied === `${r.id}a` ? ' ✓' : ''}</button></dd></div>
+                      <div><dt>Name on account</dt><dd className="withcopy"><span>{d.name}</span><CopyButton text={d.name} /></dd></div>
+                      <div><dt>Sort code</dt><dd className="withcopy"><span className="mono">{d.sortCode}</span><CopyButton text={d.sortCode.replace(/-/g, '')} /></dd></div>
+                      <div><dt>Account</dt><dd className="withcopy"><span className="mono">{d.account}</span><CopyButton text={d.account} /></dd></div>
                     </dl>
                   ) : (
                     <div className="bank-hidden"><span className="mono">•••• {r.last4}</span><span className="note"> · added {day(r.addedAt)}</span></div>
@@ -125,7 +122,7 @@ export function BankClient({ rows }: { rows: BankRow[] }) {
                 )}
                 <div className="btnrow bank-act">
                   {r.onFile
-                    ? (d ? <button className="btn ghost small" onClick={() => setShown(({ [r.id]: _, ...rest }) => rest)}>Hide</button>
+                    ? (d ? <><CopyButton className="btn blue small" label="Copy all" text={[`Name: ${r.first} ${r.last}`, r.address.length ? `Address: ${r.address.join(', ')}` : '', `Name on account: ${d.name}`, `Sort code: ${d.sortCode}`, `Account number: ${d.account}`].filter(Boolean).join('\n')} /><button className="btn ghost small" onClick={() => setShown(({ [r.id]: _, ...rest }) => rest)}>Hide</button></>
                          : <button className="btn ghost small" disabled={pending} onClick={() => show([r.id])}>Show</button>)
                     : <button className="btn ghost small" disabled={pending} onClick={() => request(r.id)}>Text bank details link</button>}
                 </div>
@@ -134,7 +131,7 @@ export function BankClient({ rows }: { rows: BankRow[] }) {
           })}
         </div>
       )}
-      {view === 'on' && <p className="note" style={{ marginTop: 12 }}>Tap a sort code or account number to copy it. To change someone’s details, open their record and use Clear bank details, then text them the link.</p>}
+      {view === 'on' && <p className="note" style={{ marginTop: 12 }}>Use the Copy buttons to grab one detail, or Copy all for everything on that person. To change someone’s details, open their record and use Clear bank details, then text them the link.</p>}
     </section>
   );
 }

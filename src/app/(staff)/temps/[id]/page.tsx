@@ -5,7 +5,8 @@ import { displayMobile } from '@/lib/phone';
 import { fmtDateTime, shiftWhen } from '@/lib/format';
 import { DOC_LABEL, type DocKind } from '@/lib/docs';
 import { DOC_KIND_LABEL, type DocKindFile } from '@/lib/storage';
-import { RecordActions, RtwCheck, Uploader, Reveal, BankActions, EditDetails } from './TempRecord';
+import { RecordActions, RtwCheck, Uploader, Reveal, BankActions, EditDetails, CopyPayroll } from './TempRecord';
+import { CopyButton } from '@/components/Copy';
 import { JOB_TYPES } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -121,8 +122,8 @@ export default async function TempRecordPage({ params }: { params: { id: string 
             <h2>Details</h2>
             <dl className="kv">
               <dt>Date of birth</dt><dd>{day(p?.dob ?? null)}{p?.dob ? ` (age ${ageOf(p.dob)})` : ''}</dd>
-              <dt>Email</dt><dd>{p?.email || '-'}</dd>
-              <dt>Address</dt><dd>{[p?.address1, p?.address2, p?.town, t.postcode].filter(Boolean).join(', ')}</dd>
+              <dt>Email</dt><dd>{p?.email ? <span className="withcopy">{p.email}<CopyButton text={p.email} /></span> : '-'}</dd>
+              <dt>Address</dt><dd><span className="withcopy">{[p?.address1, p?.address2, p?.town, t.postcode].filter(Boolean).join(', ')}<CopyButton text={[p?.address1, p?.address2, p?.town, t.postcode].filter(Boolean).join('\n')} /></span></dd>
               <dt>NI number</dt><dd>{p?.ni_enc ? <Reveal id={t.id} field="ni" /> : 'Not given'}</dd>
               <dt>Cleared for</dt><dd>{t.job_types.join(', ') || '-'}</dd>
               <dt>Experience</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{p?.experience || '-'}</dd>
@@ -133,7 +134,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
             <h3 style={{ marginTop: 18 }}>Emergency contact</h3>
             <dl className="kv">
               <dt>Name</dt><dd>{p?.nok_name || '-'}{p?.nok_relationship ? ` (${p.nok_relationship})` : ''}</dd>
-              <dt>Phone</dt><dd>{p?.nok_phone || '-'}</dd>
+              <dt>Phone</dt><dd>{p?.nok_phone ? <span className="withcopy">{p.nok_phone}<CopyButton text={p.nok_phone} /></span> : '-'}</dd>
             </dl>
           </section>
 
@@ -187,6 +188,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
           <section className="panel">
             <h2>Admin only</h2>
             <p className="note" style={{ marginTop: 0 }}>Encrypted. Each view is recorded in the audit trail.</p>
+            {admin && <div className="btnrow" style={{ marginBottom: 12 }}><CopyPayroll id={t.id} /><span className="note">Name, date of birth, NI, address, contact and bank details in one go.</span></div>}
             <dl className="kv">
               <dt>Health</dt><dd><Reveal id={t.id} field="health" /></dd>
               <dt>Convictions</dt><dd><Reveal id={t.id} field="convictions" /></dd>
