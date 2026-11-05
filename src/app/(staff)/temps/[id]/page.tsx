@@ -5,7 +5,7 @@ import { displayMobile } from '@/lib/phone';
 import { fmtDateTime, shiftWhen } from '@/lib/format';
 import { DOC_LABEL, type DocKind } from '@/lib/docs';
 import { DOC_KIND_LABEL, type DocKindFile } from '@/lib/storage';
-import { RecordActions, RtwCheck, Uploader, Reveal, BankActions, EditDetails, CopyPayroll } from './TempRecord';
+import { RecordActions, RtwCheck, Uploader, Reveal, BankActions, EditDetails, CopyPayroll, EditRegistration } from './TempRecord';
 import { CopyButton } from '@/components/Copy';
 import { JOB_TYPES } from '@/lib/format';
 
@@ -136,6 +136,12 @@ export default async function TempRecordPage({ params }: { params: { id: string 
               <dt>Name</dt><dd>{p?.nok_name || '-'}{p?.nok_relationship ? ` (${p.nok_relationship})` : ''}</dd>
               <dt>Phone</dt><dd>{p?.nok_phone ? <span className="withcopy">{p.nok_phone}<CopyButton text={p.nok_phone} /></span> : '-'}</dd>
             </dl>
+            <div style={{ marginTop: 14 }}>
+              <EditRegistration id={t.id} initial={{
+                dob: p?.dob ?? '', email: p?.email ?? '', nationality: p?.nationality ?? '', address1: p?.address1 ?? '', address2: p?.address2 ?? '',
+                town: p?.town ?? '', nokName: p?.nok_name ?? '', nokRelationship: p?.nok_relationship ?? '', nokPhone: p?.nok_phone ?? '',
+              }} />
+            </div>
           </section>
 
           <section className="panel">

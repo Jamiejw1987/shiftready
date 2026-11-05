@@ -2,6 +2,7 @@
 import { useEffect, useState, useTransition } from 'react';
 import { JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
 import { createAndSendShift, previewReach } from './actions';
+import { RecipientPicker, type PickTemp } from '@/components/RecipientPicker';
 
 const tomorrow = () => new Date(Date.now() + 864e5).toISOString().slice(0, 10);
 const addDays = (iso: string, n: number) => new Date(Date.parse(iso + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
@@ -24,22 +25,27 @@ export function ShiftForm({ prefill, requestId }: { prefill?: Prefill; requestId
   const [err, setErr] = useState('');
   const [reach, setReach] = useState<string>('');
   const [confirming, setConfirming] = useState(false);
+  const [temps, setTemps] = useState<PickTemp[]>([]);
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const going = temps.filter((t) => !excluded.has(t.id)).length;
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => { setF({ ...f, [k]: e.target.value }); setConfirming(false); };
 
   useEffect(() => {
     const t = setTimeout(async () => {
-      if (!f.sitePostcode.trim()) return setReach('');
+      if (!f.sitePostcode.trim()) { setTemps([]); return setReach(''); }
       const r = await previewReach(f.sitePostcode, f.jobType, parseFloat(f.radius) || 0, requestId);
-      setReach(r.ok ? `Goes to ${r.count} active temp${r.count === 1 ? '' : 's'} cleared for ${f.jobType} within ${f.radius} miles` : r.error);
+      setTemps(r.ok ? r.temps : []);
+      setReach(r.ok ? `${r.count} active temp${r.count === 1 ? '' : 's'} cleared for ${f.jobType} within ${f.radius} miles` : r.error);
     }, 500);
     return () => clearTimeout(t);
   }, [f.sitePostcode, f.jobType, f.radius]);
 
   function send() {
     setErr('');
+    if (!noSend && temps.length && !going) return setErr('Everyone is unticked. Tick at least one person, or choose “Don’t send it out”.');
     if (!confirming && !noSend) return setConfirming(true);
     start(async () => {
-      const r = await createAndSendShift({ ...f, date: multi && days.length ? days[0] : f.date, pay: parseFloat(f.pay), heads: parseInt(f.heads), radius: parseFloat(f.radius), dates: multi ? days : undefined, noSend, requestId });
+      const r = await createAndSendShift({ ...f, date: multi && days.length ? days[0] : f.date, pay: parseFloat(f.pay), heads: parseInt(f.heads), radius: parseFloat(f.radius), dates: multi ? days : undefined, noSend, requestId, exclude: [...excluded] });
       if (r && !r.ok) { setErr(r.error); setConfirming(false); }
     });
   }
@@ -85,9 +91,16 @@ export function ShiftForm({ prefill, requestId }: { prefill?: Prefill; requestId
         <div className="btnrow" style={{ alignItems: 'center' }}>
           {err && <p className="err">{err}</p>}
           {confirming && <button className="btn ghost" onClick={() => setConfirming(false)}>Back</button>}
-          <button className="btn blue" disabled={pending || (multi && !days.length)} onClick={send}>{pending ? (noSend ? 'Creating…' : 'Sending…') : noSend ? (multi ? `Create ${days.length}-day shift` : 'Create shift') : confirming ? 'Confirm and send texts' : multi ? `Send ${days.length}-day shift offer` : 'Send shift offer'}</button>
+          <button className="btn blue" disabled={pending || (multi && !days.length)} onClick={send}>{pending ? (noSend ? 'Creating…' : 'Sending…') : noSend ? (multi ? `Create ${days.length}-day shift` : 'Create shift') : confirming ? `Confirm and text ${going} ${going === 1 ? 'person' : 'people'}` : multi ? `Send ${days.length}-day shift offer` : 'Send shift offer'}</button>
         </div>
       </div>
+      {!noSend && temps.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <span className="l">Who it goes to</span>
+          <RecipientPicker temps={temps} excluded={excluded} setExcluded={(x) => { setExcluded(x); setConfirming(false); }} startOpen={confirming} key={confirming ? 'c' : 'n'} />
+          <p className="note" style={{ margin: '6px 0 0' }}>Nearest first. Untick anyone who shouldn’t get this one. Anyone already booked elsewhere at the same time is skipped automatically.</p>
+        </div>
+      )}
     </section>
   );
 }

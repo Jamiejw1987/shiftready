@@ -22,12 +22,24 @@ export type ShiftInput = {
   noSend?: boolean;
   /** Made from a client's request: linked to it, and temps can only say they're interested until the office confirms them. */
   requestId?: string;
+  /** Temps the office unticked: they don't get this offer. */
+  exclude?: string[];
 };
 
-type Temp = { id: string; first_name: string; mobile: string; lat: number | null; lng: number | null; job_types: string[] };
+/** A temp in the "who it goes to" list, before sending. */
+export type Recipient = { id: string; name: string; miles: number };
+const asRecipients = (list: { id: string; first_name: string; last_name?: string | null; miles: number }[]): Recipient[] =>
+  list.map((t) => ({ id: t.id, name: `${t.first_name} ${t.last_name ?? ''}`.trim(), miles: Math.round(t.miles * 10) / 10 }));
+const without = <T extends { id: string }>(list: T[], exclude?: string[]) => {
+  if (!exclude?.length) return list;
+  const out = new Set(exclude);
+  return list.filter((t) => !out.has(t.id));
+};
+
+type Temp = { id: string; first_name: string; last_name: string | null; mobile: string; lat: number | null; lng: number | null; job_types: string[] };
 
 async function matchTemps(supabase: Awaited<ReturnType<typeof requireStaff>>['supabase'], point: { lat: number; lng: number }, jobType: string, radius: number, clientId: string | null = null) {
-  const { data } = await supabase.from('temps').select('id,first_name,mobile,lat,lng,job_types').eq('status', 'active').contains('job_types', [jobType]);
+  const { data } = await supabase.from('temps').select('id,first_name,last_name,mobile,lat,lng,job_types').eq('status', 'active').contains('job_types', [jobType]);
   // Never offer a client's shift to someone that client asked not to have back.
   const blocked = await blockedFor(supabase, clientId);
   return ((data ?? []) as Temp[])
@@ -45,7 +57,7 @@ export async function previewReach(sitePostcode: string, jobType: string, radius
   if (!point) return { ok: false as const, error: 'Site postcode not found.' };
   const clientId = requestId ? (await supabase.from('client_requests').select('client_id').eq('id', requestId).maybeSingle()).data?.client_id ?? null : null;
   const list = await matchTemps(supabase, point, jobType, radius, clientId);
-  return { ok: true as const, count: list.length };
+  return { ok: true as const, count: list.length, temps: asRecipients(list) };
 }
 
 export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false; error: string } | never> {
@@ -107,7 +119,7 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
     revalidatePath('/shifts');
     redirect(`/shifts/${shift.id}?manual=1`);
   }
-  const matched = await matchTemps(supabase, point, input.jobType, input.radius, shift.client_id ?? null);
+  const matched = without(await matchTemps(supabase, point, input.jobType, input.radius, shift.client_id ?? null), input.exclude);
   // Skip anyone already booked on a shift at the same time.
   const booked = await bookingsNear(supabase, matched.map((t) => t.id), shift.shift_date);
   const temps = matched.filter((t) => !(booked.get(t.id) ?? []).some((b) => overlaps(b, shift)));
@@ -253,18 +265,20 @@ export async function previewMore(shiftId: string, radius: number) {
   if (!(radius > 0 && radius <= 100)) return { ok: false as const, error: 'Radius must be 1 to 100 miles.' };
   const { s, temps, busy } = await newTempsFor(supabase, shiftId, radius);
   if (!s) return { ok: false as const, error: 'Shift not found.' };
-  return { ok: true as const, count: temps.length, busy };
+  return { ok: true as const, count: temps.length, busy, temps: asRecipients(temps) };
 }
 
 /** Sends an open shift to temps who haven't had it yet (e.g. newly added temps, or a wider radius). Nobody gets it twice. */
-export async function sendToMore(shiftId: string, radius: number) {
+export async function sendToMore(shiftId: string, radius: number, exclude: string[] = []) {
   const { supabase, profile } = await requireStaff();
   if (!(radius > 0 && radius <= 100)) return { ok: false, error: 'Radius must be 1 to 100 miles.' };
-  const { s, temps, busy } = await newTempsFor(supabase, shiftId, radius);
+  const found = await newTempsFor(supabase, shiftId, radius);
+  const { s, busy } = found;
+  const temps = without(found.temps, exclude);
   if (!s) return { ok: false, error: 'Shift not found.' };
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
   if (s.status === 'cancelled' || s.shift_date < today) return { ok: false, error: 'This shift is cancelled or has passed.' };
-  if (!temps.length) return { ok: false, error: 'There’s nobody new to send it to. Try a bigger radius, or add more temps.' };
+  if (!temps.length) return { ok: false, error: found.temps.length ? 'Everyone is unticked. Tick at least one person.' : 'There’s nobody new to send it to. Try a bigger radius, or add more temps.' };
   const { data: offers } = await supabase
     .from('offers')
     .upsert(temps.map((t) => ({ shift_id: s.id, temp_id: t.id, distance_miles: Math.round(t.miles * 10) / 10 })), { onConflict: 'shift_id,temp_id', ignoreDuplicates: true })
@@ -464,7 +478,7 @@ async function createSeries(supabase: Db, profile: Me, input: ShiftInput, dates:
     revalidatePath('/shifts');
     redirect(`/shifts/series/${seriesId}?manual=1`);
   }
-  const temps = await matchTemps(supabase, point, input.jobType, input.radius);
+  const temps = without(await matchTemps(supabase, point, input.jobType, input.radius), input.exclude);
   const res = await offerSeries(supabase, profile, days, temps);
   await audit(supabase, profile.id, 'shift.sent', `Sent ${base.client} weekly shift (${seriesWhen(days)}, ${base.heads} a day) to ${res.sent} temps${res.failed ? `, ${res.failed} texts failed` : ''}`);
   revalidatePath('/shifts');
@@ -472,7 +486,7 @@ async function createSeries(supabase: Db, profile: Me, input: ShiftInput, dates:
 }
 
 /** Sends a weekly shift to temps who haven't had it yet. */
-export async function seriesSendMore(seriesId: string, radius: number) {
+export async function seriesSendMore(seriesId: string, radius: number, exclude: string[] = []) {
   const { supabase, profile } = await requireStaff();
   if (!(radius > 0 && radius <= 100)) return { ok: false, error: 'Radius must be 1 to 100 miles.' };
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
@@ -482,8 +496,9 @@ export async function seriesSendMore(seriesId: string, radius: number) {
   const matched = await matchTemps(supabase, { lat: days[0].lat, lng: days[0].lng }, days[0].job_type, radius);
   const { data: already } = await supabase.from('offers').select('temp_id').in('shift_id', (all ?? []).map((d) => d.id));
   const had = new Set((already ?? []).map((o) => o.temp_id));
-  const fresh = matched.filter((t) => !had.has(t.id));
-  if (!fresh.length) return { ok: false, error: 'There’s nobody new to send it to. Try a bigger radius, or add more temps.' };
+  const all2 = matched.filter((t) => !had.has(t.id));
+  const fresh = without(all2, exclude);
+  if (!fresh.length) return { ok: false, error: all2.length ? 'Everyone is unticked. Tick at least one person.' : 'There’s nobody new to send it to. Try a bigger radius, or add more temps.' };
   const res = await offerSeries(supabase, profile, days, fresh);
   if (radius > Number(days[0].radius_miles)) await supabase.from('shifts').update({ radius_miles: radius }).eq('series_id', seriesId);
   await audit(supabase, profile.id, 'shift.sent_more', `Sent ${days[0].client} weekly shift to ${res.sent} more temps`);
@@ -494,11 +509,11 @@ export async function seriesSendMore(seriesId: string, radius: number) {
 export async function seriesPreviewMore(seriesId: string, radius: number) {
   const { supabase } = await requireStaff();
   const { data: all } = await supabase.from('shifts').select('id,lat,lng,job_type').eq('series_id', seriesId);
-  if (!all?.length || !(radius > 0)) return 0;
+  if (!all?.length || !(radius > 0)) return [] as Recipient[];
   const matched = await matchTemps(supabase, { lat: all[0].lat, lng: all[0].lng }, all[0].job_type, radius);
   const { data: already } = await supabase.from('offers').select('temp_id').in('shift_id', all.map((d) => d.id));
   const had = new Set((already ?? []).map((o) => o.temp_id));
-  return matched.filter((t) => !had.has(t.id)).length;
+  return asRecipients(matched.filter((t) => !had.has(t.id)));
 }
 
 /**

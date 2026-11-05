@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { seriesBook, seriesSendMore, seriesPreviewMore } from '../../actions';
+import { RecipientPicker, type PickTemp } from '@/components/RecipientPicker';
 
 type Col = { id: string; label: string; heads: number; booked: number; cancelled: boolean; past: boolean };
 type Row = { id: string; name: string; mobile: string; miles: number | null; cells: Record<string, { offerId: string; status: string; available: boolean | null; awaiting: boolean }> };
@@ -80,12 +81,14 @@ export function SeriesSendMore({ seriesId, radius: r0 }: { seriesId: string; rad
   const router = useRouter();
   const [pending, start] = useTransition();
   const [radius, setRadius] = useState(String(r0));
-  const [count, setCount] = useState<number | null>(null);
+  const [temps, setTemps] = useState<PickTemp[] | null>(null);
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const count = temps == null ? null : temps.filter((t) => !excluded.has(t.id)).length;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => {
     const r = parseFloat(radius);
-    if (!(r > 0)) return setCount(null);
-    const t = setTimeout(async () => setCount(await seriesPreviewMore(seriesId, r)), 350);
+    if (!(r > 0)) return setTemps(null);
+    const t = setTimeout(async () => setTemps(await seriesPreviewMore(seriesId, r)), 350);
     return () => clearTimeout(t);
   }, [seriesId, radius]);
   return (
@@ -97,12 +100,13 @@ export function SeriesSendMore({ seriesId, radius: r0 }: { seriesId: string; rad
         <input id="smR" type="number" min="1" max="100" value={radius} onChange={(e) => setRadius(e.target.value)} style={{ width: 100 }} />
         <span className="note">miles</span>
         <button className="btn blue" disabled={pending || !count} onClick={() => start(async () => {
-          const r = await seriesSendMore(seriesId, parseFloat(radius));
+          const r = await seriesSendMore(seriesId, parseFloat(radius), [...excluded]);
           setMsg({ ok: r.ok, text: r.ok ? r.message! : r.error! });
           router.refresh();
-          setCount(await seriesPreviewMore(seriesId, parseFloat(radius)));
-        })}>{pending ? 'Sending…' : count == null ? 'Checking…' : count ? `Send to ${count} new temp${count === 1 ? '' : 's'}` : 'Nobody new in range'}</button>
+          setTemps(await seriesPreviewMore(seriesId, parseFloat(radius))); setExcluded(new Set());
+        })}>{pending ? 'Sending…' : count == null ? 'Checking…' : count ? `Send to ${count} new temp${count === 1 ? '' : 's'}` : temps?.length ? 'Everyone unticked' : 'Nobody new in range'}</button>
       </div>
+      {temps && temps.length > 0 && <RecipientPicker temps={temps} excluded={excluded} setExcluded={setExcluded} />}
       {msg && <p className={msg.ok ? 'okmsg' : 'err'}>{msg.text}</p>}
     </div>
   );

@@ -2,19 +2,22 @@
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { previewMore, sendToMore } from '../actions';
+import { RecipientPicker, type PickTemp } from '@/components/RecipientPicker';
 
 /** Re-send an open shift only to temps who haven't had it yet. */
 export function SendMore({ id, radius: r0 }: { id: string; radius: number }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [radius, setRadius] = useState(String(r0));
-  const [count, setCount] = useState<number | null>(null);
+  const [temps, setTemps] = useState<PickTemp[] | null>(null);
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const count = temps == null ? null : temps.filter((t) => !excluded.has(t.id)).length;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     const r = parseFloat(radius);
-    if (!(r > 0)) return setCount(null);
-    const t = setTimeout(async () => { const p = await previewMore(id, r); setCount(p.ok ? p.count : null); }, 350);
+    if (!(r > 0)) return setTemps(null);
+    const t = setTimeout(async () => { const p = await previewMore(id, r); setTemps(p.ok ? p.temps : null); }, 350);
     return () => clearTimeout(t);
   }, [id, radius]);
 
@@ -27,12 +30,13 @@ export function SendMore({ id, radius: r0 }: { id: string; radius: number }) {
         <input id="moreR" type="number" min="1" max="100" value={radius} onChange={(e) => setRadius(e.target.value)} style={{ width: 100 }} />
         <span className="note">miles</span>
         <button className="btn blue" disabled={pending || !count} onClick={() => start(async () => {
-          const r = await sendToMore(id, parseFloat(radius));
+          const r = await sendToMore(id, parseFloat(radius), [...excluded]);
           setMsg({ ok: r.ok, text: r.ok ? r.message! : r.error! });
           router.refresh();
-          const p = await previewMore(id, parseFloat(radius)); setCount(p.ok ? p.count : null);
-        })}>{pending ? 'Sending…' : count == null ? 'Checking…' : count ? `Send to ${count} new temp${count === 1 ? '' : 's'}` : 'Nobody new in range'}</button>
+          const p = await previewMore(id, parseFloat(radius)); setTemps(p.ok ? p.temps : null); setExcluded(new Set());
+        })}>{pending ? 'Sending…' : count == null ? 'Checking…' : count ? `Send to ${count} new temp${count === 1 ? '' : 's'}` : temps?.length ? 'Everyone unticked' : 'Nobody new in range'}</button>
       </div>
+      {temps && temps.length > 0 && <RecipientPicker temps={temps} excluded={excluded} setExcluded={setExcluded} />}
       {msg && <p className={msg.ok ? 'okmsg' : 'err'}>{msg.text}</p>}
     </div>
   );

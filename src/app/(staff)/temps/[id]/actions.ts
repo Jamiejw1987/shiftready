@@ -2,7 +2,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireStaff, audit } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { decrypt } from '@/lib/crypto';
+import { decrypt, encrypt, encryptionReady } from '@/lib/crypto';
 import { sendToTemp } from '@/lib/sms';
 import { regApprovedText, bankLinkText, myLinkText, regInviteText } from '@/lib/texts';
 import { toE164, displayMobile } from '@/lib/phone';
@@ -227,4 +227,60 @@ export async function payrollDetails(tempId: string): Promise<Result & { text?: 
   ].filter(Boolean);
   await audit(supabase, profile.id, 'temp.viewed_sensitive', `Copied ${t.first_name} ${t.last_name}'s payroll details (incl. NI and bank details)`);
   return { ok: true, text: lines.join('\n') };
+}
+
+export type RegEdit = {
+  dob: string; email: string; nationality: string; address1: string; address2: string; town: string;
+  ni: string; nokName: string; nokRelationship: string; nokPhone: string;
+};
+
+/**
+ * Fixes mistakes in what a temp typed when they registered (wrong date of birth, typo in address...).
+ * Any consultant can do this. NI is only changed if a new one is typed. Every change is logged, with the old
+ * and new date of birth so there's a record.
+ */
+export async function updateRegistration(tempId: string, d: RegEdit): Promise<Result> {
+  const { supabase, profile } = await requireStaff();
+  const { data: t } = await supabase.from('temps').select('first_name,last_name,registered_at').eq('id', tempId).single();
+  if (!t) return { ok: false, error: 'Not found.' };
+  const { data: p } = await supabase.from('temp_profiles').select('dob,email,nationality,address1,address2,town,nok_name,nok_relationship,nok_phone').eq('temp_id', tempId).maybeSingle();
+  if (!p) return { ok: false, error: 'They haven’t registered yet, so there’s nothing to edit.' };
+  const clean = (v: string, max: number) => v.replace(/\s+/g, ' ').trim().slice(0, max);
+
+  const problems: string[] = [];
+  const dob = d.dob.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dob)) problems.push('a date of birth');
+  else {
+    const b = new Date(dob + 'T12:00:00Z'), n = new Date();
+    const age = n.getUTCFullYear() - b.getUTCFullYear() - (n < new Date(Date.UTC(n.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate())) ? 1 : 0);
+    if (Number.isNaN(age) || age < 16 || age > 90) problems.push('a date of birth that makes them 16 to 90');
+  }
+  const email = clean(d.email, 120).toLowerCase();
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) problems.push('a valid email (or leave it blank)');
+  if (clean(d.address1, 120).length < 3) problems.push('the first line of their address');
+  if (clean(d.town, 60).length < 2) problems.push('their town');
+  if (clean(d.nationality, 60).length < 3) problems.push('their nationality');
+  const ni = d.ni.replace(/\s+/g, '').toUpperCase();
+  if (ni && !/^[A-Z]{2}\d{6}[A-D]$/.test(ni)) problems.push('a NI number like QQ123456C (or leave it blank to keep the one on file)');
+  if (!clean(d.nokName, 80) || !/^[+\d\s()-]{7,20}$/.test(d.nokPhone.trim())) problems.push('an emergency contact name and phone number');
+  if (problems.length) return { ok: false, error: 'Please add ' + problems.join(', ') + '.' };
+  if (ni && !encryptionReady()) return { ok: false, error: 'Can’t save the NI number right now (encryption key missing).' };
+
+  const next = {
+    dob, email: email || null, nationality: clean(d.nationality, 60), address1: clean(d.address1, 120), address2: clean(d.address2, 120) || null,
+    town: clean(d.town, 60), nok_name: clean(d.nokName, 80), nok_relationship: clean(d.nokRelationship, 40) || null, nok_phone: clean(d.nokPhone, 20),
+  };
+  const labels: Record<string, string> = { email: 'email', nationality: 'nationality', address1: 'address', address2: 'address', town: 'address', nok_name: 'emergency contact', nok_relationship: 'emergency contact', nok_phone: 'emergency contact' };
+  const changes = new Set<string>();
+  const fmt = (x: string | null) => (x ? new Date(x + 'T12:00:00Z').toLocaleDateString('en-GB') : 'none');
+  if (next.dob !== p.dob) changes.add(`date of birth ${fmt(p.dob)} → ${fmt(next.dob)}`);
+  for (const k of Object.keys(labels)) if ((next as Record<string, unknown>)[k] !== ((p as Record<string, unknown>)[k] ?? null)) changes.add(labels[k]);
+  if (ni) changes.add('NI number');
+  if (!changes.size) return { ok: false, error: 'Nothing has changed.' };
+
+  const { error } = await supabase.from('temp_profiles').update({ ...next, ...(ni ? { ni_enc: encrypt(ni) } : {}), updated_at: new Date().toISOString() }).eq('temp_id', tempId);
+  if (error) return { ok: false, error: 'Couldn’t save. Try again.' };
+  await audit(supabase, profile.id, 'temp.registration_edited', `Corrected ${t.first_name} ${t.last_name}'s registration: ${[...changes].join(', ')}`);
+  revalidatePath(`/temps/${tempId}`);
+  return { ok: true, message: 'Registration details updated.' };
 }

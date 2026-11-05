@@ -3,7 +3,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { prepareFile, uploadToSlot, OK_TYPES } from '@/lib/upload';
 import { resendRegistration } from '../../registrations/actions';
-import { updateDetails, sendMyLink, approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, staffUploadSlot, clearBank, payrollDetails } from './actions';
+import { updateDetails, sendMyLink, approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, staffUploadSlot, clearBank, payrollDetails, updateRegistration, type RegEdit } from './actions';
 import { CopyButton } from '@/components/Copy';
 
 type Msg = { ok: boolean; text: string } | null;
@@ -231,3 +231,46 @@ export function CopyPayroll({ id }: { id: string }) {
   );
 }
 
+
+/** Fix what a temp typed when registering: date of birth, address, email, NI, emergency contact. */
+export function EditRegistration({ id, initial }: { id: string; initial: Omit<RegEdit, 'ni'> }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState<RegEdit>({ ...initial, ni: '' });
+  const [msg, setMsg] = useState<Msg>(null);
+  const set = (k: keyof RegEdit) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+  if (!open) return (
+    <>
+      <button className="btn ghost small" onClick={() => { setF({ ...initial, ni: '' }); setOpen(true); setMsg(null); }}>Edit registration details</button>
+      <Note m={msg} />
+    </>
+  );
+  return (
+    <div className="compose" style={{ marginTop: 12, marginBottom: 0 }}>
+      <h3 style={{ margin: 0 }}>Edit registration details</h3>
+      <div className="form">
+        <div className="f"><label className="l" htmlFor="rDob">Date of birth</label><input id="rDob" type="date" value={f.dob} onChange={set('dob')} /></div>
+        <div className="f"><label className="l" htmlFor="rNat">Nationality</label><input id="rNat" type="text" value={f.nationality} onChange={set('nationality')} /></div>
+        <div className="f w2"><label className="l" htmlFor="rEmail">Email</label><input id="rEmail" type="email" value={f.email} onChange={set('email')} /></div>
+        <div className="f w2"><label className="l" htmlFor="rA1">Address line 1</label><input id="rA1" type="text" value={f.address1} onChange={set('address1')} /></div>
+        <div className="f"><label className="l" htmlFor="rA2">Address line 2</label><input id="rA2" type="text" value={f.address2} onChange={set('address2')} /></div>
+        <div className="f"><label className="l" htmlFor="rTown">Town</label><input id="rTown" type="text" value={f.town} onChange={set('town')} /></div>
+        <div className="f w2"><label className="l" htmlFor="rNi">New NI number</label><input id="rNi" type="text" placeholder="Leave blank to keep the one on file" autoComplete="off" value={f.ni} onChange={set('ni')} /></div>
+        <div className="f"><label className="l" htmlFor="rNok">Emergency contact</label><input id="rNok" type="text" value={f.nokName} onChange={set('nokName')} /></div>
+        <div className="f"><label className="l" htmlFor="rNokR">Relationship</label><input id="rNokR" type="text" value={f.nokRelationship} onChange={set('nokRelationship')} /></div>
+        <div className="f w2"><label className="l" htmlFor="rNokP">Emergency contact phone</label><input id="rNokP" type="tel" value={f.nokPhone} onChange={set('nokPhone')} /></div>
+      </div>
+      <p className="note" style={{ margin: 0 }}>Name, mobile and postcode are changed with Edit details at the top. Every change here is recorded in the audit trail.</p>
+      <Note m={msg} />
+      <div className="btnrow" style={{ justifyContent: 'flex-end' }}>
+        <button className="btn ghost" onClick={() => setOpen(false)}>Cancel</button>
+        <button className="btn blue" disabled={pending} onClick={() => start(async () => {
+          const r = await updateRegistration(id, f);
+          setMsg({ ok: r.ok, text: r.ok ? r.message! : r.error! });
+          if (r.ok) { setOpen(false); router.refresh(); }
+        })}>{pending ? 'Saving…' : 'Save'}</button>
+      </div>
+    </div>
+  );
+}

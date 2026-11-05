@@ -394,3 +394,18 @@ table.week td.wk-no { text-align: center; color: var(--line-strong); }
 .btn.small.copybtn { min-height: 28px; padding: 3px 10px; font-size: 12px; }
 .copyrows { display: flex; flex-direction: column; gap: 6px; font-family: var(--f-mono); }
 .copyrows > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+
+/* ---------- Who a shift goes to ---------- */
+.pick { border: 1px solid var(--line); border-radius: var(--r); background: #fff; margin-top: 6px; overflow: hidden; }
+.pick-head { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; background: var(--field); border: 0; font: inherit; font-size: 14px; cursor: pointer; text-align: left; color: var(--ink); min-height: 44px; }
+.pick-toggle { color: var(--blue-deep); font-weight: 700; white-space: nowrap; }
+.pick-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 14px 0; }
+.pick-tools input[type=search] { flex: 1 1 180px; min-width: 0; }
+.pick-list { list-style: none; margin: 0; padding: 6px 6px 8px; max-height: 340px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 2px 8px; }
+.pick-list label { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: var(--r-sm); cursor: pointer; min-height: 40px; }
+.pick-list label:hover { background: var(--field); }
+.pick-list label.off .pick-name { color: var(--muted); text-decoration: line-through; }
+.pick-list input { width: 20px; height: 20px; accent-color: var(--blue); flex: none; margin: 0; }
+.pick-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-mi { font: 500 12px var(--f-mono); color: var(--muted); white-space: nowrap; }
+@media (max-width: 520px) { .pick-list { grid-template-columns: minmax(0, 1fr); } }
