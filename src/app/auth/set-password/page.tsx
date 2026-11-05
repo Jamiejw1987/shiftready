@@ -1,11 +1,10 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/browser';
+import { savePassword } from './actions';
 import { Logo } from '@/components/Logo';
 
 export default function SetPassword() {
-  const supabase = createClient();
   const router = useRouter();
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
@@ -18,9 +17,9 @@ export default function SetPassword() {
     if (pw.length < 12) return setErr('Use at least 12 characters.');
     if (pw !== pw2) return setErr('The two passwords don’t match.');
     setBusy(true);
-    const { error } = await supabase.auth.updateUser({ password: pw });
+    const r = await savePassword(pw);
     setBusy(false);
-    if (error) return setErr(error.message.includes('session') ? 'This link has expired. Ask an admin to resend your invite.' : error.message);
+    if (!r.ok) return setErr(r.error!);
     router.replace('/login?step=2fa');
   }
 

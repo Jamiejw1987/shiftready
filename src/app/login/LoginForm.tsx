@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/browser';
+import { requestPasswordReset } from './actions';
 
 type Step = 'creds' | 'enrol' | 'verify' | 'reset-sent';
 
@@ -75,7 +76,10 @@ export function LoginForm({ startAt2fa, accessError }: { startAt2fa: boolean; ac
   async function forgot() {
     setErr('');
     if (!email) return setErr('Type your work email above first, then press Forgotten password.');
-    await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/auth/confirm` });
+    setBusy(true);
+    const r = await requestPasswordReset(email);
+    setBusy(false);
+    if (!r.ok) return setErr(r.error!);
     setStep('reset-sent');
   }
 
@@ -83,7 +87,7 @@ export function LoginForm({ startAt2fa, accessError }: { startAt2fa: boolean; ac
     return (
       <div>
         <h1>Check your email</h1>
-        <p className="lede">If {email} has a ShiftReady account, we’ve sent a link to set a new password.</p>
+        <p className="lede">If {email} has a ShiftReady account, we’ve sent a link to set a new password. It can take a minute to arrive, so check your junk folder too.</p>
         <button className="btn ghost" onClick={() => setStep('creds')}>Back to sign in</button>
       </div>
     );
@@ -126,7 +130,7 @@ export function LoginForm({ startAt2fa, accessError }: { startAt2fa: boolean; ac
         <input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} /></div>
       {err && <p className="err">{err}</p>}
       <button className="btn blue" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
-      <button type="button" className="btn ghost" onClick={forgot}>Forgotten password</button>
+      <button type="button" className="btn ghost" disabled={busy} onClick={forgot}>Forgotten password</button>
     </form>
   );
 }

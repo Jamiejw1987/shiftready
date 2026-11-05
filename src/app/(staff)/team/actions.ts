@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { requireStaff, audit } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { toE164 } from '@/lib/phone';
-import { appUrl } from '@/lib/texts';
+import { sendStaffLink } from '@/lib/staffLinks';
 
 type Result = { ok: boolean; error?: string; message?: string };
 
@@ -15,13 +15,28 @@ export async function inviteConsultant(input: { name: string; email: string; rol
   if (input.mobile.trim() && !mobile) return { ok: false, error: 'Mobile should be a UK mobile starting 07, or leave it blank.' };
 
   const admin = createAdminClient();
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo: `${appUrl()}/auth/confirm` });
-  if (error || !data.user) return { ok: false, error: error?.message.includes('already') ? 'That email already has an account.' : `Invite failed: ${error?.message}` };
-  const { error: pErr } = await admin.from('profiles').insert({ id: data.user.id, full_name: name, email, role: input.role === 'admin' ? 'admin' : 'consultant', mobile });
+  const { data: taken } = await admin.from('profiles').select('id').ilike('email', email).maybeSingle();
+  if (taken) return { ok: false, error: 'That email is already on the team. Use “Send password link” on their card instead.' };
+  const r = await sendStaffLink(admin, { email, full_name: name }, true);
+  if (!r.ok) return { ok: false, error: `Invite failed: ${r.error}` };
+  const { error: pErr } = await admin.from('profiles').insert({ id: r.userId, full_name: name, email, role: input.role === 'admin' ? 'admin' : 'consultant', mobile });
   if (pErr) return { ok: false, error: 'The invite was sent but the profile couldn’t be saved. Contact your developer.' };
   await audit(supabase, profile.id, 'team.invited', `Invited ${name} (${email}) as ${input.role}`);
   revalidatePath('/team');
-  return { ok: true, message: `Invite emailed to ${email}.` };
+  return { ok: true, message: r.dryRun ? 'Email isn’t set up (no Postmark token), so nothing was sent.' : `Invite emailed to ${email}.` };
+}
+
+/** Emails someone a fresh link to set their password: for a lost invite or a forgotten password. */
+export async function sendLoginLink(id: string): Promise<Result> {
+  const { supabase, profile } = await requireStaff({ admin: true });
+  const admin = createAdminClient();
+  const { data: p } = await admin.from('profiles').select('full_name,email,active').eq('id', id).single();
+  if (!p) return { ok: false, error: 'Not found.' };
+  if (!p.active) return { ok: false, error: `Restore ${p.full_name}’s access first.` };
+  const r = await sendStaffLink(admin, { email: p.email, full_name: p.full_name }, false);
+  if (!r.ok) return { ok: false, error: `Couldn’t send: ${r.error}` };
+  await audit(supabase, profile.id, 'team.link_sent', `Sent ${p.full_name} a link to set their password`);
+  return { ok: true, message: r.dryRun ? 'Email isn’t set up (no Postmark token), so nothing was sent.' : `Password link emailed to ${p.email}. It works once and lasts 24 hours.` };
 }
 
 export async function setAccess(id: string, active: boolean): Promise<Result> {
