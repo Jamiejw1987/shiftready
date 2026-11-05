@@ -13,7 +13,7 @@ export function Nav({ admin, waiting = 0, toCheck = 0, clientNew = 0 }: { admin:
     { href: '/client-requests', label: 'Client requests' },
     { href: '/clients', label: 'Clients' },
     { href: '/requests', label: 'Requests' },
-    ...(admin ? [{ href: '/reports', label: 'Reports' }, { href: '/team', label: 'Team' }] : []),
+    ...(admin ? [{ href: '/reports', label: 'Reports' }, { href: '/bank', label: 'Bank' }, { href: '/team', label: 'Team' }] : []),
   ];
   const ref = useRef<HTMLElement>(null);
 

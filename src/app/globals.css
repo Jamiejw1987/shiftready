@@ -368,3 +368,23 @@ table.week td.wk-no { text-align: center; color: var(--line-strong); }
   .member-edit { grid-template-columns: minmax(0, 1fr); }
   .member-actions .btn { flex: 1 1 auto; }
 }
+
+/* ---------- Bank details ---------- */
+.bank-tools { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.bank-row { border: 1px solid var(--line); border-radius: var(--r); padding: 12px 16px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap: 10px 20px; align-items: center; background: #fff; }
+.bank-row a { color: var(--ink); text-decoration: none; } .bank-row a:hover b { text-decoration: underline; }
+.bank-details { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); gap: 4px 14px; margin: 0; }
+.bank-details dt { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 700; }
+.bank-details dd { margin: 2px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+.copy { font: 500 14px var(--f-mono); background: var(--field); border: 1px dashed var(--line-strong); border-radius: var(--r-sm); padding: 3px 8px; cursor: pointer; color: var(--ink); white-space: nowrap; }
+.bank-act { justify-content: flex-end; }
+@media (max-width: 760px) {
+  .bank-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .bank-row .bank-details, .bank-row .bank-hidden { grid-column: 1 / -1; grid-row: 2; }
+  .bank-act { grid-column: 2; grid-row: 1; }
+}
+@media (max-width: 420px) {
+  .bank-details { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .bank-details > div:first-child { grid-column: 1 / -1; }
+  .bank-tools .btnrow { width: 100%; } .bank-tools .btnrow .btn { flex: 1; }
+}
