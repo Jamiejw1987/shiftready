@@ -8,6 +8,7 @@ import { welcomeText, welcomeWa, appUrl } from '@/lib/texts';
 import { JOB_TYPES } from '@/lib/format';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { removeTempFiles } from '@/lib/storage';
+import { welcomeMessageProblems, isDefaultWelcome, renderWelcomeMessage } from '@/lib/welcomeMessage';
 
 export type NewTemp = { first: string; last: string; mobile: string; postcode: string; types: string[] };
 type Result = { ok: boolean; error?: string; message?: string };
@@ -47,9 +48,15 @@ export async function addTemp(input: NewTemp, confirmedCompliant: boolean): Prom
 
 export type ImportRow = NewTemp;
 
-export async function importTemps(rows: ImportRow[]): Promise<Result & { added?: number; skipped?: { row: number; reason: string }[] }> {
+export async function importTemps(rows: ImportRow[], message?: string): Promise<Result & { added?: number; skipped?: { row: number; reason: string }[] }> {
   const { supabase, profile } = await requireStaff();
   if (rows.length > 2000) return { ok: false, error: 'That file has more than 2,000 rows. Split it into smaller files.' };
+  // A custom welcome goes as a plain text: WhatsApp only allows its pre-approved wording for a first message.
+  const custom = message && !isDefaultWelcome(message) ? message.replace(/\s+/g, ' ').trim() : null;
+  if (custom) {
+    const problems = welcomeMessageProblems(custom);
+    if (problems.length) return { ok: false, error: problems.join('. ') + '.' };
+  }
 
   const { data: existing } = await supabase.from('temps').select('mobile');
   const known = new Set((existing ?? []).map((t) => t.mobile));
@@ -89,9 +96,11 @@ export async function importTemps(rows: ImportRow[]): Promise<Result & { added?:
   if (error || !data) return { ok: false, error: 'Couldn’t save the import. Nothing was added. Try again.' };
 
   const res = await sendMany(data, (t) =>
-    sendToTemp({ db: supabase, temp: t, body: welcomeText(t.first_name, t.optin_token), kind: 'welcome', sentBy: profile.id, wa: { template: 'welcome', vars: welcomeWa(t.first_name) } }),
+    custom
+      ? sendSms({ db: supabase, to: t.mobile, body: renderWelcomeMessage(custom, { first: t.first_name, token: t.optin_token }), kind: 'welcome', tempId: t.id, sentBy: profile.id })
+      : sendToTemp({ db: supabase, temp: t, body: welcomeText(t.first_name, t.optin_token), kind: 'welcome', sentBy: profile.id, wa: { template: 'welcome', vars: welcomeWa(t.first_name) } }),
   );
-  await audit(supabase, profile.id, 'temp.bulk_added', `Bulk added ${data.length} temps from CSV. ${res.sent} welcome texts sent${res.failed ? `, ${res.failed} failed` : ''}`);
+  await audit(supabase, profile.id, 'temp.bulk_added', `Bulk added ${data.length} temps from CSV${custom ? ` with a custom welcome: "${custom.slice(0, 60)}${custom.length > 60 ? '...' : ''}"` : ''}. ${res.sent} welcome texts sent${res.failed ? `, ${res.failed} failed` : ''}`);
   revalidatePath('/temps');
   return { ok: true, added: data.length, skipped, message: `${data.length} temps added. ${res.sent} welcome texts sent${res.failed ? `, ${res.failed} failed` : ''}.` };
 }

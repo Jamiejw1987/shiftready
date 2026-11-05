@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { displayMobile, toE164 } from '@/lib/phone';
 import { looksLikePostcode, milesBetween, type Point } from '@/lib/geo';
 import { plainText, segmentInfo } from '@/lib/smsText';
+import { DEFAULT_WELCOME_MESSAGE, welcomeMessageProblems, isDefaultWelcome, renderWelcomeMessage } from '@/lib/welcomeMessage';
 import { JOB_TYPES } from '@/lib/format';
 import { parseCSV, mapRows, type MappedRow } from './csv';
 import { addTemp, importTemps, setTempStatus, resendWelcome, deleteTemp, sendBulkText, lookupPostcode } from './actions';
@@ -54,6 +55,10 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
   const [csvErr, setCsvErr] = useState('');
   const [csvMsg, setCsvMsg] = useState('');
   const [over, setOver] = useState(false);
+  // The welcome text for this import, remembered on this computer for next time.
+  const [welcome, setWelcomeState] = useState(DEFAULT_WELCOME_MESSAGE);
+  useEffect(() => { try { const v = localStorage.getItem('ssuk.welcomeMessage'); if (v) setWelcomeState(v); } catch { /* not available */ } }, []);
+  const setWelcome = (t: string) => { setWelcomeState(t); try { localStorage.setItem('ssuk.welcomeMessage', t); } catch { /* not available */ } };
   function loadFile(f: File) {
     setCsvErr(''); setCsvMsg('');
     const r = new FileReader();
@@ -82,7 +87,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
     if (!preview) return;
     const good = preview.rows.filter((r) => !r.issues.length);
     start(async () => {
-      const r = await importTemps(good.map(({ first, last, mobile, postcode, types }) => ({ first, last, mobile, postcode, types })));
+      const r = await importTemps(good.map(({ first, last, mobile, postcode, types }) => ({ first, last, mobile, postcode, types })), welcome);
       if (!r.ok) return setCsvErr(r.error!);
       setPreview(null);
       setCsvMsg(r.message! + (r.skipped?.length ? ` ${r.skipped.length} more skipped: ${r.skipped.slice(0, 5).map((s) => `row ${s.row} (${s.reason})`).join(', ')}${r.skipped.length > 5 ? '…' : ''}` : ''));
@@ -219,9 +224,30 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
                     <td>{r.issues.length ? <span className="err">{r.issues.join('; ')}</span> : <span className="pill ok">OK</span>}</td>
                   </tr>))}
               </tbody></table></div>
+              {(() => {
+                const sample = preview.rows.find((r) => !r.issues.length)?.first || 'Sarah';
+                const shown = renderWelcomeMessage(welcome, { first: sample, token: '00000000-0000-0000-0000-000000000000' }, typeof window !== 'undefined' ? window.location.origin : '');
+                const seg = segmentInfo(plainText(shown));
+                const problems = welcomeMessageProblems(welcome);
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
+                    <div className="btnrow">
+                      <span className="note">Welcome message:</span>
+                      <button type="button" className={`chip${isDefaultWelcome(welcome) ? ' on' : ''}`} onClick={() => setWelcome(DEFAULT_WELCOME_MESSAGE)}>Standard welcome</button>
+                    </div>
+                    <label className="f"><span className="l">Text they’ll get</span>
+                      <textarea rows={4} value={welcome} onChange={(e) => setWelcome(e.target.value)} /></label>
+                    <p className="note" style={{ margin: 0 }}><b>{'{first}'}</b> = their first name, <b>{'{link}'}</b> = their link to opt in to shift offers. Keep “Reply YES” in so they can opt in by text.</p>
+                    <div className="f"><span className="l">How it looks</span>
+                      <div className="secret" style={{ fontFamily: 'var(--f-body)', fontSize: 14 }}>{shown}</div>
+                      <span className="note">{seg.chars} characters, {seg.segments} text{seg.segments === 1 ? '' : 's'} each{seg.unicode ? ' (a special character makes each text shorter: check for curly quotes or emoji)' : ''}.{!isDefaultWelcome(welcome) ? ' A changed message goes by text, not WhatsApp.' : ''}</span></div>
+                    {problems.length > 0 && <p className="alert" style={{ margin: 0 }}>{problems.join('. ')}.</p>}
+                  </div>
+                );
+              })()}
               <div className="bar"><span className="note">Rows with problems are skipped. Fix them in the file and re-upload.</span>
                 <div className="btnrow"><button className="btn ghost" onClick={() => setPreview(null)}>Cancel</button>
-                  <button className="btn blue" disabled={!good || pending} onClick={runImport}>{pending ? 'Adding…' : `Add ${good} temps and send welcome texts`}</button></div></div>
+                  <button className="btn blue" disabled={!good || pending || welcomeMessageProblems(welcome).length > 0} onClick={runImport}>{pending ? 'Adding…' : `Add ${good} temps and send welcome texts`}</button></div></div>
             </>
           );
         })()}
