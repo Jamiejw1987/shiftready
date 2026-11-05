@@ -409,3 +409,6 @@ table.week td.wk-no { text-align: center; color: var(--line-strong); }
 .pick-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pick-mi { font: 500 12px var(--f-mono); color: var(--muted); white-space: nowrap; }
 @media (max-width: 520px) { .pick-list { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- Driving licence (registration) ---------- */
+.licence { display: flex; flex-direction: column; gap: 12px; border: 1px solid var(--line); border-radius: var(--r); padding: 14px; background: var(--field); }

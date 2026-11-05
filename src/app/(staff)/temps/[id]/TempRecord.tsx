@@ -3,7 +3,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { prepareFile, uploadToSlot, OK_TYPES } from '@/lib/upload';
 import { resendRegistration } from '../../registrations/actions';
-import { updateDetails, sendMyLink, approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, staffUploadSlot, clearBank, payrollDetails, updateRegistration, type RegEdit } from './actions';
+import { updateDetails, sendMyLink, approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, staffUploadSlot, clearBank, payrollDetails, updateRegistration, type RegEdit, recordLicenceCheck, requestCheckCode } from './actions';
 import { CopyButton } from '@/components/Copy';
 
 type Msg = { ok: boolean; text: string } | null;
@@ -272,5 +272,37 @@ export function EditRegistration({ id, initial }: { id: string; initial: Omit<Re
         })}>{pending ? 'Saving…' : 'Save'}</button>
       </div>
     </div>
+  );
+}
+
+/** Office tools for a driver's licence: text for a new check code, and record the DVLA check. */
+export function LicenceActions({ id, checked }: { id: string; checked: boolean }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [open, setOpen] = useState(false);
+  const [notes, setNotes] = useState('');
+  const [msg, setMsg] = useState<Msg>(null);
+  const run = (fn: () => Promise<{ ok: boolean; error?: string; message?: string }>, after?: () => void) => start(async () => {
+    const r = await fn(); setMsg({ ok: r.ok, text: r.ok ? r.message! : r.error! }); if (r.ok) { after?.(); router.refresh(); }
+  });
+  return (
+    <>
+      <div className="btnrow" style={{ marginTop: 12 }}>
+        <a className="btn blue small" href="https://www.gov.uk/check-driving-information" target="_blank" rel="noopener noreferrer">Check on GOV.UK ↗</a>
+        <button className="btn ghost small" onClick={() => setOpen(!open)}>{checked ? 'Record a new check' : 'Record the check'}</button>
+        <button className="btn ghost small" disabled={pending} onClick={() => run(() => requestCheckCode(id))}>Text for a new check code</button>
+      </div>
+      {open && (
+        <div className="compose" style={{ marginTop: 12, marginBottom: 0 }}>
+          <label className="f"><span className="l">What the DVLA check showed</span>
+            <textarea rows={2} placeholder="e.g. Valid. Categories B, C, C+E. 3 points (SP30), expire 2027." value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
+          <div className="btnrow" style={{ justifyContent: 'flex-end' }}>
+            <button className="btn ghost" onClick={() => setOpen(false)}>Cancel</button>
+            <button className="btn blue" disabled={pending} onClick={() => run(() => recordLicenceCheck(id, notes), () => { setOpen(false); setNotes(''); })}>{pending ? 'Saving…' : 'Save check'}</button>
+          </div>
+        </div>
+      )}
+      <Note m={msg} />
+    </>
   );
 }

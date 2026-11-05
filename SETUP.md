@@ -129,3 +129,8 @@ Clients sign in with an emailed link (no password), post the shifts they need, s
 How a client request flows: client posts > every consultant is alerted (app, text, email) > open it under **Client requests**, press **I'm on it** (client sees Acknowledged) > fill in pay and send the shift (temps can only say they're interested) > confirm people from the **Interested** column, best rated for that client first > client sees "4 of 6 filled" and names > client is emailed when it's full > after the start time the client marks attended / no-show and rates 1-5 stars. 1 or 2 stars asks "Do you want this person to return to site?"; **No** keeps that temp off that client's shifts until an admin lifts it on the client page.
 
 Client reports (**Clients > a client > Report**) are internal: pick the dates, check the figures, then download the spreadsheet or Print / Save as PDF and send it yourself. Nothing goes to clients automatically.
+
+## Driving work and licence checks (Nov 2026)
+
+1. **Database:** Supabase > SQL Editor > New query. Paste all of `supabase/2026-11-05-driving.sql` and click **Run**. Safe to run again.
+2. That's it. "Driving" now appears as a type of work. Candidates who tick it give their licence number, categories, points, a photo of their licence and (ideally) a DVLA check code. The temp's record has a Driving licence panel with a link to GOV.UK's licence check, a button to text them for a new check code, and a place to record the result.

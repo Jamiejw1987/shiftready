@@ -5,7 +5,8 @@ import { displayMobile } from '@/lib/phone';
 import { fmtDateTime, shiftWhen } from '@/lib/format';
 import { DOC_LABEL, type DocKind } from '@/lib/docs';
 import { DOC_KIND_LABEL, type DocKindFile } from '@/lib/storage';
-import { RecordActions, RtwCheck, Uploader, Reveal, BankActions, EditDetails, CopyPayroll, EditRegistration } from './TempRecord';
+import { RecordActions, RtwCheck, Uploader, Reveal, BankActions, EditDetails, CopyPayroll, EditRegistration, LicenceActions } from './TempRecord';
+import { licenceLabel, CHECK_CODE_DAYS } from '@/lib/regOptions';
 import { CopyButton } from '@/components/Copy';
 import { JOB_TYPES } from '@/lib/format';
 
@@ -38,6 +39,12 @@ export default async function TempRecordPage({ params }: { params: { id: string 
     supabase.from('offers').select('id,status,shifts(id,client,shift_date,start_time,end_time)').eq('temp_id', t.id).order('created_at', { ascending: false }).limit(12),
     supabase.from('profiles').select('id,full_name'),
   ]);
+  // Driving licence: loaded separately so the page still works before supabase/2026-11-05-driving.sql is run.
+  const { data: drv } = await supabase.from('temp_profiles')
+    .select('driving_licence_no,driving_categories,driving_points,driving_check_code,driving_check_code_at,licence_checked_at,licence_checked_by,licence_check_notes')
+    .eq('temp_id', t.id).maybeSingle();
+  const isDriver = (t.job_types ?? []).includes('Driving') || !!drv?.driving_licence_no;
+  const codeAge = drv?.driving_check_code_at ? Math.floor((Date.now() - Date.parse(drv.driving_check_code_at)) / 864e5) : null;
   const name = (id: string | null) => (id ? users?.find((u) => u.id === id)?.full_name ?? 'Former consultant' : 'Candidate');
   // What clients said about them: attendance, ratings and anyone who asked not to have them back.
   const [{ data: feedback }, { data: blocks }] = await Promise.all([
@@ -143,6 +150,32 @@ export default async function TempRecordPage({ params }: { params: { id: string 
               }} />
             </div>
           </section>
+
+          {isDriver && (
+            <section className="panel">
+              <h2>Driving licence</h2>
+              {drv?.driving_licence_no ? (
+                <dl className="kv">
+                  <dt>Licence number</dt><dd><span className="withcopy"><span className="mono">{drv.driving_licence_no}</span><CopyButton text={drv.driving_licence_no} /></span></dd>
+                  <dt>Last 8 characters</dt><dd><span className="withcopy"><span className="mono">{drv.driving_licence_no.slice(-8)}</span><CopyButton text={drv.driving_licence_no.slice(-8)} /></span><div className="note">GOV.UK asks for these with the check code.</div></dd>
+                  <dt>Categories</dt><dd>{(drv.driving_categories ?? []).map(licenceLabel).join(', ') || '-'}</dd>
+                  <dt>Points (they said)</dt><dd>{drv.driving_points ?? '-'}</dd>
+                  <dt>DVLA check code</dt><dd>{drv.driving_check_code ? (
+                    <>
+                      <span className="withcopy"><span className="mono">{drv.driving_check_code}</span><CopyButton text={drv.driving_check_code} /></span>
+                      <div className="note">Given {day(drv.driving_check_code_at)}{codeAge != null && (codeAge > CHECK_CODE_DAYS
+                        ? <> · <span className="pill bad">Expired</span> text them for a new one</>
+                        : <> · works for {CHECK_CODE_DAYS - codeAge} more day{CHECK_CODE_DAYS - codeAge === 1 ? '' : 's'}</>)}</div>
+                    </>
+                  ) : <span className="note">Not given. Text them for one.</span>}</dd>
+                  <dt>Office check</dt><dd>{drv.licence_checked_at
+                    ? <>{day(drv.licence_checked_at)} by {name(drv.licence_checked_by)}<div style={{ whiteSpace: 'pre-wrap' }}>{drv.licence_check_notes}</div></>
+                    : <span className="pill warn">Not checked yet</span>}</dd>
+                </dl>
+              ) : <p className="alert" style={{ margin: 0 }}>{drv === null && !(t.job_types ?? []).includes('Driving') ? 'No licence details.' : 'No licence details on file yet. Text them for a check code, or add details when they register.'}</p>}
+              <LicenceActions id={t.id} checked={!!drv?.licence_checked_at} />
+            </section>
+          )}
 
           <section className="panel">
             <h2>Right to work</h2>

@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { Logo } from '@/components/Logo';
 import { SelfService, type MyRequest } from '../../r/[token]/SelfService';
 import { WtrChange } from '../../r/[token]/WtrChange';
+import { LicenceCode } from '../../r/[token]/LicenceCode';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'My ShiftReady | Staff Selection UK', robots: { index: false } };
@@ -12,7 +13,7 @@ const UUID = /^[0-9a-f-]{36}$/i;
 export default async function MyPage({ params, searchParams }: { params: { token: string }; searchParams: { do?: string } }) {
   if (!UUID.test(params.token)) notFound();
   const db = createAdminClient();
-  const { data: t } = await db.from('temps').select('id,first_name,last_name,status,registered_at,bank_on_file').eq('reg_token', params.token).maybeSingle();
+  const { data: t } = await db.from('temps').select('id,first_name,last_name,status,registered_at,bank_on_file,job_types').eq('reg_token', params.token).maybeSingle();
   if (!t) notFound();
   const shell = (body: React.ReactNode) => (
     <main className="tpage"><div className="tbar"><Logo small /></div><div className="tbody">{body}</div></main>
@@ -33,6 +34,7 @@ export default async function MyPage({ params, searchParams }: { params: { token
         {t.registered_at && !t.bank_on_file && <a className="btn blue" href={`/b/${params.token}`}>Add bank details</a>}
       </div>
       <SelfService token={params.token} requests={(reqs ?? []) as MyRequest[]} hasEmail={!!prof?.email} hasAddress={!!prof?.address1} open={searchParams.do === 'holiday' || searchParams.do === 'p45' ? searchParams.do : ''} />
+      {t.registered_at && ((t.job_types ?? []).includes('Driving') || searchParams.do === 'licence') && <LicenceCode token={params.token} startOpen={searchParams.do === 'licence'} />}
       {prof && t.registered_at && <WtrChange token={params.token} optedOut={!!prof.wtr_opt_out} effective={prof.wtr_effective} lastName={t.last_name} />}
     </>,
   );

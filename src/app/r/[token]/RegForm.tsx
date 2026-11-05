@@ -2,7 +2,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
-import { AVAILABILITY, TRANSPORT, NATIONALITIES } from '@/lib/regOptions';
+import { AVAILABILITY, TRANSPORT, NATIONALITIES, LICENCE_CATEGORIES } from '@/lib/regOptions';
 import { prepareFile, uploadToSlot, OK_TYPES } from '@/lib/upload';
 import { startUploads, submitRegistration, type RegData } from './actions';
 
@@ -11,7 +11,7 @@ type Props = {
   token: string; first: string; last: string; mobile: string; jobTypes: string[];
   docs: { kid: Doc; terms: Doc; privacy: Doc; wtr: Doc };
 };
-type FileKind = 'passport' | 'flt_licence' | 'ni_proof' | 'other';
+type FileKind = 'passport' | 'flt_licence' | 'driving_licence' | 'ni_proof' | 'other';
 
 function Section({ n, title, children, note }: { n: number; title: string; note?: string; children: React.ReactNode }) {
   return (
@@ -52,6 +52,7 @@ export function RegForm(p: Props) {
     rtwRoute: '', shareCode: '', nationality: '', nokName: '', nokRelationship: '', nokPhone: '',
     healthDeclared: null, healthDetails: '', convictionsDeclared: null, convictionsDetails: '', wtrOptOut: null,
     readKid: false, readTerms: false, readPrivacy: false, messagesConsent: true, signature: '',
+    drivingLicenceNo: '', drivingCategories: [], drivingPoints: '', drivingCheckCode: '',
   });
   const [files, setFiles] = useState<Partial<Record<FileKind, File>>>({});
   const set = <K extends keyof RegData>(k: K, v: RegData[K]) => setD((x) => ({ ...x, [k]: v }));
@@ -81,9 +82,10 @@ export function RegForm(p: Props) {
     if (!files.ni_proof) return setErr('Please add a photo of your proof of NI number (section 1).');
     if (d.rtwRoute === 'british_irish' && !files.passport) return setErr('Please add a photo of your passport (section 3).');
     if (d.jobTypes.includes('FLT counterbalance') && !files.flt_licence) return setErr('Please add a photo of your FLT licence (section 3).');
+    if (d.jobTypes.includes('Driving') && !files.driving_licence) return setErr('Please add a photo of the front of your driving licence (section 2).');
     start(async () => {
       try {
-        const chosen = (Object.entries(files) as [FileKind, File][]).filter(([k]) => k !== 'flt_licence' || d.jobTypes.includes('FLT counterbalance'));
+        const chosen = (Object.entries(files) as [FileKind, File][]).filter(([k]) => (k !== 'flt_licence' || d.jobTypes.includes('FLT counterbalance')) && (k !== 'driving_licence' || d.jobTypes.includes('Driving')));
         const prepared = await Promise.all(chosen.map(async ([kind, f]) => ({ kind, ...(await prepareFile(f)) })));
         let uploads: { kind: string; path: string; filename: string }[] = [];
         if (prepared.length) {
@@ -134,6 +136,28 @@ export function RegForm(p: Props) {
       <Section n={2} title="Work">
         <div className="f"><span className="l">What work can you do?</span>
           <div className="chips">{JOB_TYPES.map((t) => <label key={t} className="chip"><input type="checkbox" checked={d.jobTypes.includes(t)} onChange={() => toggle('jobTypes', t)} /> {t}</label>)}</div></div>
+        {d.jobTypes.includes('Driving') && (
+          <div className="licence">
+            <h3 style={{ margin: 0 }}>Your driving licence</h3>
+            <p className="note" style={{ margin: 0 }}>We check every driver’s licence with the DVLA before they drive for us.</p>
+            <div className="f"><label className="l" htmlFor="dl">Driving licence number</label>
+              <input id="dl" type="text" autoCapitalize="characters" autoComplete="off" placeholder="16 characters, e.g. MORGA753116SM9IJ" value={d.drivingLicenceNo} onChange={(e) => set('drivingLicenceNo', e.target.value)} />
+              <span className="note">It’s number 5 on the front of your photocard licence.</span></div>
+            <div className="f"><span className="l">Categories you can drive</span>
+              <div className="chips">{LICENCE_CATEGORIES.map(([c, l]) => (
+                <label key={c} className="chip"><input type="checkbox" checked={(d.drivingCategories ?? []).includes(c)} onChange={() => setD((x) => {
+                  const cur = x.drivingCategories ?? [];
+                  return { ...x, drivingCategories: cur.includes(c) ? cur.filter((y) => y !== c) : [...cur, c] };
+                })} /> {l}</label>
+              ))}</div></div>
+            <div className="f"><label className="l" htmlFor="dpts">Penalty points on your licence</label>
+              <input id="dpts" type="number" inputMode="numeric" min={0} max={12} placeholder="0 if none" value={d.drivingPoints} onChange={(e) => set('drivingPoints', e.target.value)} style={{ maxWidth: 140 }} /></div>
+            <div className="f"><span className="l">Photo of the front of your licence</span><FilePick kind="driving_licence" label="Take or choose photo" /></div>
+            <div className="f"><label className="l" htmlFor="dcc">DVLA check code (recommended)</label>
+              <input id="dcc" type="text" autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="8 characters, e.g. Xy 3T 7K pZ" value={d.drivingCheckCode} onChange={(e) => set('drivingCheckCode', e.target.value)} />
+              <span className="note">This lets us check your licence straight away. Get it free at <a href="https://www.gov.uk/view-driving-licence" target="_blank" rel="noopener noreferrer">gov.uk/view-driving-licence</a>: sign in, choose “Share your licence information” and “Create code”. Type it exactly, capitals and small letters matter. It lasts 21 days.</span></div>
+          </div>
+        )}
         <div className="f"><label className="l" htmlFor="exp">Your experience</label>
           <textarea id="exp" placeholder="e.g. 2 years picking and packing at a food warehouse" value={d.experience} onChange={(e) => set('experience', e.target.value)} /></div>
         <div className="f"><span className="l">When can you work?</span>

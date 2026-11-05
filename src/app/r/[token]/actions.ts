@@ -8,7 +8,7 @@ import { geocodePostcode, looksLikePostcode, normalisePostcode } from '@/lib/geo
 import { JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
 import { sendSms } from '@/lib/sms';
 import { uploadSlots, recordUploads } from '@/lib/storage';
-import { AVAILABILITY, TRANSPORT } from '@/lib/regOptions';
+import { AVAILABILITY, TRANSPORT, LICENCE_CATEGORIES, cleanLicenceNo, licenceNoOk, cleanCheckCode, checkCodeOk } from '@/lib/regOptions';
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
@@ -23,6 +23,8 @@ export type RegData = {
   wtrOptOut: boolean | null;
   readKid: boolean; readTerms: boolean; readPrivacy: boolean; messagesConsent: boolean;
   signature: string;
+  /** Only when they tick Driving. */
+  drivingLicenceNo?: string; drivingCategories?: string[]; drivingPoints?: string; drivingCheckCode?: string;
 };
 
 
@@ -76,6 +78,16 @@ export async function submitRegistration(token: string, r: RegData, uploads: { k
   if (!TRANSPORT.includes(r.transport)) p.push('how you\u2019ll get to work');
   if (!r.ownPpe.length) p.push('the safety kit you have (or \u201cNone yet\u201d)');
   if (jobTypes.includes('FLT counterbalance') && !uploads.some((u) => u.kind === 'flt_licence')) p.push('a photo of your FLT licence');
+  const driving = jobTypes.includes('Driving');
+  const cats = (r.drivingCategories ?? []).filter((c) => LICENCE_CATEGORIES.some(([k]) => k === c));
+  const points = parseInt(r.drivingPoints ?? '', 10);
+  if (driving) {
+    if (!licenceNoOk(r.drivingLicenceNo ?? '')) p.push('your 16-character driving licence number');
+    if (!cats.length) p.push('the driving licence categories you hold');
+    if (!(points >= 0 && points <= 12)) p.push('how many penalty points you have (0 if none)');
+    if (r.drivingCheckCode && !checkCodeOk(r.drivingCheckCode)) p.push('your 8-character DVLA check code (or leave it blank)');
+    if (!uploads.some((u) => u.kind === 'driving_licence')) p.push('a photo of the front of your driving licence');
+  }
   const shareCode = r.shareCode.replace(/[\s-]+/g, '').toUpperCase();
   if (clean(r.nationality, 60).length < 3) p.push('your nationality');
   if (r.rtwRoute !== 'british_irish' && r.rtwRoute !== 'share_code') p.push('how you’ll prove your right to work');
@@ -121,6 +133,15 @@ export async function submitRegistration(token: string, r: RegData, uploads: { k
   if (r.wtrOptOut) sigs.push({ temp_id: t.id, document_id: docs.wtr!.id, action: 'wtr_opt_out', signed_name: sig, ip });
   await db.from('temp_signatures').insert(sigs);
   await recordUploads(db, t.id, uploads, null);
+  if (driving) {
+    // Saved on its own so the rest of the registration still goes through if the driving columns aren't set up yet.
+    const code = r.drivingCheckCode ? cleanCheckCode(r.drivingCheckCode) : null;
+    const { error: de } = await db.from('temp_profiles').update({
+      driving_licence_no: cleanLicenceNo(r.drivingLicenceNo ?? ''), driving_categories: cats, driving_points: points,
+      driving_check_code: code, driving_check_code_at: code ? now : null,
+    }).eq('temp_id', t.id);
+    if (de) await db.from('audit_log').insert({ actor: null, action: 'system.error', detail: `Couldn’t save ${first} ${last}'s driving licence details (run supabase/2026-11-05-driving.sql): ${de.message}` });
+  }
 
   const update: Record<string, unknown> = {
     first_name: first, last_name: last, postcode, lat: point.lat, lng: point.lng, job_types: jobTypes,
@@ -170,5 +191,18 @@ export async function changeWtr(token: string, optOut: boolean, signature: strin
     detail: optOut ? `${t.first_name} ${t.last_name} opted out of the 48-hour week` : `${t.first_name} ${t.last_name} cancelled their 48-hour opt-out (effective ${effective.toLocaleDateString('en-GB')})`,
   });
   revalidatePath(`/r/${token}`);
+  return { ok: true };
+}
+
+/** A driver gives us a fresh DVLA check code from their own link (/me). */
+export async function saveCheckCode(token: string, codeIn: string): Promise<{ ok: boolean; error?: string }> {
+  if (!UUID.test(token)) return { ok: false, error: 'Link not valid.' };
+  if (!checkCodeOk(codeIn)) return { ok: false, error: 'The check code is 8 letters and numbers. Type it exactly as shown, capitals and small letters matter.' };
+  const db = createAdminClient();
+  const { data: t } = await db.from('temps').select('id,first_name,last_name').eq('reg_token', token).maybeSingle();
+  if (!t) return { ok: false, error: 'Link not valid.' };
+  const { error } = await db.from('temp_profiles').update({ driving_check_code: cleanCheckCode(codeIn), driving_check_code_at: new Date().toISOString() }).eq('temp_id', t.id);
+  if (error) return { ok: false, error: 'Something went wrong. Please call the office.' };
+  await db.from('audit_log').insert({ actor: null, action: 'temp.licence_code', detail: `${t.first_name} ${t.last_name} added a new DVLA check code` });
   return { ok: true };
 }

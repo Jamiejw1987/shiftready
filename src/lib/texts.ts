@@ -99,3 +99,7 @@ export const confirmedReply = (first: string, what: string) =>
 
 export const OPTED_IN_REPLY = "Thanks, you're all set. We'll message you when shifts come up near you. Reply STOP at any time to opt out. - Staff Selection";
 export const OPTED_OUT_REPLY = "You've been opted out and won't get shift messages from Staff Selection. Reply START to opt back in.";
+
+/** Asks a driver for a new DVLA check code (they last 21 days). */
+export const licenceCodeText = (first: string, token: string) =>
+  `Hi ${first}, to check your driving licence we need a new DVLA check code. Get one at gov.uk/view-driving-licence (Share your licence information > Create code), then add it here: ${appUrl()}/me/${token}?do=licence - Staff Selection`;

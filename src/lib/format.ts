@@ -25,5 +25,5 @@ export function fmtDateTime(iso: string) {
   });
 }
 
-export const JOB_TYPES = ['Warehouse', 'FLT counterbalance', 'Production', 'Cleaning'] as const;
+export const JOB_TYPES = ['Warehouse', 'FLT counterbalance', 'Production', 'Cleaning', 'Driving'] as const;
 export const PPE_OPTIONS = ['Safety boots', 'Hi-vis vest', 'Thermal layers', 'Gloves'] as const;

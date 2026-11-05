@@ -4,7 +4,7 @@ import { requireStaff, audit } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { decrypt, encrypt, encryptionReady } from '@/lib/crypto';
 import { sendToTemp } from '@/lib/sms';
-import { regApprovedText, bankLinkText, myLinkText, regInviteText } from '@/lib/texts';
+import { regApprovedText, bankLinkText, myLinkText, regInviteText, licenceCodeText } from '@/lib/texts';
 import { toE164, displayMobile } from '@/lib/phone';
 import { geocodePostcode, looksLikePostcode, normalisePostcode } from '@/lib/geo';
 import { JOB_TYPES } from '@/lib/format';
@@ -283,4 +283,29 @@ export async function updateRegistration(tempId: string, d: RegEdit): Promise<Re
   await audit(supabase, profile.id, 'temp.registration_edited', `Corrected ${t.first_name} ${t.last_name}'s registration: ${[...changes].join(', ')}`);
   revalidatePath(`/temps/${tempId}`);
   return { ok: true, message: 'Registration details updated.' };
+}
+
+/** Records that the office has checked a driver's licence with the DVLA, with what they found. */
+export async function recordLicenceCheck(tempId: string, notes: string): Promise<Result> {
+  const { supabase, profile } = await requireStaff();
+  const { data: t } = await supabase.from('temps').select('first_name,last_name').eq('id', tempId).single();
+  if (!t) return { ok: false, error: 'Not found.' };
+  const n = notes.replace(/\s+/g, ' ').trim().slice(0, 500);
+  if (n.length < 2) return { ok: false, error: 'Add a short note of what the check showed, e.g. “Valid, C+E, 3 points (SP30)”.' };
+  const { error } = await supabase.from('temp_profiles').update({ licence_checked_at: new Date().toISOString(), licence_checked_by: profile.id, licence_check_notes: n }).eq('temp_id', tempId);
+  if (error) return { ok: false, error: 'Couldn’t save. Has supabase/2026-11-05-driving.sql been run?' };
+  await audit(supabase, profile.id, 'temp.licence_checked', `Checked ${t.first_name} ${t.last_name}'s driving licence with the DVLA: ${n}`);
+  revalidatePath(`/temps/${tempId}`);
+  return { ok: true, message: 'Licence check recorded.' };
+}
+
+/** Texts a driver asking for a new DVLA check code, with a link to add it. */
+export async function requestCheckCode(tempId: string): Promise<Result> {
+  const { supabase, profile } = await requireStaff();
+  const { data: t } = await supabase.from('temps').select('id,first_name,last_name,mobile,reg_token,status').eq('id', tempId).single();
+  if (!t) return { ok: false, error: 'Not found.' };
+  if (t.status === 'out') return { ok: false, error: 'They’ve opted out of texts.' };
+  const r = await sendToTemp({ db: supabase, temp: t, kind: 'system', sentBy: profile.id, body: licenceCodeText(t.first_name, t.reg_token) });
+  await audit(supabase, profile.id, 'temp.licence_code_requested', `Asked ${t.first_name} ${t.last_name} for a new DVLA check code`);
+  return r.ok ? { ok: true, message: 'Text sent asking for a new check code.' } : { ok: false, error: `Text failed: ${r.error}` };
 }
