@@ -2,7 +2,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { displayMobile } from '@/lib/phone';
-import { inviteConsultant, setAccess, updateMember, setPayroll, setClientSms, sendLoginLink } from './actions';
+import { inviteConsultant, setAccess, updateMember, setPayroll, setClientSms, sendLoginLink, setRole } from './actions';
 
 type Member = { id: string; full_name: string; email: string; role: 'admin' | 'consultant'; mobile: string | null; active: boolean; payroll?: boolean; client_sms_alerts?: boolean; temps: number; shifts: number };
 
@@ -13,6 +13,7 @@ export function TeamClient({ members, meId }: { members: Member[]; meId: string 
   const [inv, setInv] = useState({ name: '', email: '', role: 'consultant' as 'admin' | 'consultant', mobile: '' });
   const [editing, setEditing] = useState<string | null>(null);
   const [edit, setEdit] = useState({ role: 'consultant' as 'admin' | 'consultant', mobile: '' });
+  const [confirmRole, setConfirmRole] = useState<string | null>(null);
 
   function run(fn: () => Promise<{ ok: boolean; error?: string; message?: string }>, after?: () => void) {
     start(async () => {
@@ -57,6 +58,13 @@ export function TeamClient({ members, meId }: { members: Member[]; meId: string 
               </dl>
             )}
 
+            {confirmRole === m.id && (
+              <p className="alert" style={{ gridColumn: '1 / -1' }}>
+                {m.role === 'admin'
+                  ? `${m.full_name} will lose access to Reports, Bank details, Team and the audit trail.`
+                  : `Admins can see every temp’s bank details, Reports, the Team page and audit trail, and can add or switch off other staff.`}
+              </p>
+            )}
             <div className="btnrow member-actions">
               {editing === m.id ? (
                 <>
@@ -69,6 +77,16 @@ export function TeamClient({ members, meId }: { members: Member[]; meId: string 
                   {m.active && <button className="btn ghost small" disabled={pending} onClick={() => run(() => sendLoginLink(m.id))}>Send password link</button>}
                   <button className="btn ghost small" disabled={pending} onClick={() => run(() => setPayroll(m.id, !m.payroll))}>{m.payroll ? 'Remove payroll' : 'Make payroll contact'}</button>
                   <button className="btn ghost small" disabled={pending} onClick={() => run(() => setClientSms(m.id, m.client_sms_alerts === false))}>{m.client_sms_alerts === false ? 'Turn on request texts' : 'Turn off request texts'}</button>
+                  {m.id !== meId && m.active && (confirmRole === m.id ? (
+                    <>
+                      <button className="btn blue small" disabled={pending} onClick={() => run(() => setRole(m.id, m.role === 'admin' ? 'consultant' : 'admin'), () => setConfirmRole(null))}>
+                        {m.role === 'admin' ? `Yes, remove admin` : `Yes, make ${m.full_name.split(' ')[0]} admin`}
+                      </button>
+                      <button className="btn ghost small" onClick={() => setConfirmRole(null)}>Cancel</button>
+                    </>
+                  ) : (
+                    <button className="btn ghost small" disabled={pending} onClick={() => setConfirmRole(m.id)}>{m.role === 'admin' ? 'Remove admin' : 'Make admin'}</button>
+                  ))}
                   {m.id !== meId && (
                     <button className="btn ghost small danger" disabled={pending} onClick={() => run(() => setAccess(m.id, !m.active))}>{m.active ? 'Switch off access' : 'Restore access'}</button>
                   )}

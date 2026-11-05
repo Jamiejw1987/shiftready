@@ -102,3 +102,17 @@ export async function recoverReplies(sinceIso: string): Promise<Result & { found
     return { ok: false, error: e instanceof Error ? e.message : 'Something went wrong.' };
   }
 }
+
+/** Makes someone an admin (Reports, Bank details, Team, audit trail) or a consultant again. */
+export async function setRole(id: string, role: 'admin' | 'consultant'): Promise<Result> {
+  const { supabase, profile } = await requireStaff({ admin: true });
+  if (id === profile.id) return { ok: false, error: 'You can’t change your own role.' };
+  const admin = createAdminClient();
+  const { data: p } = await admin.from('profiles').select('full_name,active').eq('id', id).single();
+  if (!p) return { ok: false, error: 'Not found.' };
+  const { error } = await admin.from('profiles').update({ role: role === 'admin' ? 'admin' : 'consultant' }).eq('id', id);
+  if (error) return { ok: false, error: 'Couldn’t save. Try again.' };
+  await audit(supabase, profile.id, 'team.role', `${role === 'admin' ? 'Made' : 'Removed'} ${p.full_name} ${role === 'admin' ? 'an admin' : 'as an admin (now a consultant)'}`);
+  revalidatePath('/team');
+  return { ok: true, message: role === 'admin' ? `${p.full_name} is now an admin. They’ll see the extra tabs next time a page loads.` : `${p.full_name} is now a consultant.` };
+}
