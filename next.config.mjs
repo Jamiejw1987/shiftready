@@ -2,6 +2,8 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Payroll uploads client timesheet exports through a server action (base64, so allow a few MB).
+  experimental: { serverActions: { bodySizeLimit: '8mb' } },
   // Friendlier addresses for the public sign-up page.
   async redirects() {
     return [
