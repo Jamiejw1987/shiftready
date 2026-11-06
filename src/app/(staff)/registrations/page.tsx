@@ -9,6 +9,7 @@ import { appUrl } from '@/lib/texts';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { applyEndpoint, applyMessage } from '@/lib/applications';
 import { ApplyAddress, ApplyMessage, RetryButton } from './ApplyClient';
+import { InvitedSearch } from './InvitedSearch';
 
 const OUTCOME: Record<string, [string, string]> = {
   texted: ['ok', 'Link texted'],
@@ -24,20 +25,37 @@ const OUTCOME: Record<string, [string, string]> = {
 
 export const dynamic = 'force-dynamic';
 
+const PAGE = 50;
+
+/** Turn what was typed into a search_text match: lowercase, no wildcard/filter characters, phone numbers as bare digits without 0/44. */
+function cleanSearch(raw: string) {
+  const s = raw.trim().toLowerCase().replace(/[%_,()\\]/g, '');
+  const compact = s.replace(/[\s+\-]/g, '');
+  if (/^\d{4,}$/.test(compact)) return compact.replace(/^(44|0)/, '');
+  return s.replace(/\s+/g, ' ');
+}
+
 const ago = (iso: string | null) => {
   if (!iso) return '';
   const d = Math.floor((Date.now() - new Date(iso).getTime()) / 864e5);
   return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
 };
 
-export default async function RegistrationsPage() {
+export default async function RegistrationsPage({ searchParams }: { searchParams: { q?: string; p?: string } }) {
+  const q = (searchParams.q ?? '').slice(0, 80);
+  const term = cleanSearch(q);
+  const pageNo = Math.max(0, (parseInt(searchParams.p ?? '1', 10) || 1) - 1);
   const { supabase, profile } = await requireStaff();
+  let invitedQuery = supabase.from('temps').select('id,first_name,last_name,mobile,status,reg_requested_at,added_by', { count: 'exact' })
+    .is('registered_at', null).not('reg_requested_at', 'is', null).neq('status', 'out');
+  if (term) invitedQuery = invitedQuery.ilike('search_text', `%${term}%`);
+  invitedQuery = invitedQuery.order('reg_requested_at', { ascending: false }).range(pageNo * PAGE, pageNo * PAGE + PAGE - 1);
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
   const soon = new Date(Date.now() + 28 * 864e5).toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
-  const [docs, { data: review }, { data: invited }, { data: due }, { data: users }] = await Promise.all([
+  const [docs, { data: review }, { data: invited, count: invitedCount }, { data: due }, { data: users }] = await Promise.all([
     currentDocs(supabase),
     supabase.from('temps').select('id,first_name,last_name,mobile,postcode,rtw_route,rtw_checked_at,needs_admin_review,registered_at,added_by').eq('status', 'review').order('registered_at'),
-    supabase.from('temps').select('id,first_name,last_name,mobile,status,reg_requested_at,added_by').is('registered_at', null).not('reg_requested_at', 'is', null).neq('status', 'out').order('reg_requested_at', { ascending: false }),
+    invitedQuery,
     supabase.from('temps').select('id,first_name,last_name,rtw_expires,status').not('rtw_expires', 'is', null).lte('rtw_expires', soon).in('status', ['active', 'hold']).order('rtw_expires'),
     supabase.from('profiles').select('id,full_name'),
   ]);
@@ -49,6 +67,15 @@ export default async function RegistrationsPage() {
   ]);
   const problems = [...(encryptionReady() ? [] : ['the encryption key (FIELD_ENCRYPTION_KEY) hasn’t been added in Vercel']), ...docProblems(docs)];
   const by = (id: string | null) => users?.find((u) => u.id === id)?.full_name ?? '-';
+  const total = invitedCount ?? 0;
+  const pages = Math.max(1, Math.ceil(total / PAGE));
+  const pageHref = (n: number) => {
+    const sp = new URLSearchParams();
+    if (q) sp.set('q', q);
+    if (n > 1) sp.set('p', String(n));
+    const qs = sp.toString();
+    return `/registrations${qs ? `?${qs}` : ''}#not-finished`;
+  };
 
   return (
     <>
@@ -143,8 +170,10 @@ export default async function RegistrationsPage() {
         </table></div>
       </section>
 
-      <section className="panel">
-        <h2>Links sent, not finished yet</h2>
+      <section className="panel" id="not-finished">
+        <h2>Links sent, not finished yet <span className="pill blue" style={{ verticalAlign: 'middle' }}>{total}</span></h2>
+        <InvitedSearch initial={q} />
+        <p className="note" style={{ marginBottom: 10 }}>{total} not finished{q && ` matching “${q}”`}{pages > 1 && ` · page ${pageNo + 1} of ${pages}`}</p>
         <div className="tablewrap"><table className="cards">
           <thead><tr><th>Candidate</th><th>Mobile</th><th>Sent</th><th>By</th><th></th></tr></thead>
           <tbody>
@@ -157,9 +186,15 @@ export default async function RegistrationsPage() {
                 <td><div className="btnrow"><ResendButton id={t.id} /><Link className="btn ghost small" href={`/temps/${t.id}`}>Open</Link></div></td>
               </tr>
             ))}
-            {!invited?.length && <tr><td colSpan={5} className="note">No links waiting.</td></tr>}
+            {!invited?.length && <tr><td colSpan={5} className="note">{q ? `Nobody matching “${q}”.` : 'No links waiting.'}</td></tr>}
           </tbody>
         </table></div>
+        {pages > 1 && (
+          <div className="btnrow" style={{ marginTop: 12 }}>
+            {pageNo > 0 ? <Link className="btn ghost small" href={pageHref(pageNo)} scroll={false}>Previous</Link> : <span className="btn ghost small" aria-disabled="true" style={{ opacity: 0.4 }}>Previous</span>}
+            {pageNo + 1 < pages ? <Link className="btn ghost small" href={pageHref(pageNo + 2)} scroll={false}>Next</Link> : <span className="btn ghost small" aria-disabled="true" style={{ opacity: 0.4 }}>Next</span>}
+          </div>
+        )}
       </section>
     </>
   );
