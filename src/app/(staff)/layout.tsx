@@ -21,7 +21,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
       <header className="band">
         <div className="band-in">
           <div className="band-logo"><Logo /></div>
-          <div className="band-nav"><Nav admin={profile.role === 'admin'} waiting={waiting ?? 0} toCheck={toCheck ?? 0} clientNew={clientNew ?? 0} /></div>
+          <div className="band-nav"><Nav admin={profile.role === 'admin'} payroll={!!profile.payroll} waiting={waiting ?? 0} toCheck={toCheck ?? 0} clientNew={clientNew ?? 0} /></div>
           <div className="user">
             <Link href="/notifications" className={`bell${unread ? ' hot' : ''}`} aria-label={unread ? `${unread} new alerts` : 'Alerts'}>
               <span aria-hidden="true">🔔</span>{unread ? <span className="navbadge">{unread > 99 ? '99+' : unread}</span> : null}

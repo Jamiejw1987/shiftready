@@ -13,6 +13,7 @@ export type Profile = {
   notif_seen_at?: string | null;
   client_email_alerts?: boolean;
   client_sms_alerts?: boolean;
+  payroll?: boolean;              // ticked as a payroll contact on the Team page
 };
 
 /**

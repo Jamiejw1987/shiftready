@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 
-export function Nav({ admin, waiting = 0, toCheck = 0, clientNew = 0 }: { admin: boolean; waiting?: number; toCheck?: number; clientNew?: number }) {
+export function Nav({ admin, payroll = false, waiting = 0, toCheck = 0, clientNew = 0 }: { admin: boolean; payroll?: boolean; waiting?: number; toCheck?: number; clientNew?: number }) {
   const path = usePathname();
   const items = [
     { href: '/temps', label: 'Temps' },
@@ -13,7 +13,9 @@ export function Nav({ admin, waiting = 0, toCheck = 0, clientNew = 0 }: { admin:
     { href: '/client-requests', label: 'Client requests' },
     { href: '/clients', label: 'Clients' },
     { href: '/requests', label: 'Requests' },
-    ...(admin ? [{ href: '/reports', label: 'Reports' }, { href: '/bank', label: 'Bank' }, { href: '/team', label: 'Team' }] : []),
+    ...(admin ? [{ href: '/reports', label: 'Reports' }, { href: '/bank', label: 'Bank' }] : []),
+    ...(admin || payroll ? [{ href: '/payroll', label: 'Payroll' }] : []),
+    ...(admin ? [{ href: '/team', label: 'Team' }] : []),
   ];
   const ref = useRef<HTMLElement>(null);
 
