@@ -4,7 +4,7 @@ import { requireStaff, audit } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { decrypt, encrypt, encryptionReady } from '@/lib/crypto';
 import { sendToTemp } from '@/lib/sms';
-import { regApprovedText, bankLinkText, myLinkText, regInviteText, licenceCodeText } from '@/lib/texts';
+import { regApprovedText, bankLinkText, bankChangeLinkText, myLinkText, regInviteText, licenceCodeText } from '@/lib/texts';
 import { toE164, displayMobile } from '@/lib/phone';
 import { geocodePostcode, looksLikePostcode, normalisePostcode } from '@/lib/geo';
 import { JOB_TYPES } from '@/lib/format';
@@ -119,6 +119,25 @@ export async function sendBankLink(tempId: string): Promise<Result> {
   const r = await sendToTemp({ db: supabase, temp: t, kind: 'system', sentBy: profile.id, body: bankLinkText(t.first_name, t.reg_token) });
   await audit(supabase, profile.id, 'temp.bank_link_sent', `Sent bank details link to ${t.first_name} ${t.last_name}`);
   return r.ok ? { ok: true, message: 'Bank details link sent.' } : { ok: false, error: `Text failed: ${r.error}` };
+}
+
+/**
+ * Texts a temp a link to replace the bank details already on file. The link only accepts a change for 48 hours
+ * after it's sent, so an old or forwarded link can't be used to redirect someone's pay later. If nothing is on
+ * file yet it just sends the normal bank details link.
+ */
+export async function sendBankChangeLink(tempId: string): Promise<Result> {
+  const { supabase, profile } = await requireStaff();
+  const { data: t } = await supabase.from('temps').select('id,first_name,last_name,mobile,reg_token,status,bank_on_file').eq('id', tempId).single();
+  if (!t) return { ok: false, error: 'Not found.' };
+  if (!t.bank_on_file) return sendBankLink(tempId);
+  const until = new Date(Date.now() + 48 * 3600e3).toISOString();
+  const { error } = await supabase.from('temps').update({ bank_change_until: until }).eq('id', t.id);
+  if (error) return { ok: false, error: /bank_change_until/.test(error.message) ? 'One-off setup needed: run supabase/2026-11-06-bank-change.sql in Supabase first.' : 'Couldn’t set up the link. Try again.' };
+  const r = await sendToTemp({ db: supabase, temp: t, kind: 'system', sentBy: profile.id, body: bankChangeLinkText(t.first_name, t.reg_token) });
+  await audit(supabase, profile.id, 'temp.bank_change_link_sent', `Sent change bank details link to ${t.first_name} ${t.last_name}`);
+  revalidatePath(`/temps/${tempId}`);
+  return r.ok ? { ok: true, message: 'Change link sent. It works for 48 hours; their new details will replace the old ones.' } : { ok: false, error: `Text failed: ${r.error}` };
 }
 
 export async function sendMyLink(tempId: string): Promise<Result> {

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { displayMobile } from '@/lib/phone';
 import { revealBank, type BankDetails } from './actions';
-import { sendBankLink } from '../temps/[id]/actions';
+import { sendBankLink, sendBankChangeLink } from '../temps/[id]/actions';
 import { CopyButton } from '@/components/Copy';
 
 export type BankRow = { id: string; first: string; last: string; mobile: string; status: string; onFile: boolean; last4: string | null; addedAt: string | null; address: string[] };
@@ -58,10 +58,10 @@ export function BankClient({ rows }: { rows: BankRow[] }) {
     });
   }
 
-  function request(id: string) {
+  function request(id: string, change = false) {
     setMsg(null);
     start(async () => {
-      const r = await sendBankLink(id);
+      const r = await (change ? sendBankChangeLink(id) : sendBankLink(id));
       setMsg({ ok: r.ok, text: r.ok ? r.message! : r.error! });
       if (r.ok) router.refresh();
     });
@@ -123,7 +123,7 @@ export function BankClient({ rows }: { rows: BankRow[] }) {
                 <div className="btnrow bank-act">
                   {r.onFile
                     ? (d ? <><CopyButton className="btn blue small" label="Copy all" text={[`Name: ${r.first} ${r.last}`, r.address.length ? `Address: ${r.address.join(', ')}` : '', `Name on account: ${d.name}`, `Sort code: ${d.sortCode}`, `Account number: ${d.account}`].filter(Boolean).join('\n')} /><button className="btn ghost small" onClick={() => setShown(({ [r.id]: _, ...rest }) => rest)}>Hide</button></>
-                         : <button className="btn ghost small" disabled={pending} onClick={() => show([r.id])}>Show</button>)
+                         : <><button className="btn ghost small" disabled={pending} onClick={() => show([r.id])}>Show</button><button className="btn ghost small" disabled={pending} onClick={() => request(r.id, true)}>Text change link</button></>)
                     : <button className="btn ghost small" disabled={pending} onClick={() => request(r.id)}>Text bank details link</button>}
                 </div>
               </article>
@@ -131,7 +131,7 @@ export function BankClient({ rows }: { rows: BankRow[] }) {
           })}
         </div>
       )}
-      {view === 'on' && <p className="note" style={{ marginTop: 12 }}>Use the Copy buttons to grab one detail, or Copy all for everything on that person. To change someone’s details, open their record and use Clear bank details, then text them the link.</p>}
+      {view === 'on' && <p className="note" style={{ marginTop: 12 }}>Use the Copy buttons to grab one detail, or Copy all for everything on that person. To change someone’s details, use Text change link: their new details replace the old ones when they submit (the link works for 48 hours).</p>}
     </section>
   );
 }

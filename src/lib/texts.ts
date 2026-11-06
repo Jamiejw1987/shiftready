@@ -71,6 +71,11 @@ export const regApprovedText = (first: string, willGetShifts: boolean) =>
 export const bankLinkText = (first: string, token: string) =>
   `Hi ${first}, please add your bank details so we can pay you: ${appUrl()}/b/${token} - Staff Selection`;
 
+export const bankChangeLinkText = (first: string, token: string) =>
+  `Hi ${first}, here's your link to update your bank details. It works for 48 hours and your new details will replace the old ones: ${appUrl()}/b/${token} - Staff Selection`;
+export const bankChangedText = (first: string, last4: string) =>
+  `Hi ${first}, your bank details have been updated. We'll now pay you into the account ending ${last4}. If you didn't make this change, call the office straight away. - Staff Selection`;
+
 // Holiday and P45 requests
 const d = (iso: string) => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/London' });
 export const holidayRange = (start: string, end: string) => (start === end ? d(start) : `${d(start)} to ${d(end)}`);

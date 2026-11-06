@@ -3,7 +3,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { prepareFile, uploadToSlot, OK_TYPES } from '@/lib/upload';
 import { resendRegistration } from '../../registrations/actions';
-import { updateDetails, sendMyLink, approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, staffUploadSlot, clearBank, payrollDetails, updateRegistration, type RegEdit, recordLicenceCheck, requestCheckCode } from './actions';
+import { updateDetails, sendMyLink, approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, sendBankChangeLink, staffUploadSlot, clearBank, payrollDetails, updateRegistration, type RegEdit, recordLicenceCheck, requestCheckCode } from './actions';
 import { CopyButton } from '@/components/Copy';
 
 type Msg = { ok: boolean; text: string } | null;
@@ -171,6 +171,7 @@ export function BankActions({ id, onFile, admin }: { id: string; onFile: boolean
     <>
       <div className="btnrow" style={{ marginTop: 14 }}>
         {!onFile && <button className="btn ghost small" disabled={pending} onClick={() => run(() => sendBankLink(id))}>Text bank details link</button>}
+        {onFile && <button className="btn ghost small" disabled={pending} onClick={() => run(() => sendBankChangeLink(id))}>Text change bank details link</button>}
         {onFile && admin && (confirm
           ? <><button className="btn small" style={{ background: 'var(--bad)' }} disabled={pending} onClick={() => run(() => clearBank(id))}>Confirm clear</button><button className="btn ghost small" onClick={() => setConfirm(false)}>Keep</button></>
           : <button className="btn ghost small" onClick={() => setConfirm(true)}>Clear bank details</button>)}

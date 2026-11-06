@@ -339,6 +339,7 @@ alter table public.temps add column if not exists rtw_expires date;             
 -- Set when the candidate declared a health matter or an unspent conviction: an admin must approve them.
 alter table public.temps add column if not exists needs_admin_review boolean not null default false;
 alter table public.temps add column if not exists bank_on_file boolean not null default false;
+alter table public.temps add column if not exists bank_change_until timestamptz; -- staff-sent "change bank details" link is open until this time
 do $$ begin
   alter table public.temps add constraint temps_rtw_route_check check (rtw_route in ('british_irish', 'share_code'));
 exception when duplicate_object then null; end $$;

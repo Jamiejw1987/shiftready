@@ -10,13 +10,14 @@ const UUID = /^[0-9a-f-]{36}$/i;
 export default async function BankPage({ params }: { params: { token: string } }) {
   if (!UUID.test(params.token)) notFound();
   const db = createAdminClient();
-  const { data: t } = await db.from('temps').select('id,first_name,status,bank_on_file').eq('reg_token', params.token).maybeSingle();
+  const { data: t } = await db.from('temps').select('id,first_name,status,bank_on_file,bank_change_until').eq('reg_token', params.token).maybeSingle();
   if (!t) notFound();
   let last4: string | null = null;
   if (t.bank_on_file) {
     const { data: p } = await db.from('temp_profiles').select('bank_last4').eq('temp_id', t.id).maybeSingle();
     last4 = p?.bank_last4 ?? null;
   }
+  const canChange = t.bank_on_file && !!t.bank_change_until && new Date(t.bank_change_until) > new Date();
   return (
     <main className="tpage">
       <div className="tbar"><Logo small /></div>
@@ -24,6 +25,8 @@ export default async function BankPage({ params }: { params: { token: string } }
         {t.status === 'invited' || t.status === 'review' ? (
           <div className="state"><div className="badge mute">–</div><div className="big">Register first</div><p>Please finish your registration using the link we texted you, then add your bank details.</p>
             <a className="btn blue" href={`/r/${params.token}`}>Go to registration</a></div>
+        ) : canChange ? (
+          <BankForm token={params.token} first={t.first_name} replacing={last4 ?? '****'} />
         ) : t.bank_on_file ? (
           <div className="state"><div className="badge ok">✓</div><div className="big">Bank details saved</div>
             <p>We’ll pay you into the account ending {last4 ?? '****'}. To change your bank details, please call the office.</p></div>
