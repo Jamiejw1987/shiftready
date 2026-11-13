@@ -1152,3 +1152,6 @@ alter table public.temp_profiles
 alter table public.temp_documents drop constraint if exists temp_documents_kind_check;
 alter table public.temp_documents add constraint temp_documents_kind_check
   check (kind in ('passport', 'id', 'rtw_check', 'ni_proof', 'flt_licence', 'driving_licence', 'other'));
+
+-- People the consultant unticked when sending a shift: "Send to more temps" leaves them unticked (13 Nov 2026).
+alter table public.shifts add column if not exists left_out uuid[] not null default '{}';

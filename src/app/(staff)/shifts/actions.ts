@@ -26,10 +26,40 @@ export type ShiftInput = {
   exclude?: string[];
 };
 
-/** A temp in the "who it goes to" list, before sending. */
-export type Recipient = { id: string; name: string; miles: number };
-const asRecipients = (list: { id: string; first_name: string; last_name?: string | null; miles: number }[]): Recipient[] =>
-  list.map((t) => ({ id: t.id, name: `${t.first_name} ${t.last_name ?? ''}`.trim(), miles: Math.round(t.miles * 10) / 10 }));
+/** A temp in the "who it goes to" list, before sending. `leftOut`: a consultant unticked them when this shift went out before. */
+export type Recipient = { id: string; name: string; miles: number; leftOut?: boolean };
+const asRecipients = (list: { id: string; first_name: string; last_name?: string | null; miles: number }[], leftOut?: Set<string>): Recipient[] =>
+  list.map((t) => ({ id: t.id, name: `${t.first_name} ${t.last_name ?? ''}`.trim(), miles: Math.round(t.miles * 10) / 10, ...(leftOut?.has(t.id) ? { leftOut: true } : {}) }));
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const uuids = (list?: string[]) => [...new Set((list ?? []).filter((x) => UUID.test(x)))];
+/** Who was unticked on any of these shifts (empty until the 2026-11-13-left-out.sql migration has been run). */
+const leftOutOf = (rows: { left_out?: string[] | null }[] | null | undefined) => new Set((rows ?? []).flatMap((r) => r.left_out ?? []));
+
+/**
+ * Remembers who the consultant unticked, so "Send to more temps" doesn't treat them as new people later.
+ * Best-effort: if the database hasn't had the left_out column added yet, sending still works as before.
+ */
+async function rememberLeftOut(supabase: Awaited<ReturnType<typeof requireStaff>>['supabase'], filter: { id?: string; series_id?: string }, add: string[]) {
+  const ids = uuids(add);
+  if (!ids.length) return;
+  const q = supabase.from('shifts').select('id,left_out');
+  const { data, error } = filter.series_id ? await q.eq('series_id', filter.series_id) : await q.eq('id', filter.id!);
+  if (error || !data) return;
+  for (const row of data as { id: string; left_out?: string[] | null }[]) {
+    const next = [...new Set([...(row.left_out ?? []), ...ids])];
+    await supabase.from('shifts').update({ left_out: next }).eq('id', row.id);
+  }
+}
+/** Inserts shifts with left_out; if that column doesn't exist yet, inserts without it so creating shifts never breaks. */
+async function insertShifts<T extends Record<string, unknown>>(supabase: Awaited<ReturnType<typeof requireStaff>>['supabase'], rows: T[], leftOut: string[]) {
+  const withCol = rows.map((r) => ({ ...r, left_out: leftOut }));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const first = await supabase.from('shifts').insert(withCol as any).select().order('shift_date');
+  if (!first.error || !/left_out/.test(first.error.message ?? '')) return first;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return supabase.from('shifts').insert(rows as any).select().order('shift_date');
+}
 const without = <T extends { id: string }>(list: T[], exclude?: string[]) => {
   if (!exclude?.length) return list;
   const out = new Set(exclude);
@@ -94,18 +124,15 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
   const point = await geocodePostcode(pc);
   if (!point) return { ok: false, error: `We couldn’t find the postcode ${pc}.` };
 
-  const { data: shift, error } = await supabase
-    .from('shifts')
-    .insert({
+  const { data: inserted, error } = await insertShifts(supabase, [{
       client: input.client.trim(), site: input.site.trim(), site_postcode: pc, lat: point.lat, lng: point.lng,
       shift_date: input.date, start_time: input.start, end_time: input.end, job_type: input.jobType,
       duties: input.duties.split('\n').map((s) => s.trim()).filter(Boolean),
       pay_rate: Math.round(input.pay * 100) / 100, heads: Math.round(input.heads), radius_miles: input.radius,
       ppe: input.ppe.filter((p) => (PPE_OPTIONS as readonly string[]).includes(p)), sent_by: profile.id,
       ...(link ?? {}),
-    })
-    .select()
-    .single();
+    }], input.noSend ? [] : uuids(input.exclude));
+  const shift = inserted?.[0];
   if (error || !shift) return { ok: false, error: 'Couldn’t save the shift. Try again.' };
   if (req) {
     const now = new Date().toISOString();
@@ -257,15 +284,15 @@ async function newTempsFor(supabase: Awaited<ReturnType<typeof requireStaff>>['s
   const fresh = matched.filter((t) => !sent.has(t.id));
   const booked = await bookingsNear(supabase, fresh.map((t) => t.id), s.shift_date);
   const temps = fresh.filter((t) => !(booked.get(t.id) ?? []).some((b) => overlaps(b, s)));
-  return { s, temps, busy: fresh.length - temps.length };
+  return { s, temps, busy: fresh.length - temps.length, leftOut: leftOutOf([s]) };
 }
 
 export async function previewMore(shiftId: string, radius: number) {
   const { supabase } = await requireStaff();
   if (!(radius > 0 && radius <= 100)) return { ok: false as const, error: 'Radius must be 1 to 100 miles.' };
-  const { s, temps, busy } = await newTempsFor(supabase, shiftId, radius);
+  const { s, temps, busy, leftOut } = await newTempsFor(supabase, shiftId, radius);
   if (!s) return { ok: false as const, error: 'Shift not found.' };
-  return { ok: true as const, count: temps.length, busy, temps: asRecipients(temps) };
+  return { ok: true as const, count: temps.length, busy, temps: asRecipients(temps, leftOut) };
 }
 
 /** Sends an open shift to temps who haven't had it yet (e.g. newly added temps, or a wider radius). Nobody gets it twice. */
@@ -290,6 +317,7 @@ export async function sendToMore(shiftId: string, radius: number, exclude: strin
     return sendToTemp({ db: supabase, temp: t, kind: 'offer', offerId: o.id, sentBy: profile.id, body: offerText(info), wa: { template: 'offer', vars: offerWa(info) } });
   });
   if (radius > Number(s.radius_miles)) await supabase.from('shifts').update({ radius_miles: radius }).eq('id', s.id);
+  await rememberLeftOut(supabase, { id: s.id }, exclude);
   await audit(supabase, profile.id, 'shift.sent_more', `Sent ${s.client} shift (${shiftWhen(s)}) to ${res.sent} more temps${res.failed ? `, ${res.failed} failed` : ''}${radius > Number(s.radius_miles) ? `, radius now ${radius} mi` : ''}`);
   revalidatePath(`/shifts/${s.id}`);
   return { ok: true, message: `Sent to ${res.sent} more temp${res.sent === 1 ? '' : 's'}${res.failed ? ` (${res.failed} failed)` : ''}${busy ? `. ${busy} already booked at that time were skipped` : ''}.` };
@@ -471,7 +499,7 @@ async function createSeries(supabase: Db, profile: Me, input: ShiftInput, dates:
     pay_rate: Math.round(input.pay * 100) / 100, heads: Math.round(input.heads), radius_miles: input.radius,
     ppe: input.ppe.filter((p) => (PPE_OPTIONS as readonly string[]).includes(p)), sent_by: profile.id, series_id: seriesId,
   };
-  const { data: days, error } = await supabase.from('shifts').insert(dates.map((shift_date) => ({ ...base, shift_date }))).select().order('shift_date');
+  const { data: days, error } = await insertShifts(supabase, dates.map((shift_date) => ({ ...base, shift_date })), input.noSend ? [] : uuids(input.exclude));
   if (error || !days?.length) return { ok: false, error: 'Couldn’t save the shifts. Try again.' };
   if (input.noSend) {
     await audit(supabase, profile.id, 'shift.created', `Created ${base.client} weekly shift (${seriesWhen(days)}) without sending it out`);
@@ -501,6 +529,7 @@ export async function seriesSendMore(seriesId: string, radius: number, exclude: 
   if (!fresh.length) return { ok: false, error: all2.length ? 'Everyone is unticked. Tick at least one person.' : 'There’s nobody new to send it to. Try a bigger radius, or add more temps.' };
   const res = await offerSeries(supabase, profile, days, fresh);
   if (radius > Number(days[0].radius_miles)) await supabase.from('shifts').update({ radius_miles: radius }).eq('series_id', seriesId);
+  await rememberLeftOut(supabase, { series_id: seriesId }, exclude);
   await audit(supabase, profile.id, 'shift.sent_more', `Sent ${days[0].client} weekly shift to ${res.sent} more temps`);
   revalidatePath(`/shifts/series/${seriesId}`);
   return { ok: true, message: `Sent to ${res.sent} more temp${res.sent === 1 ? '' : 's'}${res.failed ? ` (${res.failed} failed)` : ''}.` };
@@ -508,12 +537,12 @@ export async function seriesSendMore(seriesId: string, radius: number, exclude: 
 
 export async function seriesPreviewMore(seriesId: string, radius: number) {
   const { supabase } = await requireStaff();
-  const { data: all } = await supabase.from('shifts').select('id,lat,lng,job_type').eq('series_id', seriesId);
+  const { data: all } = await supabase.from('shifts').select('*').eq('series_id', seriesId);
   if (!all?.length || !(radius > 0)) return [] as Recipient[];
   const matched = await matchTemps(supabase, { lat: all[0].lat, lng: all[0].lng }, all[0].job_type, radius);
   const { data: already } = await supabase.from('offers').select('temp_id').in('shift_id', all.map((d) => d.id));
   const had = new Set((already ?? []).map((o) => o.temp_id));
-  return asRecipients(matched.filter((t) => !had.has(t.id)));
+  return asRecipients(matched.filter((t) => !had.has(t.id)), leftOutOf(all));
 }
 
 /**
