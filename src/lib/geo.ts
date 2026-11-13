@@ -41,6 +41,26 @@ export async function geocodePostcode(pc: string): Promise<Point | null> {
   return m.get(normalisePostcode(pc)) ?? null;
 }
 
+/** True for an outward code on its own, e.g. "BD4" or "LS10". */
+export function looksLikeOutcode(pc: string): boolean {
+  return /^[A-Z]{1,2}\d[A-Z\d]?$/i.test((pc || '').trim());
+}
+
+/** Centre point of a full postcode ("BD4 6SG") or just the area code ("BD4"). */
+export async function geocodePlace(q: string): Promise<Point | null> {
+  const v = (q || '').trim();
+  if (looksLikePostcode(v)) return geocodePostcode(v);
+  if (!looksLikeOutcode(v)) return null;
+  try {
+    const res = await fetch(`https://api.postcodes.io/outcodes/${encodeURIComponent(v.toUpperCase())}`, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const r = (await res.json()).result;
+    return r?.latitude != null ? { lat: r.latitude, lng: r.longitude } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Straight-line distance in miles. */
 export function milesBetween(a: Point, b: Point): number {
   const R = 3958.8;

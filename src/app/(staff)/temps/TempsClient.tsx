@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { displayMobile, toE164 } from '@/lib/phone';
-import { looksLikePostcode, milesBetween, type Point } from '@/lib/geo';
+import { looksLikePostcode, looksLikeOutcode, milesBetween, type Point } from '@/lib/geo';
 import { plainText, segmentInfo } from '@/lib/smsText';
 import { DEFAULT_WELCOME_MESSAGE, welcomeMessageProblems, isDefaultWelcome, renderWelcomeMessage } from '@/lib/welcomeMessage';
 import { JOB_TYPES } from '@/lib/format';
@@ -106,14 +106,26 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
   const [type, setType] = useState('');
   const [status, setStatus] = useState('');
   const [by, setBy] = useState('all');
-  async function findNear() {
+  const [looking, setLooking] = useState(false);
+  async function findNear(v = near) {
     setNearErr('');
-    if (!near.trim()) return setNearPoint(null);
-    const p = await lookupPostcode(near);
-    if (!p) { setNearPoint(null); return setNearErr('Postcode not found'); }
+    if (!v.trim()) return setNearPoint(null);
+    setLooking(true);
+    const p = await lookupPostcode(v);
+    setLooking(false);
+    if (!p) { setNearPoint(null); return setNearErr('Postcode or area not found'); }
     setNearPoint(p);
     if (!miles) setMiles('10');
   }
+  // Look the postcode up as soon as it's typed in full (or as an area like BD4), no need to press Enter.
+  useEffect(() => {
+    const v = near.trim();
+    if (!v) { setNearPoint(null); setNearErr(''); return; }
+    if (!looksLikePostcode(v) && !looksLikeOutcode(v)) return;
+    const t = setTimeout(() => findNear(v), 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [near]);
   const dist = (t: TempRow) => (nearPoint && t.lat != null && t.lng != null ? milesBetween(nearPoint, { lat: t.lat, lng: t.lng }) : null);
   const shown = useMemo(() => {
     const a = area.trim().toUpperCase().replace(/\s+/g, ''), mi = parseFloat(miles);
@@ -136,6 +148,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
     }).sort((x, y) => (nearPoint ? (dist(x) ?? 999) - (dist(y) ?? 999) : 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [temps, q, area, nearPoint, miles, type, status, by]);
+  const noLocation = useMemo(() => temps.filter((t) => t.lat == null || t.lng == null).length, [temps]);
   // Show the latest 10 until someone searches or filters, then up to 50 at a time.
   const filtering = Boolean(q.trim() || area.trim() || (nearPoint && miles) || type || status || by !== 'all');
   const [limit, setLimit] = useState(10);
@@ -264,11 +277,11 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
         <div className="filters">
           <div className="f"><label className="l" htmlFor="fArea">Postcode or area</label><input id="fArea" type="text" placeholder="e.g. BD4, BD, LS" value={area} onChange={(e) => setArea(e.target.value)} /></div>
           <div className="f"><label className="l" htmlFor="fNear">Near postcode</label>
-            <input id="fNear" type="text" placeholder="e.g. BD4 6SG" value={near} onChange={(e) => setNear(e.target.value)} onBlur={findNear} onKeyDown={(e) => e.key === 'Enter' && findNear()} />
-            {nearErr && <span className="err">{nearErr}</span>}</div>
+            <input id="fNear" type="text" placeholder="e.g. BD4 6SG or BD4" value={near} onChange={(e) => setNear(e.target.value)} onBlur={() => findNear()} onKeyDown={(e) => e.key === 'Enter' && findNear()} />
+            {nearErr ? <span className="err">{nearErr}</span> : looking ? <span className="note">Looking up…</span> : null}</div>
           <div className="f"><label className="l" htmlFor="fMiles">Within</label>
-            <select id="fMiles" value={miles} onChange={(e) => setMiles(e.target.value)} disabled={!nearPoint}>
-              <option value="">Any distance</option>{[5, 10, 15, 25].map((m) => <option key={m} value={m}>{m} miles</option>)}</select></div>
+            <select id="fMiles" value={miles} onChange={(e) => setMiles(e.target.value)}>
+              <option value="">Any distance</option>{[3, 5, 10, 15, 20, 25, 30].map((m) => <option key={m} value={m}>{m} miles</option>)}</select></div>
           <div className="f"><label className="l" htmlFor="fType">Cleared for</label>
             <select id="fType" value={type} onChange={(e) => setType(e.target.value)}><option value="">Any job type</option>{JOB_TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>
           <div className="f"><label className="l" htmlFor="fStatus">Status</label>
@@ -280,7 +293,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
         </div>
 
         <div className="selbar">
-          <span><b>{filtering ? `${shown.length} match${shown.length === 1 ? '' : 'es'}` : `Latest ${visible.length} of ${temps.length}`}</b> <span className="note">{sel.size ? `· ${sel.size} selected` : filtering ? '· tick temps, or the top box to select every match' : '· search or filter to find anyone else'}</span></span>
+          <span><b>{nearPoint && miles ? `${shown.length} temp${shown.length === 1 ? '' : 's'} within ${miles} miles of ${near.trim().toUpperCase()}` : filtering ? `${shown.length} match${shown.length === 1 ? '' : 'es'}` : `Latest ${visible.length} of ${temps.length}`}</b> {nearPoint && miles && noLocation > 0 && <span className="note"> · {noLocation} temp{noLocation === 1 ? ' has' : 's have'} no postcode on file, so can’t be included</span>} <span className="note">{sel.size ? `· ${sel.size} selected` : filtering ? '· tick temps, or the top box to select every match' : '· search or filter to find anyone else'}</span></span>
           <div className="btnrow">
             <button className="btn small" style={{ background: 'transparent', border: '1px solid #3a414c' }} onClick={clearFilters}>Clear filters</button>
             <button className="btn blue small" disabled={!sel.size} onClick={() => { setCompose(true); setBulkMsg(null); if (!body) setBody(TEMPLATES[0][1]); }}>Text selected{sel.size ? ` (${sel.size})` : ''}</button>

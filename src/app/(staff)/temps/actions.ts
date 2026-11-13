@@ -2,7 +2,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireStaff, audit } from '@/lib/auth';
 import { toE164, displayMobile } from '@/lib/phone';
-import { geocodePostcodes, geocodePostcode, looksLikePostcode, normalisePostcode } from '@/lib/geo';
+import { geocodePostcodes, geocodePostcode, looksLikePostcode, normalisePostcode, geocodePlace } from '@/lib/geo';
 import { sendSms, sendMany, sendToTemp } from '@/lib/sms';
 import { welcomeText, welcomeWa, appUrl } from '@/lib/texts';
 import { JOB_TYPES } from '@/lib/format';
@@ -161,5 +161,5 @@ export async function sendBulkText(ids: string[], body: string): Promise<Result>
 
 export async function lookupPostcode(pc: string) {
   await requireStaff();
-  return geocodePostcode(pc);
+  return geocodePlace(pc);
 }
