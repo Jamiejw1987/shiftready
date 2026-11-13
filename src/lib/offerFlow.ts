@@ -2,7 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { sendSms } from './sms';
 import { shiftWhen } from './format';
-import { findClash } from './clash';
+import { findClash, overCap } from './clash';
 
 export type OfferAction = 'accept' | 'decline' | 'standby' | 'alerts' | 'reset';
 const REASONS = ['Not available', 'Too far', 'Pay rate', 'Other'];
@@ -21,6 +21,8 @@ export async function respondToOffer(db: SupabaseClient, token: string, action: 
     // Nobody can be booked on two shifts that overlap.
     const s = o?.shifts as unknown as { id: string; shift_date: string; start_time: string; end_time: string } | null;
     if (o && s && o.status !== 'accepted' && (await findClash(db, o.temp_id, s))) return 'clash';
+    // Nor take them over a legal weekly hours limit (e.g. students limited to 20 hours a week).
+    if (o && s && o.status !== 'accepted' && (await overCap(db, [o.temp_id], s)).has(o.temp_id)) return 'hours';
   }
   const { data, error } = await db.rpc('respond_to_offer', { p_token: token, p_action: action, p_reason: action === 'decline' ? r : null });
   if (error) return 'error';

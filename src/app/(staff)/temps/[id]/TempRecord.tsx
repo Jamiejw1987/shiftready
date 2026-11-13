@@ -3,7 +3,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { prepareFile, uploadToSlot, OK_TYPES } from '@/lib/upload';
 import { resendRegistration } from '../../registrations/actions';
-import { updateDetails, sendMyLink, approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, sendBankChangeLink, staffUploadSlot, clearBank, payrollDetails, updateRegistration, type RegEdit, recordLicenceCheck, requestCheckCode } from './actions';
+import { updateDetails, sendMyLink, approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, sendBankChangeLink, staffUploadSlot, clearBank, payrollDetails, updateRegistration, type RegEdit, recordLicenceCheck, requestCheckCode, setHoursCap } from './actions';
 import { CopyButton } from '@/components/Copy';
 
 type Msg = { ok: boolean; text: string } | null;
@@ -305,5 +305,35 @@ export function LicenceActions({ id, checked }: { id: string; checked: boolean }
       )}
       <Note m={msg} />
     </>
+  );
+}
+
+/** Tickbox for temps who can legally only work a set number of hours a week (e.g. student visa: 20). */
+export function HoursLimit({ id, cap, reason }: { id: string; cap: number | null; reason: string | null }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [on, setOn] = useState(cap != null);
+  const [hours, setHours] = useState(String(cap ?? 20));
+  const [why, setWhy] = useState(reason ?? 'Student visa (term time)');
+  const [msg, setMsg] = useState<Msg>(null);
+  const changed = on !== (cap != null) || (on && (Number(hours) !== cap || why !== (reason ?? '')));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <label className="tick"><input type="checkbox" checked={on} onChange={(e) => { setOn(e.target.checked); setMsg(null); }} /> Can only legally work a limited number of hours a week</label>
+      {on && (
+        <div className="form">
+          <div className="f"><label className="l" htmlFor="capH">Hours a week (max)</label><input id="capH" type="number" min={1} max={60} value={hours} onChange={(e) => setHours(e.target.value)} /></div>
+          <div className="f w2"><label className="l" htmlFor="capR">Reason</label><input id="capR" value={why} maxLength={200} onChange={(e) => setWhy(e.target.value)} /></div>
+        </div>
+      )}
+      <div className="btnrow">
+        <button className="btn blue" disabled={pending || !changed} onClick={() => start(async () => {
+          const r = await setHoursCap(id, on, Number(hours), why);
+          setMsg({ ok: r.ok, text: r.ok ? r.message! : r.error! });
+          if (r.ok) router.refresh();
+        })}>Save</button>
+      </div>
+      <Note m={msg} />
+    </div>
   );
 }

@@ -5,7 +5,7 @@ import { respondToOffer, type OfferAction } from './offerFlow';
 import { awaitingFor, answerBooking } from './confirm';
 import { shiftWhen } from './format';
 import {
-  appUrl, replyInterested, REPLY_CLOSED, OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD, REPLY_ATTENDED, replyClash, confirmedReply,
+  appUrl, replyInterested, REPLY_CLOSED, OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD, REPLY_ATTENDED, replyClash, replyHours, confirmedReply,
 } from './texts';
 
 /**
@@ -177,6 +177,7 @@ export async function handleInbound(params: Record<string, string>): Promise<voi
   else if (result === 'closed') await reply(REPLY_CLOSED);
   else if (result === 'full') await reply(replyFull(s.client, when));
   else if (result === 'clash') await reply(replyClash(s.client, when));
+  else if (result === 'hours') await reply(replyHours(s.client, when));
   else if (result === 'removed') await reply(`You were taken off ${s.client} ${when}. Please call the office if you have any questions. - Staff Selection`);
   else if (result === 'declined') await reply(replyDeclined(s.client, when));
   else if (result === 'standby') await reply(replyStandby(s.client, when));

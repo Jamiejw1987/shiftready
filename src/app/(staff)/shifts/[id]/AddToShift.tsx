@@ -28,11 +28,11 @@ export function AddToShift({ id }: { id: string }) {
       {hits.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {hits.map((h) => {
-            const block = h.onShift ? 'Already booked on' : h.blocked ? 'Client asked not to have them back' : h.clash ? 'Booked elsewhere at this time' : h.status !== 'active' ? (h.status === 'hold' ? 'On hold' : 'Not opted in') : '';
+            const block = h.onShift ? 'Already booked on' : h.blocked ? 'Client asked not to have them back' : h.clash ? 'Booked elsewhere at this time' : h.overHours ? 'Over weekly hours limit' : h.status !== 'active' ? (h.status === 'hold' ? 'On hold' : 'Not opted in') : '';
             return (
               <div key={h.id} className="slot" style={{ marginTop: 0 }}>
                 <span><b>{h.name}</b> <span className="note">{h.mobile}{h.postcode ? ` · ${h.postcode}` : ''}</span>{h.clientStars != null && <> <span className="pill blue">★ {h.clientStars.toFixed(1)} here</span></>}{h.stars != null && <> <span className="pill mute">★ {h.stars.toFixed(1)}</span></>}</span>
-                {block ? <span className="pill mute">{block}</span> : (
+                {block ? <span className="pill mute" title={h.overHours || undefined}>{block}</span> : (
                   <button className="btn blue small" disabled={pending} onClick={() => start(async () => {
                     const r = await addToShift(id, h.id, mode);
                     setMsg({ ok: r.ok, text: r.ok ? r.message! : r.error! });

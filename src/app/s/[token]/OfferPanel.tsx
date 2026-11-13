@@ -37,6 +37,7 @@ export function OfferPanel(p: Props) {
       const r = await respond(p.token, action, { ppeTicked: ticked.filter(Boolean).length, reason });
       if (r.result === 'error') setErr('Something went wrong. Please try again, or call the office.');
       if (r.result === 'not_active') setErr('Your profile is on hold. Please call the office.');
+      if (r.result === 'hours') setErr('Sorry, this shift would put you over the hours you’re allowed to work that week, so you can’t take it. Call the office if you think this is wrong.');
       if (r.result === 'clash') setErr('You’re already booked on another shift at this time, so you can’t take this one. Call the office if you need to swap.');
       if (r.result === 'closed') setErr('Sorry, this shift isn’t available to you. Please call the office if you have any questions.');
       setDeclining(false);

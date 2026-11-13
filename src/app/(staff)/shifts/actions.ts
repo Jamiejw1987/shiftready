@@ -8,7 +8,7 @@ import { sendMany, sendToTemp } from '@/lib/sms';
 import { offerText, offerWa, promotedText, promotedWa, noShowText, replyAccepted, appUrl, seriesOfferText, seriesBookedText, confirmAskText } from '@/lib/texts';
 import { displayMobile } from '@/lib/phone';
 import { shiftWhen, JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
-import { bookingsNear, overlaps } from '@/lib/clash';
+import { bookingsNear, overlaps, overCap, capMessage } from '@/lib/clash';
 import { seriesWhen, dayLabel } from '@/lib/series';
 import { randomUUID } from 'crypto';
 import { afterBookingChange, blockedFor, clientAudit, scoresFor } from '@/lib/clients';
@@ -149,7 +149,9 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
   const matched = without(await matchTemps(supabase, point, input.jobType, input.radius, shift.client_id ?? null), input.exclude);
   // Skip anyone already booked on a shift at the same time.
   const booked = await bookingsNear(supabase, matched.map((t) => t.id), shift.shift_date);
-  const temps = matched.filter((t) => !(booked.get(t.id) ?? []).some((b) => overlaps(b, shift)));
+  // ...and anyone it would take over their weekly hours limit.
+  const capped = await overCap(supabase, matched.map((t) => t.id), shift);
+  const temps = matched.filter((t) => !capped.has(t.id) && !(booked.get(t.id) ?? []).some((b) => overlaps(b, shift)));
   const busy = matched.length - temps.length;
   let sent = 0, failed = 0;
   if (temps.length) {
@@ -257,7 +259,8 @@ export async function removeFromShift(offerId: string) {
   // Move up the first person on standby who isn't booked elsewhere at that time.
   const { data: standby } = await db.from('offers').select('id,temp_id,token,temps(first_name,last_name,mobile)').eq('shift_id', s.id).eq('status', 'standby').order('standby_at');
   const booked = await bookingsNear(db, (standby ?? []).map((x) => x.temp_id), s.shift_date);
-  const next = (standby ?? []).find((x) => !(booked.get(x.temp_id) ?? []).some((b) => b.id !== s.id && overlaps(b, s)));
+  const capped = await overCap(db, (standby ?? []).map((x) => x.temp_id), s);
+  const next = (standby ?? []).find((x) => !capped.has(x.temp_id) && !(booked.get(x.temp_id) ?? []).some((b) => b.id !== s.id && overlaps(b, s)));
   if (next && s.status !== 'cancelled') {
     await db.from('offers').update({ status: 'accepted', responded_at: new Date().toISOString(), standby_at: null }).eq('id', next.id);
     const pt = next.temps as unknown as { first_name: string; last_name: string; mobile: string };
@@ -283,7 +286,8 @@ async function newTempsFor(supabase: Awaited<ReturnType<typeof requireStaff>>['s
   const sent = new Set((already ?? []).map((o) => o.temp_id));
   const fresh = matched.filter((t) => !sent.has(t.id));
   const booked = await bookingsNear(supabase, fresh.map((t) => t.id), s.shift_date);
-  const temps = fresh.filter((t) => !(booked.get(t.id) ?? []).some((b) => overlaps(b, s)));
+  const capped = await overCap(supabase, fresh.map((t) => t.id), s);
+  const temps = fresh.filter((t) => !capped.has(t.id) && !(booked.get(t.id) ?? []).some((b) => overlaps(b, s)));
   return { s, temps, busy: fresh.length - temps.length, leftOut: leftOutOf([s]) };
 }
 
@@ -340,6 +344,7 @@ export async function findTempsForShift(shiftId: string, q: string) {
   const { data: mine } = await supabase.from('offers').select('temp_id,status').eq('shift_id', shiftId).in('temp_id', hits.map((h) => h.id));
   const booked = s ? await bookingsNear(supabase, hits.map((h) => h.id), s.shift_date) : new Map();
   const scores = await scoresFor(supabase, hits.map((h) => h.id), s?.client_id ?? null);
+  const capped = s ? await overCap(supabase, hits.map((h) => h.id), s) : new Map();
   return hits.map((t) => ({
     blocked: !!scores.get(t.id)?.blocked,
     clientStars: scores.get(t.id)?.client ?? null,
@@ -347,6 +352,7 @@ export async function findTempsForShift(shiftId: string, q: string) {
     id: t.id, name: `${t.first_name} ${t.last_name}`, mobile: displayMobile(t.mobile), postcode: t.postcode, status: t.status,
     onShift: (mine ?? []).some((o) => o.temp_id === t.id && o.status === 'accepted'),
     clash: s ? (booked.get(t.id) ?? []).some((b: { id: string }) => b.id !== s.id && overlaps(b as never, s)) : false,
+    overHours: capped.has(t.id) ? capMessage(t.first_name, capped.get(t.id)!) : '',
   }));
 }
 
@@ -366,6 +372,8 @@ export async function addToShift(shiftId: string, tempId: string, mode: BookMode
   if ((count ?? 0) >= s.heads) return { ok: false, error: 'This shift is already full. Take someone off first, or increase the heads.' };
   const clash = (await bookingsNear(supabase, [t.id], s.shift_date)).get(t.id)?.find((b) => b.id !== s.id && overlaps(b, s));
   if (clash) return { ok: false, error: `${t.first_name} is already booked on ${clash.client} at that time.` };
+  const cap = (await overCap(supabase, [t.id], s)).get(t.id);
+  if (cap) return { ok: false, error: `${capMessage(t.first_name, cap)} They can’t be booked on.` };
   if ((await blockedFor(supabase, s.client_id ?? null)).has(t.id)) return { ok: false, error: `${s.client} asked for ${t.first_name} not to return, so they can’t be booked on. An admin can lift this on the client’s page.` };
   const now = new Date().toISOString();
   const { data: o, error } = await supabase.from('offers')
@@ -419,9 +427,10 @@ export async function updateShift(shiftId: string, e: ShiftEdit) {
   if (free > 0) {
     const standby = (offers ?? []).filter((o) => o.status === 'standby').sort((a, b) => (a.standby_at ?? '').localeCompare(b.standby_at ?? ''));
     const busy = await bookingsNear(supabase, standby.map((o) => o.temp_id), updated.shift_date);
+    const capped = await overCap(supabase, standby.map((o) => o.temp_id), updated);
     for (const o of standby) {
       if (promoted >= free) break;
-      if ((busy.get(o.temp_id) ?? []).some((b) => b.id !== s.id && overlaps(b, updated))) continue;
+      if (capped.has(o.temp_id) || (busy.get(o.temp_id) ?? []).some((b) => b.id !== s.id && overlaps(b, updated))) continue;
       await supabase.from('offers').update({ status: 'accepted', responded_at: new Date().toISOString(), standby_at: null }).eq('id', o.id);
       const t = o.temps as unknown as { first_name: string; mobile: string };
       const info = { first: t.first_name, client: s.client, when: shiftWhen(updated), token: o.token };
@@ -430,6 +439,11 @@ export async function updateShift(shiftId: string, e: ShiftEdit) {
     }
     if (booked.length + promoted >= heads) await supabase.from('shifts').update({ status: 'filled' }).eq('id', s.id);
   }
+
+  // If the times changed, flag anyone booked who'd now be over their weekly hours limit (they stay booked; the office decides).
+  const overNow = updated.start_time !== s.start_time || updated.end_time !== s.end_time
+    ? await overCap(supabase, booked.map((o) => o.temp_id), updated) : new Map();
+  const overNames = booked.filter((o) => overNow.has(o.temp_id)).map((o) => (o.temps as unknown as { first_name: string }).first_name);
 
   // Tell booked temps about changes that affect them (not just the number of people needed).
   let told = 0;
@@ -446,7 +460,7 @@ export async function updateShift(shiftId: string, e: ShiftEdit) {
   await afterBookingChange(supabase, s.id);
   revalidatePath(`/shifts/${s.id}`);
   revalidatePath('/shifts');
-  return { ok: true, message: `Saved.${promoted ? ` ${promoted} moved up from standby and texted.` : ''}${told ? ` ${told} booked temp${told === 1 ? '' : 's'} texted about the change.` : ''}${free - promoted > 0 ? ` ${free - promoted} place${free - promoted === 1 ? '' : 's'} still to fill: use Send to more temps or Add someone by hand.` : ''}` };
+  return { ok: true, message: `Saved.${promoted ? ` ${promoted} moved up from standby and texted.` : ''}${told ? ` ${told} booked temp${told === 1 ? '' : 's'} texted about the change.` : ''}${free - promoted > 0 ? ` ${free - promoted} place${free - promoted === 1 ? '' : 's'} still to fill: use Send to more temps or Add someone by hand.` : ''}${overNames.length ? ` Warning: ${overNames.join(', ')} ${overNames.length === 1 ? 'is' : 'are'} now over their weekly hours limit. Take them off or shorten the shift.` : ''}` };
 }
 
 type Db = Awaited<ReturnType<typeof requireStaff>>['supabase'];
@@ -460,8 +474,10 @@ async function offerSeries(supabase: Db, profile: Me, days: DayRow[], temps: (Te
     const more = await bookingsNear(supabase, temps.map((t) => t.id), day.shift_date);
     more.forEach((v, k) => booked.set(k, [...(booked.get(k) ?? []), ...v]));
   }
+  const capped = new Map<string, Set<string>>(); // day id -> temps it would take over their weekly limit
+  for (const day of days) capped.set(day.id, new Set((await overCap(supabase, temps.map((t) => t.id), day)).keys()));
   const rows = temps.flatMap((t) => days
-    .filter((day) => !(booked.get(t.id) ?? []).some((b) => b.id !== day.id && overlaps(b, day)))
+    .filter((day) => !capped.get(day.id)!.has(t.id) && !(booked.get(t.id) ?? []).some((b) => b.id !== day.id && overlaps(b, day)))
     .map((day) => ({ shift_id: day.id, temp_id: t.id, distance_miles: Math.round(t.miles * 10) / 10 })));
   if (!rows.length) return { sent: 0, failed: 0, people: 0 };
   const { data: offers } = await supabase.from('offers').upsert(rows, { onConflict: 'shift_id,temp_id', ignoreDuplicates: true }).select('id,temp_id,token,shift_id');
@@ -571,6 +587,7 @@ export async function seriesBook(seriesId: string, offerIds: string[], ask = tru
     if (t.status !== 'active') { skipped.push(`${t.first_name} isn’t active`); continue; }
     const clash = (await bookingsNear(supabase, [o.temp_id], d.shift_date)).get(o.temp_id)?.find((b) => b.id !== d.id && overlaps(b, d));
     if (clash) { skipped.push(`${t.first_name} is booked elsewhere on ${dayLabel(d.shift_date)}`); continue; }
+    if ((await overCap(supabase, [o.temp_id], d)).has(o.temp_id)) { skipped.push(`${t.first_name} would go over their weekly hours limit on ${dayLabel(d.shift_date)}`); continue; }
     await supabase.from('offers').update({ status: 'accepted', responded_at: new Date().toISOString(), standby_at: null, awaiting_confirm: ask, confirm_asked_at: ask ? new Date().toISOString() : null }).eq('id', o.id);
     count.set(d.id, (count.get(d.id) ?? 0) + 1);
     if ((count.get(d.id) ?? 0) >= d.heads) await supabase.from('shifts').update({ status: 'filled' }).eq('id', d.id);

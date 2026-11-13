@@ -328,3 +328,23 @@ export async function requestCheckCode(tempId: string): Promise<Result> {
   await audit(supabase, profile.id, 'temp.licence_code_requested', `Asked ${t.first_name} ${t.last_name} for a new DVLA check code`);
   return r.ok ? { ok: true, message: 'Text sent asking for a new check code.' } : { ok: false, error: `Text failed: ${r.error}` };
 }
+
+/**
+ * Sets or clears a temp's weekly hours limit (e.g. a student visa allows 20 hours a week in term time).
+ * While set, ShiftReady won't offer or book them on anything that takes them over it in a Mon-Sun week.
+ */
+export async function setHoursCap(tempId: string, on: boolean, hours: number, reason: string): Promise<Result> {
+  const { supabase, profile } = await requireStaff();
+  const { data: t } = await supabase.from('temps').select('first_name,last_name,hours_cap').eq('id', tempId).maybeSingle();
+  if (!t) return { ok: false, error: 'Not found.' };
+  const cap = on ? Math.round(hours) : null;
+  if (on && !(cap! >= 1 && cap! <= 60)) return { ok: false, error: 'Enter the weekly hours limit (1 to 60).' };
+  const why = on ? reason.trim().slice(0, 200) || null : null;
+  const { error } = await supabase.from('temps').update({ hours_cap: cap, hours_cap_reason: why }).eq('id', tempId);
+  if (error) return { ok: false, error: 'Couldn’t save. Has supabase/2026-11-13-hours-limit.sql been run in Supabase?' };
+  await audit(supabase, profile.id, 'temp.hours_cap', on
+    ? `Set ${t.first_name} ${t.last_name}'s weekly hours limit to ${cap}${why ? ` (${why})` : ''}${t.hours_cap ? `, was ${t.hours_cap}` : ''}`
+    : `Removed ${t.first_name} ${t.last_name}'s weekly hours limit${t.hours_cap ? ` (was ${t.hours_cap})` : ''}`);
+  revalidatePath(`/temps/${tempId}`);
+  return { ok: true, message: on ? `Limit saved: ${t.first_name} can’t be booked over ${cap} hours a week.` : 'Limit removed.' };
+}

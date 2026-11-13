@@ -20,6 +20,10 @@ export default async function TempsPage() {
     loadTemps(),
     supabase.from('profiles').select('id,full_name').order('full_name'),
   ]);
+  // Weekly hours limits, loaded separately so the list still works before supabase/2026-11-13-hours-limit.sql is run.
+  const { data: caps } = await supabase.from('temps').select('id,hours_cap').not('hours_cap', 'is', null);
+  const capOf = new Map((caps ?? []).map((c) => [c.id, c.hours_cap as number]));
+  for (const t of temps) t.hours_cap = capOf.get(t.id) ?? null;
   return (
     <TempsClient
       temps={temps}

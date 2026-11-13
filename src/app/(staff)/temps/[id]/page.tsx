@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireStaff } from '@/lib/auth';
+import { weekHours, weekOf } from '@/lib/clash';
 import { displayMobile } from '@/lib/phone';
 import { fmtDateTime, shiftWhen } from '@/lib/format';
 import { DOC_LABEL, type DocKind } from '@/lib/docs';
 import { DOC_KIND_LABEL, type DocKindFile } from '@/lib/storage';
-import { RecordActions, RtwCheck, Uploader, Reveal, BankActions, EditDetails, CopyPayroll, EditRegistration, LicenceActions } from './TempRecord';
+import { RecordActions, RtwCheck, Uploader, Reveal, BankActions, EditDetails, CopyPayroll, EditRegistration, LicenceActions, HoursLimit } from './TempRecord';
 import { licenceLabel, CHECK_CODE_DAYS } from '@/lib/regOptions';
 import { CopyButton } from '@/components/Copy';
 import { JOB_TYPES } from '@/lib/format';
@@ -58,6 +59,12 @@ export default async function TempRecordPage({ params }: { params: { id: string 
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
   const [sk, sl] = STATUS[t.status] ?? ['mute', t.status];
   const rtwExpired = t.rtw_expires && t.rtw_expires < today;
+  // Weekly hours limit: what they're booked for this week and next (weeks run Mon-Sun; a shift counts in the week it starts).
+  const nextWeek = new Date(Date.parse(weekOf(today)[0] + 'T12:00:00Z') + 7 * 864e5).toISOString().slice(0, 10);
+  const [thisWk, nextWk] = t.hours_cap != null
+    ? await Promise.all([weekHours(supabase, [t.id], today), weekHours(supabase, [t.id], nextWeek)]).then(([a, b]) => [a.get(t.id) ?? 0, b.get(t.id) ?? 0])
+    : [0, 0];
+  const hrs = (n: number) => Math.round(n * 100) / 100;
 
   return (
     <>
@@ -71,6 +78,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
           {rtwExpired && <span className="pill bad">Right to work expired</span>}
           {t.registered_at && (t.bank_on_file ? <span className="pill ok">Bank details on file</span> : <span className="pill warn">No bank details</span>)}
           {t.wa_status === 'yes' && <span className="pill wa">WhatsApp</span>}
+          {t.hours_cap != null && <span className="pill warn">Max {t.hours_cap} hrs/week</span>}
         </div>
         <p className="lede" style={{ marginBottom: 0 }}>{displayMobile(t.mobile)}{t.postcode ? ` · ${t.postcode}` : ''}{t.added_by ? ` · added by ${name(t.added_by)}` : ""} · {day(t.created_at)}</p>
         <div style={{ marginTop: 12 }}><EditDetails id={t.id} first={t.first_name} last={t.last_name} mobile={displayMobile(t.mobile)} postcode={t.postcode ?? ''} jobTypes={t.job_types ?? []} allTypes={JOB_TYPES} /></div>
@@ -83,6 +91,17 @@ export default async function TempRecordPage({ params }: { params: { id: string 
           canApprove={t.status === 'review' && !!t.rtw_checked_at && !rtwExpired}
           approveBlock={t.status !== 'review' ? '' : !t.rtw_checked_at ? 'Record the right to work check below before approving.' : rtwExpired ? 'Right to work has expired.' : ''}
         />
+      </section>
+
+      <section className="panel">
+        <h2>Working hours limit</h2>
+        {t.hours_cap != null && (
+          <p className="note" style={{ marginTop: 0 }}>
+            Booked this week: <b>{hrs(thisWk)} of {t.hours_cap} hrs</b>{thisWk >= t.hours_cap - 2 && <> <span className="pill warn">{thisWk >= t.hours_cap ? 'At limit' : 'Near limit'}</span></>} · next week: <b>{hrs(nextWk)} hrs</b>.
+            Weeks run Monday to Sunday and a shift counts in the week it starts. Shifts that would take them over the limit aren’t sent to them and they can’t be booked on.
+          </p>
+        )}
+        <HoursLimit id={t.id} cap={t.hours_cap ?? null} reason={t.hours_cap_reason ?? null} />
       </section>
 
       {(feedback?.length || blocks?.length) ? (
