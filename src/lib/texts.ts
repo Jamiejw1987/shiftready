@@ -19,7 +19,7 @@ export function offerText(o: OfferInfo) {
   const need = o.ppe.length ? ` You need: ${listOrNone(o.ppe, '')}.` : '';
   // Client-requested shifts: the office confirms every place, so a YES is "I can do it", not a booking.
   if (o.interestOnly)
-    return `Shift: ${o.client}, ${o.when}, £${o.pay.toFixed(2)}/hr.${need} Reply YES if you can do it${o.ppe.length ? ' (confirms you have these)' : ''} and we'll text you if you're confirmed, or NO if not. Details: ${appUrl()}/s/${o.token} - Staff Selection`;
+    return `Shift: ${o.client}, ${o.when}, £${o.pay.toFixed(2)}/hr.${need} Reply YES if you can do it${o.ppe.length ? ' (confirms you have these)' : ''} or NO if not. A YES is a provisional accept: we'll call you to confirm before you're booked. Details: ${appUrl()}/s/${o.token} - Staff Selection`;
   return `Shift: ${o.client}, ${o.when}, £${o.pay.toFixed(2)}/hr.${need} Reply YES to accept${o.ppe.length ? ' (confirms you have these)' : ''} or NO to decline. Details: ${appUrl()}/s/${o.token} - Staff Selection`;
 }
 export const offerWa = (o: OfferInfo) => [
@@ -50,7 +50,7 @@ export const replyAccepted = (client: string, when: string, site: string, bankTo
 export const replyFull = (client: string, when: string) =>
   `Sorry, ${client} ${when} has just been filled. Reply STANDBY to go on standby in case someone drops out. - Staff Selection`;
 export const replyInterested = (first: string, client: string, when: string) =>
-  `Thanks ${first}, we've noted you can do ${client} ${when}. You're not booked yet: we'll text you if you're confirmed. - Staff Selection`;
+  `Thanks ${first}, you're provisionally accepted for ${client} ${when}, awaiting approval from our team. We'll call you to confirm. You're not booked until then. - Staff Selection`;
 export const REPLY_CLOSED = 'Sorry, this shift is no longer available to you. Please call the office if you have any questions. - Staff Selection';
 export const replyDeclined = (client: string, when: string) => `Thanks for letting us know you can't do ${client} ${when}. - Staff Selection`;
 export const replyStandby = (client: string, when: string) =>

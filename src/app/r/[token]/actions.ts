@@ -93,6 +93,7 @@ export async function submitRegistration(token: string, r: RegData, uploads: { k
   if (r.rtwRoute !== 'british_irish' && r.rtwRoute !== 'share_code') p.push('how you’ll prove your right to work');
   if (r.rtwRoute === 'share_code' && !/^[A-Z0-9]{9}$/.test(shareCode)) p.push('your 9-character share code');
   if (r.rtwRoute === 'british_irish' && !uploads.some((u) => u.kind === 'passport' || u.kind === 'id')) p.push('a photo of your passport');
+  if (r.rtwRoute === 'share_code' && !uploads.some((u) => u.kind === 'id' || u.kind === 'passport')) p.push('a photo of your ID (passport, national ID card or photo driving licence)');
   if (!clean(r.nokName) || !clean(r.nokRelationship) || !/^[+\d\s()-]{7,20}$/.test(r.nokPhone || '')) p.push('your emergency contact’s name, relationship and phone number');
   if (r.healthDeclared === null) p.push('an answer to the health and safety question');
   if (r.convictionsDeclared === null) p.push('an answer to the convictions question');

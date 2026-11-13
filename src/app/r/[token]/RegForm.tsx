@@ -11,7 +11,7 @@ type Props = {
   token: string; first: string; last: string; mobile: string; jobTypes: string[];
   docs: { kid: Doc; terms: Doc; privacy: Doc; wtr: Doc };
 };
-type FileKind = 'passport' | 'flt_licence' | 'driving_licence' | 'ni_proof' | 'other';
+type FileKind = 'passport' | 'id' | 'flt_licence' | 'driving_licence' | 'ni_proof' | 'other';
 
 function Section({ n, title, children, note }: { n: number; title: string; note?: string; children: React.ReactNode }) {
   return (
@@ -81,11 +81,12 @@ export function RegForm(p: Props) {
     setErr('');
     if (!files.ni_proof) return setErr('Please add a photo of your proof of NI number (section 1).');
     if (d.rtwRoute === 'british_irish' && !files.passport) return setErr('Please add a photo of your passport (section 3).');
+    if (d.rtwRoute === 'share_code' && !files.id) return setErr('Please add a photo of your ID: passport, national ID card or photo driving licence (section 3).');
     if (d.jobTypes.includes('FLT counterbalance') && !files.flt_licence) return setErr('Please add a photo of your FLT licence (section 3).');
     if (d.jobTypes.includes('Driving') && !files.driving_licence) return setErr('Please add a photo of the front of your driving licence (section 2).');
     start(async () => {
       try {
-        const chosen = (Object.entries(files) as [FileKind, File][]).filter(([k]) => (k !== 'flt_licence' || d.jobTypes.includes('FLT counterbalance')) && (k !== 'driving_licence' || d.jobTypes.includes('Driving')));
+        const chosen = (Object.entries(files) as [FileKind, File][]).filter(([k]) => (k !== 'flt_licence' || d.jobTypes.includes('FLT counterbalance')) && (k !== 'id' || d.rtwRoute === 'share_code') && (k !== 'passport' || d.rtwRoute === 'british_irish') && (k !== 'driving_licence' || d.jobTypes.includes('Driving')));
         const prepared = await Promise.all(chosen.map(async ([kind, f]) => ({ kind, ...(await prepareFile(f)) })));
         let uploads: { kind: string; path: string; filename: string }[] = [];
         if (prepared.length) {
@@ -113,7 +114,7 @@ export function RegForm(p: Props) {
     <>
       <div className="state" style={{ textAlign: 'left', alignItems: 'stretch' }}>
         <div className="big">Register with Staff Selection UK</div>
-        <p>Hi {p.first}. This takes about 10 minutes. Have your share code or passport ready. Your details are kept private and only used to find you work.</p>
+        <p>Hi {p.first}. This takes about 10 minutes. Have your share code or passport, and a photo ID, ready. You can’t register without ID. Your details are kept private and only used to find you work.</p>
       </div>
 
       <Section n={1} title="About you">
@@ -182,6 +183,10 @@ export function RegForm(p: Props) {
           <div className="f"><label className="l" htmlFor="sc">Your share code</label>
             <input id="sc" type="text" autoCapitalize="characters" placeholder="e.g. W2X 4YZ 7AB" value={d.shareCode} onChange={(e) => set('shareCode', e.target.value)} />
             <span className="note">Get it free at gov.uk/prove-right-to-work. Choose “to an employer”. It lasts 90 days.</span></div>
+        )}
+        {d.rtwRoute === 'share_code' && (
+          <div className="f"><span className="l">Photo of your ID</span><FilePick kind="id" label="Take or choose photo" />
+            <span className="note">The photo page of your passport, your national ID card or your photo driving licence. You can’t register without it.</span></div>
         )}
         {d.rtwRoute === 'british_irish' && (
           <div className="f"><span className="l">Photo of your passport’s photo page</span><FilePick kind="passport" label="Take or choose photo" />

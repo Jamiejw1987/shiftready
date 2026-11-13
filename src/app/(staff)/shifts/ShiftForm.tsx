@@ -21,6 +21,7 @@ export function ShiftForm({ prefill, requestId }: { prefill?: Prefill; requestId
   });
   const [multi, setMulti] = useState(false);
   const [noSend, setNoSend] = useState(false);
+  const [firstCome, setFirstCome] = useState(false);
   const [days, setDays] = useState<string[]>([]);
   const [err, setErr] = useState('');
   const [reach, setReach] = useState<string>('');
@@ -45,7 +46,7 @@ export function ShiftForm({ prefill, requestId }: { prefill?: Prefill; requestId
     if (!noSend && temps.length && !going) return setErr('Everyone is unticked. Tick at least one person, or choose “Don’t send it out”.');
     if (!confirming && !noSend) return setConfirming(true);
     start(async () => {
-      const r = await createAndSendShift({ ...f, date: multi && days.length ? days[0] : f.date, pay: parseFloat(f.pay), heads: parseInt(f.heads), radius: parseFloat(f.radius), dates: multi ? days : undefined, noSend, requestId, exclude: [...excluded] });
+      const r = await createAndSendShift({ ...f, date: multi && days.length ? days[0] : f.date, pay: parseFloat(f.pay), heads: parseInt(f.heads), radius: parseFloat(f.radius), dates: multi ? days : undefined, noSend, requestId, exclude: [...excluded], firstCome: !requestId && firstCome });
       if (r && !r.ok) { setErr(r.error); setConfirming(false); }
     });
   }
@@ -86,6 +87,8 @@ export function ShiftForm({ prefill, requestId }: { prefill?: Prefill; requestId
       <div className="bar">
         <span className="note" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <label className="chip" style={{ alignSelf: 'flex-start' }}><input type="checkbox" checked={noSend} onChange={(e) => { setNoSend(e.target.checked); setConfirming(false); }} /> Don’t send it out: I’ll add people myself</label>
+          {!noSend && !requestId && !multi && <label className="chip" style={{ alignSelf: 'flex-start' }}><input type="checkbox" checked={firstCome} onChange={(e) => setFirstCome(e.target.checked)} /> Urgent: let temps book themselves (first to accept gets it)</label>}
+          {!noSend && !requestId && !multi && <span className="note">{firstCome ? 'Temps who accept are booked straight away.' : 'Temps who say yes show as Interested. You call them, then book them on and they get a text to confirm.'}</span>}
           {!noSend && reach}
         </span>
         <div className="btnrow" style={{ alignItems: 'center' }}>

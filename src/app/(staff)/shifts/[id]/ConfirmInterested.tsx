@@ -3,7 +3,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { addToShift } from '../actions';
 
-/** Books an interested temp onto a client-requested shift and texts them that they're booked. */
+/** After the office has spoken to them: books an interested temp on and texts them asking them to reply YES to confirm. */
 export function ConfirmInterested({ shiftId, tempId, first }: { shiftId: string; tempId: string; first: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -12,10 +12,10 @@ export function ConfirmInterested({ shiftId, tempId, first }: { shiftId: string;
     <span className="btnrow" style={{ alignItems: 'center' }}>
       {err && <span className="err">{err}</span>}
       <button className="btn blue small" disabled={pending} onClick={() => start(async () => {
-        const r = await addToShift(shiftId, tempId, 'tell');
+        const r = await addToShift(shiftId, tempId, 'ask');
         if (!r.ok) setErr(r.error ?? 'Couldn’t confirm.');
         router.refresh();
-      })}>{pending ? 'Confirming…' : `Confirm ${first}`}</button>
+      })}>{pending ? 'Booking…' : `Book ${first} & ask to confirm`}</button>
     </span>
   );
 }

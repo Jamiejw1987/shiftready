@@ -24,6 +24,8 @@ export type ShiftInput = {
   requestId?: string;
   /** Temps the office unticked: they don't get this offer. */
   exclude?: string[];
+  /** Let temps book themselves, first come first served. Off by default: temps say they're interested and the office confirms them after a call. */
+  firstCome?: boolean;
 };
 
 /** A temp in the "who it goes to" list, before sending. `leftOut`: a consultant unticked them when this shift went out before. */
@@ -130,6 +132,7 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
       duties: input.duties.split('\n').map((s) => s.trim()).filter(Boolean),
       pay_rate: Math.round(input.pay * 100) / 100, heads: Math.round(input.heads), radius_miles: input.radius,
       ppe: input.ppe.filter((p) => (PPE_OPTIONS as readonly string[]).includes(p)), sent_by: profile.id,
+      confirm_first: !input.firstCome,
       ...(link ?? {}),
     }], input.noSend ? [] : uuids(input.exclude));
   const shift = inserted?.[0];

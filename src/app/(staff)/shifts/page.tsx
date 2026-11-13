@@ -8,13 +8,13 @@ import { WeekActions } from './series/[id]/WeekActions';
 
 export const dynamic = 'force-dynamic';
 
-type Shift = { id: string; client: string; job_type: string; site_postcode: string; shift_date: string; start_time: string; end_time: string; heads: number; status: string; sent_by: string | null; series_id: string | null; confirm_first?: boolean; offers: { status: string }[] | null };
+type Shift = { id: string; client: string; job_type: string; site_postcode: string; shift_date: string; start_time: string; end_time: string; heads: number; status: string; sent_by: string | null; series_id: string | null; confirm_first?: boolean; request_id?: string | null; offers: { status: string }[] | null };
 
 export default async function ShiftsPage() {
   const { supabase, profile } = await requireStaff();
   const since = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);
   const [{ data: rows }, { data: users }] = await Promise.all([
-    supabase.from('shifts').select('id,client,job_type,site_postcode,shift_date,start_time,end_time,heads,status,sent_by,series_id,confirm_first,offers(status)').gte('shift_date', since).order('shift_date').order('start_time'),
+    supabase.from('shifts').select('id,client,job_type,site_postcode,shift_date,start_time,end_time,heads,status,sent_by,series_id,confirm_first,request_id,offers(status)').gte('shift_date', since).order('shift_date').order('start_time'),
     supabase.from('profiles').select('id,full_name'),
   ]);
   const name = (id: string | null) => users?.find((u) => u.id === id)?.full_name ?? '';
@@ -59,7 +59,7 @@ export default async function ShiftsPage() {
           const pill = s.status === 'cancelled' ? ['bad', 'Cancelled'] : filled >= s.heads ? ['ok', 'Filled'] : past ? ['mute', 'Past'] : ['warn', `${s.heads - filled} to fill`];
           return (
             <tr key={s.id}>
-              <td><Link href={`/shifts/${s.id}`}><b>{s.client}</b></Link>{s.confirm_first && <> <span className="pill blue">Client request</span></>}<div className="note">{s.job_type} · {s.site_postcode}{(s.offers ?? []).some((o) => o.status === 'interested') ? ` · ${(s.offers ?? []).filter((o) => o.status === 'interested').length} interested` : ''}</div></td>
+              <td><Link href={`/shifts/${s.id}`}><b>{s.client}</b></Link>{s.request_id && <> <span className="pill blue">Client request</span></>}<div className="note">{s.job_type} · {s.site_postcode}{(s.offers ?? []).some((o) => o.status === 'interested') ? ` · ${(s.offers ?? []).filter((o) => o.status === 'interested').length} interested` : ''}</div></td>
               <td data-l="When">{shiftWhen(s)}</td>
               <td className="num" data-l="Filled">{filled}/{s.heads}</td>
               <td className="num" data-l="Standby">{standby}</td>

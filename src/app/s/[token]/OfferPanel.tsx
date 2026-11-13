@@ -64,7 +64,7 @@ export function OfferPanel(p: Props) {
     return <State badge="–" kind="mute" title="Shift declined" text="Thanks for letting us know. We'll keep sending shifts that suit you.">
       {p.shiftState === 'open' && <button className="btn ghost" disabled={pending} onClick={() => act('reset')}>Change my answer</button>}</State>;
   if (p.offerStatus === 'interested')
-    return <State badge="✓" kind="blue" title="You’re on the list" text={`Thanks ${p.firstName}, we’ve told the office you can do ${s.client}, ${s.when}. You’re not booked yet: we’ll text you if you’re confirmed.`}>
+    return <State badge="✓" kind="blue" title="Provisionally accepted" text={`Thanks ${p.firstName}, you’re provisionally accepted for ${s.client}, ${s.when}, awaiting approval from our team. We’ll call you to confirm. You’re not booked until then.`}>
       {p.shiftState === 'open' || p.shiftState === 'full' ? <button className="btn ghost" disabled={pending} onClick={() => act('reset')}>I can’t do it now</button> : null}</State>;
   if (p.offerStatus === 'standby')
     return <State badge={`#${p.standbyPos}`} kind="blue" title="You’re on standby" text="If someone drops out you're offered the place in this order. We'll text you straight away.">
@@ -87,7 +87,7 @@ export function OfferPanel(p: Props) {
           : <span className={`pill ${p.placesLeft <= 1 ? 'warn' : 'ok'}`}>{p.placesLeft} place{p.placesLeft === 1 ? '' : 's'} left</span>}
       </div>
       <div className="in">
-        <p style={{ margin: 0 }}>Hi {p.firstName}, here’s a shift for you.{p.interestOnly ? ' Let us know if you can do it and the office will confirm your place.' : ''}</p>
+        <p style={{ margin: 0 }}>Hi {p.firstName}, here’s a shift for you.{p.interestOnly ? ' Let us know if you can do it. You’ll be provisionally accepted and we’ll call you to confirm.' : ''}</p>
         <div className="note">{s.hours.toFixed(1)} hrs · about £{(s.hours * s.pay).toFixed(2)} before tax</div>
         <dl className="meta">
           <dt>Role</dt><dd>{s.role}</dd>
