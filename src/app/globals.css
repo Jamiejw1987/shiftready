@@ -412,3 +412,7 @@ table.week td.wk-no { text-align: center; color: var(--line-strong); }
 
 /* ---------- Driving licence (registration) ---------- */
 .licence { display: flex; flex-direction: column; gap: 12px; border: 1px solid var(--line); border-radius: var(--r); padding: 14px; background: var(--field); }
+
+/* Opted-out temp: how to put them back on */
+.optback { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid #b42318; border-radius: 10px; background: var(--panel); }
+.optback .btnrow { flex-wrap: wrap; }

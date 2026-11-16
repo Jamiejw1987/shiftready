@@ -2,7 +2,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { toE164 } from '@/lib/phone';
 import { sendToTemp } from '@/lib/sms';
-import { appUrl, regInviteText } from '@/lib/texts';
+import { appUrl, regInviteText, optBackInText } from '@/lib/texts';
 import { currentDocs, docProblems } from '@/lib/docs';
 import { encryptionReady } from '@/lib/crypto';
 
@@ -28,12 +28,17 @@ export async function joinUp(input: { first: string; last: string; mobile: strin
   if ((recent ?? 0) > 300) return { ok: false, error: 'We’re very busy right now. Please try again in an hour.' };
 
   const source = input.from.replace(/[^a-z0-9 _-]/gi, '').slice(0, 30);
-  const { data: existing } = await db.from('temps').select('id,first_name,mobile,status,reg_token,registered_at,reg_requested_at').eq('mobile', mobile).maybeSingle();
+  const { data: existing } = await db.from('temps').select('id,first_name,last_name,mobile,status,reg_token,optin_token,registered_at,reg_requested_at').eq('mobile', mobile).maybeSingle();
   if (existing) {
     // Don't send more than one text every 10 minutes to the same number.
     const tenAgo = new Date(Date.now() - 600e3).toISOString();
     const { count } = await db.from('messages').select('id', { count: 'exact', head: true }).eq('temp_id', existing.id).eq('direction', 'out').gte('created_at', tenAgo);
-    if (!count && existing.status !== 'out') {
+    if (!count && existing.status === 'out') {
+      // They opted out before but have come back and asked us to text them: send their link to opt back in.
+      // (If Twilio is still blocking them, the text fails and they'll need to text START.)
+      await sendToTemp({ db, temp: existing, kind: 'system', body: optBackInText(existing.first_name, existing.optin_token) });
+      await db.from('audit_log').insert({ actor: null, action: 'temp.optin_link_sent', detail: `${existing.first_name} ${existing.last_name} signed up again after opting out and was texted their link to opt back in${source ? ` (from ${source})` : ''}` });
+    } else if (!count) {
       const body = existing.registered_at
         ? `Hi ${existing.first_name}, you're already registered with Staff Selection UK. Your page: ${appUrl()}/me/${existing.reg_token} - Staff Selection`
         : regInviteText(existing.first_name, existing.reg_token);

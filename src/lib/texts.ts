@@ -107,6 +107,34 @@ export const confirmedReply = (first: string, what: string) =>
 export const OPTED_IN_REPLY = "Thanks, you're all set. We'll message you when shifts come up near you. Reply STOP at any time to opt out. - Staff Selection";
 export const OPTED_OUT_REPLY = "You've been opted out and won't get shift messages from Staff Selection. Reply START to opt back in.";
 
+/** Sent when someone who opted out asks to be put back on (applied again, or asked the office). They tap the link to opt in. */
+export const optBackInText = (first: string, token: string) =>
+  `Hi ${first}, thanks for getting in touch with Staff Selection UK. You turned off our shift texts before. To start getting shift offers again, tap: ${appUrl()}/o/${token} or reply START. - Staff Selection`;
+
+/** The same, by email, for when texts can't get through. */
+export function optBackInEmail(first: string, token: string) {
+  const link = `${appUrl()}/o/${token}`;
+  const sms = process.env.TWILIO_FROM_NUMBER || '';
+  const subject = 'Turn your shift texts back on';
+  const text = [
+    `Hi ${first || 'there'},`, '',
+    'As requested, here is how to start getting shift offers from Staff Selection UK again.', '',
+    `Tap this link and press "Opt back in": ${link}`, '',
+    sms ? `Or text START to ${sms} from the mobile you registered with.` : '',
+    sms ? '' : null,
+    'You can reply STOP to any text to turn them off again.', '',
+    'Kind regards,', 'Staff Selection UK',
+  ].filter((l) => l !== null).join('\n');
+  const e = (x: string) => x.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const html = `<p>Hi ${e(first || 'there')},</p>
+<p>As requested, here is how to start getting shift offers from Staff Selection UK again.</p>
+<p><a href="${e(link)}" style="display:inline-block;background:#1d4ed8;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:bold">Turn shift texts back on</a></p>
+${sms ? `<p>Or text <b>START</b> to <b>${e(sms)}</b> from the mobile you registered with.</p>` : ''}
+<p>You can reply STOP to any text to turn them off again.</p>
+<p>Kind regards,<br>Staff Selection UK</p>`;
+  return { subject, text, html };
+}
+
 /** Asks a driver for a new DVLA check code (they last 21 days). */
 export const licenceCodeText = (first: string, token: string) =>
   `Hi ${first}, to check your driving licence we need a new DVLA check code. Get one at gov.uk/view-driving-licence (Share your licence information > Create code), then add it here: ${appUrl()}/me/${token}?do=licence - Staff Selection`;

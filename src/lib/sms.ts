@@ -68,11 +68,20 @@ export async function sendSms({ db, to, body, kind, tempId = null, offerId = nul
   const r: TwilioResult = smsConfigured()
     ? await twilioSend({ To: to, From: process.env.TWILIO_FROM_NUMBER!, Body: text })
     : { status: 'dry-run', providerId: null, error: null, errorCode: null };
+  // 21610: Twilio is blocking texts to this number because they texted STOP. Only they can lift it, by texting START.
+  const blocked = r.errorCode === '21610';
   await db.from('messages').insert({
     temp_id: tempId, offer_id: offerId, to_number: to, direction: 'out', channel: 'sms', kind, body: text, segments,
-    provider_id: r.providerId, status: r.status, error: r.error, sent_by: sentBy,
+    provider_id: r.providerId, status: r.status, error: blocked ? 'Blocked: they texted STOP. They need to text START to get texts again.' : r.error, sent_by: sentBy,
   });
-  return { ok: r.status !== 'failed', status: r.status, error: r.error, channel: 'sms' as const };
+  if (blocked && tempId) {
+    const { data: t } = await db.from('temps').select('status,first_name,last_name').eq('id', tempId).maybeSingle();
+    if (t && t.status !== 'out') {
+      await db.from('temps').update({ status: 'out', opted_out_at: new Date().toISOString() }).eq('id', tempId);
+      await db.from('audit_log').insert({ actor: null, action: 'temp.opted_out', detail: `${t.first_name} ${t.last_name} marked opted out: Twilio is blocking texts to them because they texted STOP` });
+    }
+  }
+  return { ok: r.status !== 'failed', status: r.status, error: blocked ? 'they texted STOP, so texts are blocked until they text START' : r.error, blocked, channel: 'sms' as const };
 }
 
 type TempArgs = Omit<SendArgs, 'to' | 'tempId'> & {

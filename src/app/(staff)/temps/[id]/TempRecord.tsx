@@ -3,14 +3,15 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { prepareFile, uploadToSlot, OK_TYPES } from '@/lib/upload';
 import { resendRegistration } from '../../registrations/actions';
-import { updateDetails, sendMyLink, approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, sendBankChangeLink, staffUploadSlot, clearBank, payrollDetails, updateRegistration, type RegEdit, recordLicenceCheck, requestCheckCode, setHoursCap } from './actions';
+import { updateDetails, sendMyLink, approve, messageTemp, recordRtwCheck, recordStaffUpload, reveal, sendBankLink, sendBankChangeLink, staffUploadSlot, clearBank, payrollDetails, updateRegistration, type RegEdit, recordLicenceCheck, requestCheckCode, setHoursCap, putBackOnTexts, emailOptBackIn, optBackInLink } from './actions';
 import { CopyButton } from '@/components/Copy';
 
 type Msg = { ok: boolean; text: string } | null;
 const Note = ({ m }: { m: Msg }) => (m ? <p className={m.ok ? 'okmsg' : 'err'} style={{ marginTop: 10 }}>{m.text}</p> : null);
 
-export function RecordActions({ id, firstName, status, registered, canApprove, approveBlock, bankOnFile = true }: {
+export function RecordActions({ id, firstName, status, registered, canApprove, approveBlock, bankOnFile = true, optedOutAt = null, hasEmail = false }: {
   id: string; firstName: string; status: string; registered: boolean; canApprove: boolean; approveBlock: string; bankOnFile?: boolean;
+  optedOutAt?: string | null; hasEmail?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -32,6 +33,22 @@ export function RecordActions({ id, firstName, status, registered, canApprove, a
           {status === 'review' && <button className="btn blue" disabled={!canApprove || pending} onClick={() => run(() => approve(id))}>Approve</button>}
         </div>
       </div>
+      {status === 'out' && (
+        <div className="optback">
+          <p style={{ margin: 0 }}>
+            <b>{firstName} has opted out of shift texts</b>{optedOutAt ? ` (${new Date(optedOutAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })})` : ''}, so we can’t text them.
+            {' '}If they ask to be put back on, use one of these. Don’t use them unless {firstName} has asked.
+          </p>
+          <div className="btnrow" style={{ marginTop: 10 }}>
+            <button className="btn blue" disabled={pending} onClick={() => {
+              if (confirm(`Only do this if ${firstName} has asked you to put them back on shift texts. It's logged against your name. Carry on?`)) run(() => putBackOnTexts(id));
+            }}>They’ve asked: put back on</button>
+            {hasEmail && <button className="btn ghost" disabled={pending} onClick={() => run(() => emailOptBackIn(id))}>Email them the opt-in link</button>}
+            <CopyButton text={() => optBackInLink(id)} label="Copy opt-in link" className="btn ghost" />
+          </div>
+          <p className="note" style={{ margin: '8px 0 0' }}>Or tell them to text START to our number. That always works, even when texts to them are blocked.</p>
+        </div>
+      )}
       {compose && (
         <div className="compose" style={{ marginTop: 12, marginBottom: 0 }}>
           <div className="f"><label className="l" htmlFor="tmsg">Message <span className="note">e.g. ask for a clearer passport photo or a new share code</span></label>

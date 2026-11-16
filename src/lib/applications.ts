@@ -2,7 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { toE164 } from './phone';
 import { sendToTemp } from './sms';
-import { appUrl } from './texts';
+import { appUrl, optBackInText } from './texts';
 import { currentDocs, docProblems } from './docs';
 import { encryptionReady } from './crypto';
 import { DEFAULT_APPLY_MESSAGE, APPLY_MESSAGE_KEY, renderApplyMessage } from './applyMessage';
@@ -159,9 +159,18 @@ export async function inviteApplicant(
   }
   if (!a.first) return done('not_sent', { detail: 'No name given' });
 
-  const { data: existing } = await db.from('temps').select('id,first_name,mobile,status,reg_token,registered_at,reg_requested_at').eq('mobile', a.mobile).maybeSingle();
+  const { data: existing } = await db.from('temps').select('id,first_name,last_name,mobile,status,reg_token,optin_token,registered_at,reg_requested_at').eq('mobile', a.mobile).maybeSingle();
   if (existing) {
-    if (existing.status === 'out') return done('opted_out', { temp_id: existing.id });
+    if (existing.status === 'out') {
+      // Opted out before, but has now applied to us: reply once with their link to opt back in.
+      const tenAgo = new Date(Date.now() - 600e3).toISOString();
+      const { count } = await db.from('messages').select('id', { count: 'exact', head: true }).eq('temp_id', existing.id).eq('direction', 'out').gte('created_at', tenAgo);
+      if (count) return done('opted_out', { temp_id: existing.id, detail: 'Texted in the last 10 minutes, so not texted again' });
+      const r = await sendToTemp({ db, temp: existing, kind: 'system', body: optBackInText(existing.first_name, existing.optin_token) });
+      await db.from('audit_log').insert({ actor: null, action: 'temp.optin_link_sent', detail: `${existing.first_name} ${existing.last_name} applied${a.jobTitle ? ` for ${a.jobTitle}` : ''} after opting out${r.ok ? ' and was texted their link to opt back in' : ' - text failed'}` });
+      if (r.ok) return done('optin_link', { temp_id: existing.id });
+      return done('opted_out', { temp_id: existing.id, detail: 'blocked' in r && r.blocked ? 'Texts blocked (they texted STOP). They need to text START.' : `Text failed: ${r.error}` });
+    }
     if (existing.registered_at) return done('already_registered', { temp_id: existing.id });
   }
   if (!encryptionReady() || docProblems(await currentDocs(db)).length) {
@@ -172,7 +181,7 @@ export async function inviteApplicant(
   if (!temp) {
     const { data: t, error: e } = await db.from('temps')
       .insert({ first_name: a.first, last_name: a.last || '-', mobile: a.mobile, status: 'invited', job_types: [], reg_requested_at: new Date().toISOString() })
-      .select('id,first_name,mobile,status,reg_token,registered_at,reg_requested_at').single();
+      .select('id,first_name,last_name,mobile,status,reg_token,optin_token,registered_at,reg_requested_at').single();
     if (e || !t) return done('failed', { detail: 'Couldn’t add them to ShiftReady' });
     temp = t;
   } else {

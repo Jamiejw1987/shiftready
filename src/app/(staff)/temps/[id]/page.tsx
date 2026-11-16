@@ -88,6 +88,8 @@ export default async function TempRecordPage({ params }: { params: { id: string 
           status={t.status}
           registered={!!t.registered_at}
           bankOnFile={!!t.bank_on_file}
+          optedOutAt={t.opted_out_at}
+          hasEmail={!!p?.email}
           canApprove={t.status === 'review' && !!t.rtw_checked_at && !rtwExpired}
           approveBlock={t.status !== 'review' ? '' : !t.rtw_checked_at ? 'Record the right to work check below before approving.' : rtwExpired ? 'Right to work has expired.' : ''}
         />

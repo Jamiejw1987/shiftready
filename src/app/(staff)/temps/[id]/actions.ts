@@ -4,7 +4,8 @@ import { requireStaff, audit } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { decrypt, encrypt, encryptionReady } from '@/lib/crypto';
 import { sendToTemp } from '@/lib/sms';
-import { regApprovedText, bankLinkText, bankChangeLinkText, myLinkText, regInviteText, licenceCodeText } from '@/lib/texts';
+import { regApprovedText, bankLinkText, bankChangeLinkText, myLinkText, regInviteText, licenceCodeText, OPTED_IN_REPLY, optBackInEmail, appUrl } from '@/lib/texts';
+import { sendEmail } from '@/lib/email';
 import { toE164, displayMobile } from '@/lib/phone';
 import { geocodePostcode, looksLikePostcode, normalisePostcode } from '@/lib/geo';
 import { JOB_TYPES } from '@/lib/format';
@@ -148,6 +149,52 @@ export async function sendMyLink(tempId: string): Promise<Result> {
   const r = await sendToTemp({ db: supabase, temp: t, kind: 'system', sentBy: profile.id, body: myLinkText(t.first_name, t.reg_token) });
   await audit(supabase, profile.id, 'temp.my_link_sent', `Sent holiday/P45 link to ${t.first_name} ${t.last_name}`);
   return r.ok ? { ok: true, message: 'Link sent.' } : { ok: false, error: `Text failed: ${r.error}` };
+}
+
+/*
+ * Getting an opted-out temp back on shift texts. We never text someone who opted out to ask them to come back:
+ * they have to ask us. When they do, a consultant can put them back on (they asked on the phone), email them
+ * their opt-in link, or copy the link to send another way. Every route is logged.
+ */
+
+/** The temp asked a consultant directly (phone, in person) to get shift texts again. */
+export async function putBackOnTexts(tempId: string): Promise<Result> {
+  const { supabase, profile } = await requireStaff();
+  const { data: t } = await supabase.from('temps').select('id,first_name,last_name,mobile,status').eq('id', tempId).single();
+  if (!t) return { ok: false, error: 'Not found.' };
+  if (t.status !== 'out') return { ok: false, error: `${t.first_name} isn't opted out.` };
+  const now = new Date().toISOString();
+  await supabase.from('temps').update({ status: 'active', opted_in_at: now, opted_out_at: null }).eq('id', t.id);
+  await audit(supabase, profile.id, 'temp.opted_in', `${t.first_name} ${t.last_name} asked ${profile.full_name} to be put back on shift texts`);
+  // Confirmation text. If Twilio is still blocking them (they texted STOP), this fails and puts them back to opted out.
+  const r = await sendToTemp({ db: supabase, temp: t, kind: 'system', sentBy: profile.id, body: OPTED_IN_REPLY });
+  if ('blocked' in r && r.blocked) {
+    return { ok: false, error: `Twilio is still blocking texts to ${t.first_name} because they texted STOP. Only they can lift that: ask them to text START to ${process.env.TWILIO_FROM_NUMBER || 'our number'}, or email them the link.` };
+  }
+  revalidatePath(`/temps/${t.id}`);
+  return { ok: true, message: r.ok ? `${t.first_name} is back on shift texts and has been sent a confirmation.` : `${t.first_name} is back on shift texts, but the confirmation text failed: ${r.error}` };
+}
+
+/** Emails the temp their own opt-back-in link (only once they've asked). */
+export async function emailOptBackIn(tempId: string): Promise<Result> {
+  const { supabase, profile } = await requireStaff();
+  const { data: t } = await supabase.from('temps').select('id,first_name,last_name,status,optin_token').eq('id', tempId).single();
+  if (!t) return { ok: false, error: 'Not found.' };
+  if (t.status !== 'out') return { ok: false, error: `${t.first_name} isn't opted out.` };
+  const { data: p } = await supabase.from('temp_profiles').select('email').eq('temp_id', t.id).maybeSingle();
+  if (!p?.email) return { ok: false, error: `No email on file for ${t.first_name}. Copy the link and send it another way, or ask them to text START.` };
+  const r = await sendEmail({ to: p.email, ...optBackInEmail(t.first_name, t.optin_token), tag: 'opt-back-in' });
+  await audit(supabase, profile.id, 'temp.optin_link_emailed', `Emailed ${t.first_name} ${t.last_name} their link to turn shift texts back on`);
+  return r.ok ? { ok: true, message: `Link emailed to ${p.email}.` } : { ok: false, error: `Email failed: ${r.error}` };
+}
+
+/** The opt-back-in link, to paste into WhatsApp or an email from Outlook. */
+export async function optBackInLink(tempId: string): Promise<string | null> {
+  const { supabase, profile } = await requireStaff();
+  const { data: t } = await supabase.from('temps').select('first_name,last_name,optin_token').eq('id', tempId).single();
+  if (!t) return null;
+  await audit(supabase, profile.id, 'temp.optin_link_copied', `Copied ${t.first_name} ${t.last_name}'s link to turn shift texts back on`);
+  return `${appUrl()}/o/${t.optin_token}`;
 }
 
 /** Admins can clear bank details (e.g. a temp has changed bank) so the temp can add new ones from their link. */

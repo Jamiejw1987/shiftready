@@ -17,6 +17,7 @@ const OUTCOME: Record<string, [string, string]> = {
   emailed: ['ok', 'Link emailed'],
   already_registered: ['blue', 'Already registered'],
   opted_out: ['mute', 'Opted out'],
+  optin_link: ['ok', 'Opted out before: opt-in link texted'],
   no_mobile: ['warn', 'No UK mobile'],
   not_sent: ['warn', 'Not sent'],
   failed: ['bad', 'Text failed'],
