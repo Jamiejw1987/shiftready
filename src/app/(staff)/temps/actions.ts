@@ -156,7 +156,7 @@ export async function sendBulkText(ids: string[], body: string): Promise<Result>
   );
   await audit(supabase, profile.id, 'sms.bulk', `Sent bulk text to ${res.sent} temps: "${text.slice(0, 60)}${text.length > 60 ? '...' : ''}"`);
   revalidatePath('/temps');
-  return { ok: true, message: `Sent to ${res.sent} temp${res.sent === 1 ? '' : 's'}${res.failed ? `. ${res.failed} failed` : ''}.` };
+  return { ok: true, message: `Sent to ${res.sent} temp${res.sent === 1 ? '' : 's'}${res.failed ? `. ${res.failed} failed` : ''}${res.off ? `. ${res.off} not sent: messages switched off` : ''}.` };
 }
 
 export async function lookupPostcode(pc: string) {

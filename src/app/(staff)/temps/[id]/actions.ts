@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { requireStaff, audit } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { decrypt, encrypt, encryptionReady } from '@/lib/crypto';
-import { sendToTemp } from '@/lib/sms';
+import { sendToTemp, messagesOff } from '@/lib/sms';
 import { regApprovedText, bankLinkText, bankChangeLinkText, myLinkText, regInviteText, licenceCodeText, OPTED_IN_REPLY, optBackInEmail, appUrl } from '@/lib/texts';
 import { sendEmail } from '@/lib/email';
 import { toE164, displayMobile } from '@/lib/phone';
@@ -183,6 +183,7 @@ export async function emailOptBackIn(tempId: string): Promise<Result> {
   if (t.status !== 'out') return { ok: false, error: `${t.first_name} isn't opted out.` };
   const { data: p } = await supabase.from('temp_profiles').select('email').eq('temp_id', t.id).maybeSingle();
   if (!p?.email) return { ok: false, error: `No email on file for ${t.first_name}. Copy the link and send it another way, or ask them to text START.` };
+  if (await messagesOff(supabase, t.id)) return { ok: false, error: `Messages are switched off for ${t.first_name}. Turn them back on at the top of their record first.` };
   const r = await sendEmail({ to: p.email, ...optBackInEmail(t.first_name, t.optin_token), tag: 'opt-back-in' });
   await audit(supabase, profile.id, 'temp.optin_link_emailed', `Emailed ${t.first_name} ${t.last_name} their link to turn shift texts back on`);
   return r.ok ? { ok: true, message: `Link emailed to ${p.email}.` } : { ok: false, error: `Email failed: ${r.error}` };

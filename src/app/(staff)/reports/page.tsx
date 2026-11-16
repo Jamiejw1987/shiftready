@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requireStaff } from '@/lib/auth';
 import { addDays, monday, nice, rate, weekReport, type Row } from '@/lib/reports';
+import { loadAssignments, isCurrent } from '@/lib/ongoing';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,18 @@ export default async function ReportsPage({ searchParams }: { searchParams: { w?
   const t = r.total;
   const pct = rate(t);
   const maxDay = Math.max(1, ...r.byDay.map((d) => d.needed));
+  // Ongoing workers: who's working where week in, week out (not booked through shifts).
+  const ongoing = await loadAssignments(supabase, {});
+  const perClient = new Map<string, { id: string; name: string; now: number; started: number; ended: number }>();
+  for (const a of ongoing.list) {
+    const row = perClient.get(a.client_id) ?? { id: a.client_id, name: a.client_name, now: 0, started: 0, ended: 0 };
+    if (isCurrent(a, today)) row.now++;
+    if (a.start_date >= start && a.start_date <= addDays(start, 6)) row.started++;
+    if (a.end_date && a.end_date >= start && a.end_date <= addDays(start, 6)) row.ended++;
+    perClient.set(a.client_id, row);
+  }
+  const ongoingRows = [...perClient.values()].filter((x) => x.now || x.started || x.ended).sort((a, b) => b.now - a.now || a.name.localeCompare(b.name));
+  const ongoingTotal = ongoingRows.reduce((n, x) => n + x.now, 0);
 
   const table = (title: string, rows: Row[], first: string) => (
     <section className="panel">
@@ -82,6 +95,28 @@ export default async function ReportsPage({ searchParams }: { searchParams: { w?
       </section>
       {table('By client', r.byClient, 'Client')}
       {table('By consultant', r.byUser, 'Sent by')}
+      {ongoing.ready && (
+        <section className="panel">
+          <div className="phead">
+            <h2 style={{ margin: 0 }}>Ongoing workers <span className="pill blue">{ongoingTotal} working now</span></h2>
+            {ongoing.list.length > 0 && <a className="btn small ghost" href="/api/reports/ongoing">Download CSV</a>}
+          </div>
+          <p className="note">People working at a client week in, week out (set on the client’s page or the worker’s record). Started and finished are for the week shown above.</p>
+          {!ongoingRows.length ? <p className="note">Nobody down as ongoing yet.</p> : (
+            <div className="tablewrap"><table className="cards">
+              <thead><tr><th>Client</th><th className="num">Working now</th><th className="num">Started this week</th><th className="num">Finished this week</th></tr></thead>
+              <tbody>{ongoingRows.map((x) => (
+                <tr key={x.id}>
+                  <td><Link href={`/clients/${x.id}`}><b>{x.name}</b></Link></td>
+                  <td className="num" data-l="Working now">{x.now}</td>
+                  <td className="num" data-l="Started this week">{x.started || '-'}</td>
+                  <td className="num" data-l="Finished this week">{x.ended || '-'}</td>
+                </tr>
+              ))}</tbody>
+            </table></div>
+          )}
+        </section>
+      )}
       <p className="note" style={{ textAlign: 'center' }}>Filled = booked and worked. Unfilled = places nobody was booked into. No-show = booked but didn’t turn up. Fill rate = filled ÷ needed. Shifts count once they’ve started.</p>
     </>
   );

@@ -61,8 +61,32 @@ type SendArgs = {
   sentBy?: string | null;
 };
 
+/**
+ * "No messages": workers who are ongoing at a client, imported from another system, or switched off by hand
+ * get nothing from us, whatever the message and whoever sends it. Every send to a temp comes through here.
+ * Before supabase/2026-11-16-ongoing-workers.sql is run the column doesn't exist, and nobody is blocked.
+ */
+export async function messagesOff(db: SupabaseClient, tempId: string): Promise<boolean> {
+  const { data, error } = await db.from('temps').select('no_comms').eq('id', tempId).maybeSingle();
+  if (error || !data) return false;
+  return Boolean((data as { no_comms?: boolean }).no_comms);
+}
+
+export const MESSAGES_OFF_ERROR = 'not sent: messages are switched off for this worker (turn them back on from their record)';
+
+/** Records a message we didn't send because the worker's messages are off, so there's still a trail. */
+async function suppressed(db: SupabaseClient, a: { to: string; body: string; kind: string; tempId: string; offerId: string | null; sentBy: string | null }) {
+  await db.from('messages').insert({
+    temp_id: a.tempId, offer_id: a.offerId, to_number: a.to, direction: 'out', channel: 'sms', kind: a.kind, body: plainText(a.body),
+    status: 'suppressed', error: 'Not sent: messages switched off for this worker', sent_by: a.sentBy,
+  });
+  return { ok: false, status: 'suppressed', error: MESSAGES_OFF_ERROR, blocked: false, suppressed: true, channel: 'sms' as const };
+}
+
 /** Sends one plain text (SMS) and records it. Never throws: failures are recorded with status "failed". */
-export async function sendSms({ db, to, body, kind, tempId = null, offerId = null, sentBy = null }: SendArgs) {
+export async function sendSms(args: SendArgs & { checked?: boolean }) {
+  const { db, to, body, kind, tempId = null, offerId = null, sentBy = null } = args;
+  if (tempId && !args.checked && (await messagesOff(db, tempId))) return suppressed(db, { to, body, kind, tempId, offerId, sentBy });
   const text = plainText(body);
   const { segments } = segmentInfo(text);
   const r: TwilioResult = smsConfigured()
@@ -81,7 +105,7 @@ export async function sendSms({ db, to, body, kind, tempId = null, offerId = nul
       await db.from('audit_log').insert({ actor: null, action: 'temp.opted_out', detail: `${t.first_name} ${t.last_name} marked opted out: Twilio is blocking texts to them because they texted STOP` });
     }
   }
-  return { ok: r.status !== 'failed', status: r.status, error: blocked ? 'they texted STOP, so texts are blocked until they text START' : r.error, blocked, channel: 'sms' as const };
+  return { ok: r.status !== 'failed', status: r.status, error: blocked ? 'they texted STOP, so texts are blocked until they text START' : r.error, blocked, suppressed: false, channel: 'sms' as const };
 }
 
 type TempArgs = Omit<SendArgs, 'to' | 'tempId'> & {
@@ -97,6 +121,7 @@ type TempArgs = Omit<SendArgs, 'to' | 'tempId'> & {
  * messaged us there in the last 24 hours, which is WhatsApp's rule; otherwise by text.
  */
 export async function sendToTemp({ db, temp, body, kind, offerId = null, sentBy = null, wa = null }: TempArgs) {
+  if (await messagesOff(db, temp.id)) return suppressed(db, { to: temp.mobile, body, kind, tempId: temp.id, offerId, sentBy });
   if (whatsappConfigured()) {
     const { data: t } = await db.from('temps').select('wa_status').eq('id', temp.id).maybeSingle();
     if (t?.wa_status !== 'no') {
@@ -119,24 +144,24 @@ export async function sendToTemp({ db, temp, body, kind, offerId = null, sentBy 
           body: plainText(body), fallback_body: plainText(body), fell_back: r.status === 'failed',
           provider_id: r.providerId, status: r.status, error: r.error, sent_by: sentBy,
         });
-        if (r.status !== 'failed') return { ok: true, status: r.status, error: null, channel: 'whatsapp' as const };
+        if (r.status !== 'failed') return { ok: true, status: r.status, error: null, blocked: false, suppressed: false, channel: 'whatsapp' as const };
         if (r.errorCode === '63003') await db.from('temps').update({ wa_status: 'no' }).eq('id', temp.id);
         // WhatsApp refused it straight away: fall through and send it as a text instead.
       }
     }
   }
-  return sendSms({ db, to: temp.mobile, body, kind, tempId: temp.id, offerId, sentBy });
+  return sendSms({ db, to: temp.mobile, body, kind, tempId: temp.id, offerId, sentBy, checked: true });
 }
 
-/** Runs many sends with limited concurrency. */
-export async function sendMany<T>(items: T[], send: (item: T) => Promise<{ ok: boolean }>, concurrency = 8) {
-  let i = 0, sent = 0, failed = 0;
+/** Runs many sends with limited concurrency. People whose messages are off count as "off", not failed. */
+export async function sendMany<T>(items: T[], send: (item: T) => Promise<{ ok: boolean; suppressed?: boolean }>, concurrency = 8) {
+  let i = 0, sent = 0, failed = 0, off = 0;
   async function worker() {
     while (i < items.length) {
       const r = await send(items[i++]);
-      r.ok ? sent++ : failed++;
+      if (r.ok) sent++; else if (r.suppressed) off++; else failed++;
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
-  return { sent, failed };
+  return { sent, failed, off };
 }

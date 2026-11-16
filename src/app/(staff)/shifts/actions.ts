@@ -74,8 +74,12 @@ async function matchTemps(supabase: Awaited<ReturnType<typeof requireStaff>>['su
   const { data } = await supabase.from('temps').select('id,first_name,last_name,mobile,lat,lng,job_types').eq('status', 'active').contains('job_types', [jobType]);
   // Never offer a client's shift to someone that client asked not to have back.
   const blocked = await blockedFor(supabase, clientId);
+  // Workers with messages switched off (ongoing at a client, or imported) never get shift offers.
+  // Loaded separately so offers still go out before supabase/2026-11-16-ongoing-workers.sql is run.
+  const { data: off } = await supabase.from('temps').select('id').eq('no_comms', true);
+  const quiet = new Set((off ?? []).map((t) => t.id as string));
   return ((data ?? []) as Temp[])
-    .filter((t) => t.lat != null && t.lng != null && !blocked.has(t.id))
+    .filter((t) => t.lat != null && t.lng != null && !blocked.has(t.id) && !quiet.has(t.id))
     .map((t) => ({ ...t, miles: milesBetween(point, { lat: t.lat!, lng: t.lng! }) }))
     .filter((t) => t.miles <= radius)
     .sort((a, b) => a.miles - b.miles);

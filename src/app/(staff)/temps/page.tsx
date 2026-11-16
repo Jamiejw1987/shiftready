@@ -24,6 +24,15 @@ export default async function TempsPage() {
   const { data: caps } = await supabase.from('temps').select('id,hours_cap').not('hours_cap', 'is', null);
   const capOf = new Map((caps ?? []).map((c) => [c.id, c.hours_cap as number]));
   for (const t of temps) t.hours_cap = capOf.get(t.id) ?? null;
+  // Messages switched off (ongoing workers, imports), loaded separately so the list still works before supabase/2026-11-16-ongoing-workers.sql is run.
+  const quiet = new Set<string>();
+  for (let from = 0; from < 50000; from += 1000) {
+    const { data, error } = await supabase.from('temps').select('id').eq('no_comms', true).order('id').range(from, from + 999);
+    if (error || !data) break;
+    data.forEach((t) => quiet.add(t.id));
+    if (data.length < 1000) break;
+  }
+  for (const t of temps) t.no_comms = quiet.has(t.id);
   return (
     <TempsClient
       temps={temps}

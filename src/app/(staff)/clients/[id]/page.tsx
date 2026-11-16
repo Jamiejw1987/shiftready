@@ -6,6 +6,8 @@ import { displayMobile } from '@/lib/phone';
 import { fmtDate, fmtDateTime } from '@/lib/format';
 import { ClientSettings, SiteEditor, InviteUser, UserActions, LiftBlock } from '../ClientForms';
 import { LogoUpload } from '../LogoUpload';
+import { loadAssignments, isCurrent } from '@/lib/ongoing';
+import { ClientOngoing } from '../../ongoing/Ongoing';
 
 export const dynamic = 'force-dynamic';
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -47,6 +49,9 @@ export default async function ClientProfile({ params, searchParams }: { params: 
   const actCount = (id: string) => (userActs ?? []).filter((a) => a.client_user_id === id).length;
   const liveSites = (sites ?? []).filter((s) => s.active);
   const isAdmin = profile.role === 'admin';
+  const ongoing = await loadAssignments(supabase, { clientId: c.id });
+  const ongoingNow = ongoing.list.filter((a) => isCurrent(a, today));
+  const ongoingPast = ongoing.list.filter((a) => !isCurrent(a, today));
 
   return (
     <>
@@ -72,6 +77,19 @@ export default async function ClientProfile({ params, searchParams }: { params: 
         </div>
         <div style={{ marginTop: 14 }}><LogoUpload id={c.id} name={c.name} logo={(c as { logo?: string | null }).logo ?? null} /></div>
       </section>
+
+      {ongoing.ready && (
+        <section className="panel">
+          <div className="phead">
+            <div><h2 style={{ margin: 0 }}>Ongoing workers <span className="pill blue">{ongoingNow.length}</span></h2>
+              <p className="note" style={{ margin: '4px 0 0' }}>People working here week in, week out. They get no messages from ShiftReady while they’re ongoing.</p></div>
+            {ongoing.list.length > 0 && <a className="btn ghost small" href={`/api/clients/${c.id}/ongoing`}>Download CSV</a>}
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <ClientOngoing clientId={c.id} clientName={c.name} sites={liveSites.map((s) => ({ id: s.id, name: s.name }))} current={ongoingNow} past={ongoingPast} />
+          </div>
+        </section>
+      )}
 
       <section className="panel">
         <h2>Portal users</h2>

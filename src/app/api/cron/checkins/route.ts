@@ -40,10 +40,12 @@ export async function GET(req: NextRequest) {
 
     if (!o.checkin_sent_at && mins <= LEAD_MIN && t.status !== 'out') {
       const when = s.shift_date === day(0) ? 'today' : 'tomorrow';
-      await sendToTemp({ db, temp: { id: o.temp_id, mobile: t.mobile }, kind: 'checkin', offerId: o.id,
+      const r = await sendToTemp({ db, temp: { id: o.temp_id, mobile: t.mobile }, kind: 'checkin', offerId: o.id,
         body: `Hi ${t.first_name}, your ${s.client} shift starts at ${hhmm(s.start_time)} ${when}. Are you still coming? Reply YES to confirm or NO if you can't make it. - Staff Selection` });
-      await db.from('offers').update({ checkin_sent_at: new Date().toISOString() }).eq('id', o.id);
-      sent++;
+      // Messages switched off (ongoing worker): no check-in text, so don't chase the consultant about a reply either.
+      const at = new Date().toISOString();
+      await db.from('offers').update(r.suppressed ? { checkin_sent_at: at, checkin_alerted_at: at } : { checkin_sent_at: at }).eq('id', o.id);
+      if (!r.suppressed) sent++;
       continue;
     }
 

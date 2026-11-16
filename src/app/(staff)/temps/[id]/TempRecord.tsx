@@ -9,9 +9,9 @@ import { CopyButton } from '@/components/Copy';
 type Msg = { ok: boolean; text: string } | null;
 const Note = ({ m }: { m: Msg }) => (m ? <p className={m.ok ? 'okmsg' : 'err'} style={{ marginTop: 10 }}>{m.text}</p> : null);
 
-export function RecordActions({ id, firstName, status, registered, canApprove, approveBlock, bankOnFile = true, optedOutAt = null, hasEmail = false }: {
+export function RecordActions({ id, firstName, status, registered, canApprove, approveBlock, bankOnFile = true, optedOutAt = null, hasEmail = false, messagesOff = false }: {
   id: string; firstName: string; status: string; registered: boolean; canApprove: boolean; approveBlock: string; bankOnFile?: boolean;
-  optedOutAt?: string | null; hasEmail?: boolean;
+  optedOutAt?: string | null; hasEmail?: boolean; messagesOff?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -26,14 +26,16 @@ export function RecordActions({ id, firstName, status, registered, canApprove, a
       <div className="bar">
         <span className="note">{approveBlock}</span>
         <div className="btnrow">
+          {!messagesOff && <>
           {!registered && status !== 'out' && <button className="btn ghost" disabled={pending} onClick={() => run(() => resendRegistration(id))}>{status === 'invited' ? 'Resend registration link' : 'Send registration form'}</button>}
           {status !== 'out' && <button className="btn ghost" onClick={() => { setCompose(!compose); setMsg(null); }}>Text {firstName}</button>}
           {status !== 'invited' && status !== 'review' && status !== 'out' && !bankOnFile && <button className="btn ghost" disabled={pending} onClick={() => run(() => sendBankLink(id))}>Request bank details</button>}
           {status !== 'invited' && status !== 'review' && <button className="btn ghost" disabled={pending} onClick={() => run(() => sendMyLink(id))}>Text holiday/P45 link</button>}
+          </>}
           {status === 'review' && <button className="btn blue" disabled={!canApprove || pending} onClick={() => run(() => approve(id))}>Approve</button>}
         </div>
       </div>
-      {status === 'out' && (
+      {status === 'out' && !messagesOff && (
         <div className="optback">
           <p style={{ margin: 0 }}>
             <b>{firstName} has opted out of shift texts</b>{optedOutAt ? ` (${new Date(optedOutAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })})` : ''}, so we can’t text them.

@@ -12,6 +12,8 @@ Staff Selection UK's shift offer app. Consultants add compliant temps (singly or
 - **Temps' pages** (no login, private links in texts): opt in / opt out, view shift, tick PPE, accept or decline, standby, alerts.
 - **Texts**: Twilio. Replies YES/START and STOP are handled automatically. Day-before reminders run every evening. Without Twilio keys the app runs in dry-run mode and logs texts without sending.
 - **Client portal** (`/portal`): clients sign in with an emailed link, request shifts, see who's confirmed (name and induction flag only), mark attendance and rate temps. Office: Clients (sites, users, view as client, report, contacts export) and Client requests. See SETUP.md.
+- **Ongoing workers & no messages**: a "No messages" switch on each worker stops every text, WhatsApp, email and shift offer to them (blocked messages are logged as "suppressed"). Put workers down as ongoing at a client (no end date needed) from their record or the client's page; their messages switch off automatically. Counts and CSV on Reports and each client's page. Needs `supabase/2026-11-16-ongoing-workers.sql`.
+- **Import workers (admin, `/temps/import`)**: bring 1,000s of workers over from another system by CSV with nothing sent: names, contact, address, DOB, NI and bank (encrypted), right to work, old-system ID, and the client they work at. Column matching, preview, duplicate matching (mobile, NI, ID) and fill-in-blanks.
 - **Team (admin)**: invite consultants by email, switch off access, set roles and alert mobiles, full audit trail.
 
 ## Tech

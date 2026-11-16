@@ -11,7 +11,7 @@ import { addTemp, importTemps, setTempStatus, resendWelcome, deleteTemp, sendBul
 
 export type TempRow = {
   id: string; first_name: string; last_name: string; mobile: string; postcode: string | null;
-  lat: number | null; lng: number | null; job_types: string[]; status: 'pending' | 'active' | 'hold' | 'out'; wa_status?: 'unknown' | 'yes' | 'no'; hours_cap?: number | null;
+  lat: number | null; lng: number | null; job_types: string[]; status: 'pending' | 'active' | 'hold' | 'out'; wa_status?: 'unknown' | 'yes' | 'no'; hours_cap?: number | null; no_comms?: boolean;
   added_by: string | null; created_at: string;
 };
 type User = { id: string; full_name: string };
@@ -142,7 +142,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
       if (a && !areaMatch(t.postcode, a)) return false;
       if (nearPoint && mi) { const d = dist(t); if (d == null || d > mi) return false; }
       if (type && !(t.job_types ?? []).includes(type)) return false;
-      if (status && t.status !== status) return false;
+      if (status === 'quiet' ? !t.no_comms : status && t.status !== status) return false;
       if (by !== 'all' && t.added_by !== by) return false;
       return true;
     }).sort((x, y) => (nearPoint ? (dist(x) ?? 999) - (dist(y) ?? 999) : 0));
@@ -164,7 +164,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
   const [compose, setCompose] = useState(false);
   const [body, setBody] = useState('');
   const [bulkMsg, setBulkMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const recipients = temps.filter((t) => sel.has(t.id) && t.status === 'active');
+  const recipients = temps.filter((t) => sel.has(t.id) && t.status === 'active' && !t.no_comms);
   const skipped = sel.size - recipients.length;
   const seg = segmentInfo(plainText(body.replace(/\{first\}/g, 'Christopher').replace(/\{link\}/g, 'https://shiftready-tan.vercel.app/me/00000000-0000-0000-0000-000000000000')));
   function sendBulk() {
@@ -213,7 +213,8 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
 
       <section className="panel">
         <h2>Bulk add existing temps</h2>
-        <p className="lede">Upload a CSV of temps who are already compliant (for example an export from KISREC). Columns needed: first name, surname, mobile, postcode. Job types is optional.</p>
+        <p className="lede">Upload a CSV of temps who are already compliant (for example an export from KISREC). Columns needed: first name, surname, mobile, postcode. Job types is optional. Everyone added here gets a welcome text.</p>
+        {me.admin && <p className="note" style={{ marginTop: -6 }}>Moving workers over from another system and don’t want anything sent? Use <a href="/temps/import"><b>Import workers (no messages)</b></a>: it brings in addresses, NI, bank and right to work details, and can mark people as ongoing at a client.</p>}
         <div className={over ? 'drop over' : 'drop'}
           onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
           onDrop={(e) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files[0]; if (f) loadFile(f); }}>
@@ -286,7 +287,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
             <select id="fType" value={type} onChange={(e) => setType(e.target.value)}><option value="">Any job type</option>{JOB_TYPES.map((t) => <option key={t}>{t}</option>)}</select></div>
           <div className="f"><label className="l" htmlFor="fStatus">Status</label>
             <select id="fStatus" value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Any status</option>
-              {Object.entries(STATUS).map(([k, [, l]]) => <option key={k} value={k}>{l}</option>)}</select></div>
+              {Object.entries(STATUS).map(([k, [, l]]) => <option key={k} value={k}>{l}</option>)}<option value="quiet">Messages off (ongoing / imported)</option></select></div>
           <div className="f"><label className="l" htmlFor="fBy">Added by</label>
             <select id="fBy" value={by} onChange={(e) => setBy(e.target.value)}><option value="all">Everyone</option><option value={me.id}>Me</option>
               {users.filter((u) => u.id !== me.id).map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}</select></div>
@@ -310,7 +311,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
               <textarea id="msgBody" value={body} onChange={(e) => setBody(e.target.value)} style={{ minHeight: 110 }} />
               <span className="counter">{seg.chars} characters · {seg.segments} text{seg.segments > 1 ? 's' : ''} per person{seg.unicode ? ' · contains special characters or emoji, which make texts shorter and cost more' : ''}</span></div>
             <p className="note" style={{ margin: 0 }}>Goes to <b>{recipients.length}</b> active temp{recipients.length === 1 ? '' : 's'} (about {recipients.length * seg.segments} texts).
-              {skipped > 0 && ` ${skipped} not sent: awaiting opt-in, on hold or opted out. We can only text people who’ve opted in.`}</p>
+              {skipped > 0 && ` ${skipped} not sent: awaiting opt-in, on hold, opted out or messages off. We can only text people who’ve opted in.`}</p>
             <div className="btnrow" style={{ justifyContent: 'flex-end' }}>
               <button className="btn ghost" onClick={() => setCompose(false)}>Cancel</button>
               <button className="btn blue" disabled={!recipients.length || !body.trim() || pending} onClick={sendBulk}>{pending ? 'Sending…' : `Send to ${recipients.length}`}</button>
@@ -334,13 +335,13 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
                   <td className="mono" data-l="Postcode">{t.postcode}</td>
                   {nearPoint && <td className="num" data-l="Miles">{d != null ? d.toFixed(1) : '-'}</td>}
                   <td className="full">{(t.job_types ?? []).map((x) => <span key={x} className="pill blue" style={{ marginRight: 4 }}>{x}</span>)}</td>
-                  <td><span className={`pill ${k}`}>{l}</span>{t.wa_status === 'yes' && <span className="pill wa" title="Gets messages on WhatsApp" style={{ marginLeft: 4 }}>WhatsApp</span>}{t.hours_cap != null && <span className="pill warn" title="Can't be booked over this many hours a week" style={{ marginLeft: 4 }}>Max {t.hours_cap}h/wk</span>}</td>
+                  <td><span className={`pill ${k}`}>{l}</span>{t.wa_status === 'yes' && <span className="pill wa" title="Gets messages on WhatsApp" style={{ marginLeft: 4 }}>WhatsApp</span>}{t.hours_cap != null && <span className="pill warn" title="Can't be booked over this many hours a week" style={{ marginLeft: 4 }}>Max {t.hours_cap}h/wk</span>}{t.no_comms && <span className="pill bad" title="Gets no texts, offers or emails from ShiftReady" style={{ marginLeft: 4 }}>Messages off</span>}</td>
                   <td className="by" data-l="Added by">{userName(t.added_by)}<small>{new Date(t.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</small></td>
                   <td>
                     <div className="btnrow">
                       {t.status === 'active' && <button className="btn ghost small" disabled={pending} onClick={() => rowAction(() => setTempStatus(t.id, 'hold'))}>Put on hold</button>}
                       {t.status === 'hold' && <button className="btn ghost small" disabled={pending} onClick={() => rowAction(() => setTempStatus(t.id, 'active'))}>Reactivate</button>}
-                      {t.status === 'pending' && <button className="btn ghost small" disabled={pending} onClick={() => rowAction(() => resendWelcome(t.id))}>Resend welcome</button>}
+                      {t.status === 'pending' && !t.no_comms && <button className="btn ghost small" disabled={pending} onClick={() => rowAction(() => resendWelcome(t.id))}>Resend welcome</button>}
                       {me.admin && (confirmDelete === t.id
                         ? <><button className="btn small" style={{ background: 'var(--bad)' }} onClick={() => rowAction(() => deleteTemp(t.id))}>Confirm delete</button><button className="btn ghost small" onClick={() => setConfirmDelete(null)}>Keep</button></>
                         : <button className="btn ghost small" onClick={() => setConfirmDelete(t.id)}>Delete</button>)}

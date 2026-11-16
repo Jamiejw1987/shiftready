@@ -10,6 +10,8 @@ import { RecordActions, RtwCheck, Uploader, Reveal, BankActions, EditDetails, Co
 import { licenceLabel, CHECK_CODE_DAYS } from '@/lib/regOptions';
 import { CopyButton } from '@/components/Copy';
 import { JOB_TYPES } from '@/lib/format';
+import { loadAssignments, isCurrent } from '@/lib/ongoing';
+import { MessagesSwitch, WorkerOngoing } from '../../ongoing/Ongoing';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +67,17 @@ export default async function TempRecordPage({ params }: { params: { id: string 
     ? await Promise.all([weekHours(supabase, [t.id], today), weekHours(supabase, [t.id], nextWeek)]).then(([a, b]) => [a.get(t.id) ?? 0, b.get(t.id) ?? 0])
     : [0, 0];
   const hrs = (n: number) => Math.round(n * 100) / 100;
+  // Ongoing work at clients, and the "No messages" switch (both need supabase/2026-11-16-ongoing-workers.sql).
+  const [ongoing, { data: clientRows }, { data: siteRows }] = await Promise.all([
+    loadAssignments(supabase, { tempId: t.id }),
+    supabase.from('clients').select('id,name').eq('active', true).eq('is_test', false).order('name'),
+    supabase.from('client_sites').select('id,name,client_id').eq('active', true).order('name'),
+  ]);
+  const clientOptions = (clientRows ?? []).map((c) => ({ id: c.id, name: c.name, sites: (siteRows ?? []).filter((x) => x.client_id === c.id).map((x) => ({ id: x.id, name: x.name })) }));
+  const workingAt = ongoing.list.filter((a) => isCurrent(a, today));
+  const messagesOff = !!t.no_comms;
+  const imported = !!t.imported_at;
+  const showRecord = !!t.registered_at || imported;
 
   return (
     <>
@@ -79,6 +92,9 @@ export default async function TempRecordPage({ params }: { params: { id: string 
           {t.registered_at && (t.bank_on_file ? <span className="pill ok">Bank details on file</span> : <span className="pill warn">No bank details</span>)}
           {t.wa_status === 'yes' && <span className="pill wa">WhatsApp</span>}
           {t.hours_cap != null && <span className="pill warn">Max {t.hours_cap} hrs/week</span>}
+          {messagesOff && <span className="pill bad">Messages off</span>}
+          {workingAt.map((a) => <span key={a.id} className="pill blue">Ongoing at {a.client_name}</span>)}
+          {imported && <span className="pill mute">Imported{t.import_source ? ` from ${t.import_source}` : ''} {day(t.imported_at)}</span>}
         </div>
         <p className="lede" style={{ marginBottom: 0 }}>{displayMobile(t.mobile)}{t.postcode ? ` · ${t.postcode}` : ''}{t.added_by ? ` · added by ${name(t.added_by)}` : ""} · {day(t.created_at)}</p>
         <div style={{ marginTop: 12 }}><EditDetails id={t.id} first={t.first_name} last={t.last_name} mobile={displayMobile(t.mobile)} postcode={t.postcode ?? ''} jobTypes={t.job_types ?? []} allTypes={JOB_TYPES} /></div>
@@ -92,8 +108,18 @@ export default async function TempRecordPage({ params }: { params: { id: string 
           hasEmail={!!p?.email}
           canApprove={t.status === 'review' && !!t.rtw_checked_at && !rtwExpired}
           approveBlock={t.status !== 'review' ? '' : !t.rtw_checked_at ? 'Record the right to work check below before approving.' : rtwExpired ? 'Right to work has expired.' : ''}
+          messagesOff={messagesOff}
         />
+        {ongoing.ready && <MessagesSwitch tempId={t.id} firstName={t.first_name} off={messagesOff} reason={t.no_comms_reason ?? null} />}
       </section>
+
+      {ongoing.ready && (
+        <section className="panel">
+          <h2>Ongoing work</h2>
+          <p className="note" style={{ marginTop: 0 }}>For people working at a client week in, week out. While they’re ongoing their messages stay off, and they show on the client’s page and in reports.</p>
+          <WorkerOngoing tempId={t.id} firstName={t.first_name} list={ongoing.list} clients={clientOptions} />
+        </section>
+      )}
 
       <section className="panel">
         <h2>Working hours limit</h2>
@@ -134,7 +160,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
         </section>
       ) : null}
 
-      {!t.registered_at ? (
+      {!showRecord ? (
         <section className="panel">
           <h2>Not registered yet</h2>
           <p className="lede" style={{ margin: 0 }}>{t.reg_requested_at ? `Registration link sent ${fmtDateTime(t.reg_requested_at)}. Their details appear here once they’ve filled it in.` : 'This temp was added before online registration. Send them the registration form to collect their details, right to work and agreements.'}</p>
@@ -148,6 +174,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
         <div className="rec">
           <section className="panel">
             <h2>Details</h2>
+            {imported && !t.registered_at && <p className="note" style={{ marginTop: 0 }}>Imported{t.import_source ? ` from ${t.import_source}` : ''}{t.external_ref ? ` (ref ${t.external_ref})` : ''}. They haven’t registered on ShiftReady, so there are no signed agreements here.</p>}
             <dl className="kv">
               <dt>Date of birth</dt><dd>{day(p?.dob ?? null)}{p?.dob ? ` (age ${ageOf(p.dob)})` : ''}</dd>
               <dt>Email</dt><dd>{p?.email ? <span className="withcopy">{p.email}<CopyButton text={p.email} /></span> : '-'}</dd>
@@ -203,7 +230,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
             <dl className="kv" style={{ marginBottom: 10 }}><dt>Nationality</dt><dd>{p?.nationality || 'Not given'}</dd><dt>Date of birth</dt><dd>{p?.dob ? `${day(p.dob)} (age ${ageOf(p.dob)})` : 'Not given'}</dd></dl>
             {t.rtw_checked_at ? (
               <dl className="kv" style={{ marginBottom: 14 }}>
-                <dt>Checked</dt><dd>{fmtDateTime(t.rtw_checked_at)} by {name(t.rtw_checked_by)}</dd>
+                <dt>Checked</dt><dd>{fmtDateTime(t.rtw_checked_at)} by {t.rtw_checked_by ? name(t.rtw_checked_by) : imported ? `the previous system (imported)` : name(null)}</dd>
                 <dt>Route</dt><dd>{t.rtw_route === 'share_code' ? 'Share code' : 'British or Irish passport'}</dd>
                 <dt>Expires</dt><dd>{t.rtw_expires ? <>{day(t.rtw_expires)}{rtwExpired && <span className="pill bad" style={{ marginLeft: 6 }}>Expired</span>}</> : 'No time limit'}</dd>
               </dl>
@@ -227,7 +254,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
             <Uploader id={t.id} />
           </section>
 
-          <section className="panel">
+          {t.registered_at && <section className="panel">
             <h2>Agreements</h2>
             <dl className="kv">
               <dt>48-hour week</dt><dd>{p?.wtr_opt_out ? 'Opted out' : 'Limit applies'}{p?.wtr_effective && p.wtr_effective > today ? ` (change takes effect ${day(p.wtr_effective)})` : ''}</dd>
@@ -243,7 +270,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
                 })}
               </tbody>
             </table></div>
-          </section>
+          </section>}
 
           <section className="panel">
             <h2>Admin only</h2>
