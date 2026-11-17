@@ -17,7 +17,7 @@ export default async function SitePage() {
       <div className="ind-head">
         <span className="note">Signed in as {sup.full_name} · <form action={siteSignOut} style={{ display: 'inline' }}><button className="linkbtn" style={{ background: 'none', border: 0, padding: 0, color: 'var(--blue-deep)', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>sign out</button></form></span>
         <span className="doc">Day one sign-off</span>
-        <span className="note">{nice}. Everyone booked on today’s shifts (and last night’s).</span>
+        <span className="note">{nice}. Everyone booked today, then everyone who’s been sent the induction and still needs their day one.</span>
       </div>
       <section className="card"><div className="in">
         <b>How it works</b>
@@ -25,7 +25,7 @@ export default async function SitePage() {
           <li>Do the manual handling assessment in the app: tap Yes or No for each check, then you both sign.</li>
           <li>Show them the fire exits and assembly point, toilets, canteen and welfare, smoking area and banned items, and do the site tour.</li>
           <li>You both sign and date the paper day-one sheet. It goes to the client.</li>
-          <li>Tap their name below and take a clear photo of the signed sheet.</li>
+          <li>Find them below (search by name), tap their name and take a clear photo of the signed sheet.</li>
         </ol>
       </div></section>
       <SiteList rows={rows} trainer={sup.full_name} />

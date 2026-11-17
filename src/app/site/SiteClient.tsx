@@ -35,18 +35,26 @@ const PILL: Record<string, [string, string]> = {
 export function SiteList({ rows, trainer }: { rows: SiteRow[]; trainer: string }) {
   const [open, setOpen] = useState<string | null>(null);
   const [mh, setMh] = useState<string | null>(null);
-  if (!rows.length) return <div className="state"><div className="badge mute">–</div><div className="big">Nobody booked</div><p>No one is booked on today’s shifts for your site yet.</p></div>;
+  const [q, setQ] = useState('');
+  if (!rows.length) return <div className="state"><div className="badge mute">–</div><div className="big">Nobody to see yet</div><p>No one is booked today and nobody is waiting for their day one.</p></div>;
+  const shown = rows.filter((r) => !q.trim() || r.name.toLowerCase().includes(q.trim().toLowerCase()));
+  const firstOther = shown.findIndex((r) => !r.shift);
   return (
     <>
-      {rows.map((r) => {
+      <input type="search" placeholder="Search by name" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search by name" />
+      {shown.length > 0 && shown[0].shift && <h2 className="sech" style={{ margin: '4px 0 0' }}>Booked today</h2>}
+      {!shown.length && <p className="note">No one matches “{q}”.</p>}
+      {shown.map((r, idx) => {
         const st = r.induction?.status ?? 'none';
         const [k, l] = PILL[st] ?? PILL.none;
-        const isOpen = open === r.offerId;
+        const isOpen = open === r.key;
         return (
-          <section key={r.offerId} className="card"><div className="in" style={{ gap: 10 }}>
-            <button onClick={() => setOpen(isOpen ? null : r.offerId)} style={{ all: 'unset', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 4 }} aria-expanded={isOpen}>
+          <div key={r.key} style={{ display: 'contents' }}>
+          {idx === firstOther && <h2 className="sech" style={{ margin: '8px 0 0' }}>Waiting for day one</h2>}
+          <section className="card"><div className="in" style={{ gap: 10 }}>
+            <button onClick={() => setOpen(isOpen ? null : r.key)} style={{ all: 'unset', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 4 }} aria-expanded={isOpen}>
               <b style={{ fontSize: 18 }}>{r.name}</b>
-              <span className="note">{r.shift.client} · {r.shift.site} · {r.shift.start} to {r.shift.end}</span>
+              <span className="note">{r.shift ? `${r.shift.client} · ${r.shift.site} · ${r.shift.start} to ${r.shift.end}` : `${r.induction?.pack ?? ''} · not booked today`}</span>
               <span><span className={`pill ${k}`}>{l}</span>{r.induction?.mh === 'todo' && r.induction.signed && <> <span className="pill warn">Manual handling to do</span></>}{r.induction?.mh === 'done' && <> <span className="pill ok">Manual handling done</span></>}</span>
             </button>
             {isOpen && r.induction && (r.induction.signed ? (
@@ -63,6 +71,7 @@ export function SiteList({ rows, trainer }: { rows: SiteRow[]; trainer: string }
             ) : <p className="alert bad">They haven’t finished the induction on their phone. Don’t let them start: call the office.</p>)}
             {isOpen && !r.induction && <p className="alert bad">No induction has been sent to them. Call the office before they start.</p>}
           </div></section>
+          </div>
         );
       })}
     </>
