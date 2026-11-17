@@ -22,12 +22,13 @@ export default async function SitePage() {
       <section className="card"><div className="in">
         <b>How it works</b>
         <ol style={{ margin: 0, paddingLeft: 20 }}>
+          <li>Do the manual handling assessment in the app: tap Yes or No for each check, then you both sign.</li>
           <li>Show them the fire exits and assembly point, toilets, canteen and welfare, smoking area and banned items, and do the site tour.</li>
           <li>You both sign and date the paper day-one sheet. It goes to the client.</li>
           <li>Tap their name below and take a clear photo of the signed sheet.</li>
         </ol>
       </div></section>
-      <SiteList rows={rows} />
+      <SiteList rows={rows} trainer={sup.full_name} />
     </div></main>
   );
 }

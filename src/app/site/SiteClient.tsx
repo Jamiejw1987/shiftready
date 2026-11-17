@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 import { SitePhotoUpload } from '../(staff)/inductions/Controls';
-import { siteSignIn, siteUploadSlot, siteRecordUpload } from './actions';
+import { siteSignIn, siteUploadSlot, siteRecordUpload, saveMhSite } from './actions';
+import { MhForm } from '@/components/MhForm';
 import type { SiteRow } from '@/lib/siteData';
 
 function Submit() {
@@ -31,8 +32,9 @@ const PILL: Record<string, [string, string]> = {
   complete: ['ok', 'Day one done'],
 };
 
-export function SiteList({ rows }: { rows: SiteRow[] }) {
+export function SiteList({ rows, trainer }: { rows: SiteRow[]; trainer: string }) {
   const [open, setOpen] = useState<string | null>(null);
+  const [mh, setMh] = useState<string | null>(null);
   if (!rows.length) return <div className="state"><div className="badge mute">–</div><div className="big">Nobody booked</div><p>No one is booked on today’s shifts for your site yet.</p></div>;
   return (
     <>
@@ -45,10 +47,14 @@ export function SiteList({ rows }: { rows: SiteRow[] }) {
             <button onClick={() => setOpen(isOpen ? null : r.offerId)} style={{ all: 'unset', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 4 }} aria-expanded={isOpen}>
               <b style={{ fontSize: 18 }}>{r.name}</b>
               <span className="note">{r.shift.client} · {r.shift.site} · {r.shift.start} to {r.shift.end}</span>
-              <span><span className={`pill ${k}`}>{l}</span></span>
+              <span><span className={`pill ${k}`}>{l}</span>{r.induction?.mh === 'todo' && r.induction.signed && <> <span className="pill warn">Manual handling to do</span></>}{r.induction?.mh === 'done' && <> <span className="pill ok">Manual handling done</span></>}</span>
             </button>
             {isOpen && r.induction && (r.induction.signed ? (
               <>
+                {r.induction.mh === 'done' && <p className="okmsg">✓ Manual handling assessment done and on their file.</p>}
+                {r.induction.mh === 'todo' && (mh === r.induction.id
+                  ? <MhForm candidate={r.name} location={r.induction.site} trainer={trainer} save={(p) => saveMhSite(r.induction!.id, p)} />
+                  : <button className="btn blue" onClick={() => setMh(r.induction!.id)}>Do manual handling assessment</button>)}
                 {r.induction.siteDone && <p className="okmsg">Photo already uploaded. You can add another if the first wasn’t clear.</p>}
                 <a className="btn ghost" href={`/api/inductions/${r.induction.id}/dayone`} target="_blank" rel="noopener noreferrer">Open the day-one sheet to print</a>
                 <SitePhotoUpload camera label={r.induction.siteDone ? 'Add another photo' : 'Take photo of signed sheet'}

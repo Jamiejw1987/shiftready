@@ -7,6 +7,8 @@ export type DocKindFile = (typeof DOC_KINDS)[number];
 export const DOC_KIND_LABEL: Record<DocKindFile, string> = {
   passport: 'Passport', id: 'Photo ID', rtw_check: 'Right to work check result', ni_proof: 'Proof of NI number', flt_licence: 'FLT licence', driving_licence: 'Driving licence', other: 'Other document',
 };
+/** Labels for documents ShiftReady files itself (not chosen in the upload list). */
+export const SYSTEM_DOC_LABEL: Record<string, string> = { induction_site: 'Induction day-one sign-off', mh_assessment: 'Manual handling assessment' };
 const EXT: Record<string, string> = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heif', 'application/pdf': 'pdf',
 };

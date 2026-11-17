@@ -5,7 +5,7 @@ import { weekHours, weekOf } from '@/lib/clash';
 import { displayMobile } from '@/lib/phone';
 import { fmtDateTime, shiftWhen } from '@/lib/format';
 import { DOC_LABEL, type DocKind } from '@/lib/docs';
-import { DOC_KIND_LABEL, type DocKindFile } from '@/lib/storage';
+import { DOC_KIND_LABEL, SYSTEM_DOC_LABEL, type DocKindFile } from '@/lib/storage';
 import { RecordActions, RtwCheck, Uploader, Reveal, BankActions, EditDetails, CopyPayroll, EditRegistration, LicenceActions, HoursLimit } from './TempRecord';
 import { licenceLabel, CHECK_CODE_DAYS } from '@/lib/regOptions';
 import { CopyButton } from '@/components/Copy';
@@ -280,7 +280,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
               <tbody>
                 {(docs ?? []).map((d) => (
                   <tr key={d.id}>
-                    <td><b>{DOC_KIND_LABEL[d.kind as DocKindFile] ?? d.kind}</b><br /><span className="note">{name(d.uploaded_by)} · {day(d.created_at)}</span></td>
+                    <td><b>{DOC_KIND_LABEL[d.kind as DocKindFile] ?? SYSTEM_DOC_LABEL[d.kind] ?? d.kind}</b><br /><span className="note">{name(d.uploaded_by)} · {day(d.created_at)}</span></td>
                     <td style={{ textAlign: 'right' }}><a className="btn ghost small" href={`/api/docs/${d.id}`} target="_blank" rel="noopener noreferrer">Open</a></td>
                   </tr>
                 ))}

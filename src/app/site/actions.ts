@@ -52,3 +52,15 @@ export async function siteRecordUpload(inductionId: string, paths: { path: strin
   await db.from('audit_log').insert({ actor: null, action: 'induction.site_uploaded', detail: `${a.sup.full_name} (site login ${a.sup.username}) uploaded the day-one sign-off for ${t?.first_name} ${t?.last_name}` });
   return { ok: true, message: `Saved to ${t?.first_name}’s file.` };
 }
+
+/** Manual handling practical assessment done on site by the supervisor. */
+export async function saveMhSite(inductionId: string, p: import('@/lib/mhAssessment').MhInput): Promise<Result> {
+  const a = await allowed(inductionId);
+  if (!a) return { ok: false, error: 'You can only do this for people booked on today’s shifts.' };
+  const { saveMh } = await import('@/lib/mhAssessment');
+  const ip = (headers().get('x-forwarded-for') || '').split(',')[0].trim().slice(0, 60) || null;
+  const r = await saveMh(createAdminClient(), a.i, p, { supervisor: a.sup.id, ip });
+  if (!r.ok) return r;
+  await createAdminClient().from('audit_log').insert({ actor: null, action: 'induction.mh_assessment', detail: `${a.sup.full_name} (site login ${a.sup.username}) recorded the manual handling assessment for ${r.name}` });
+  return { ok: true, message: r.message };
+}

@@ -116,3 +116,16 @@ export async function recordSiteStaff(id: string, paths: { path: string; filenam
   const st = statusOf({ ...i, site_signed_at: 'now' });
   return { ok: true, message: st === 'complete' ? 'Uploaded. Fully inducted.' : 'Uploaded. They still need to finish signing in the app.' };
 }
+
+/** Manual handling practical assessment done in the app by office staff. */
+export async function saveMhStaff(id: string, p: import('@/lib/mhAssessment').MhInput): Promise<Result> {
+  const { supabase, profile } = await requireStaff();
+  const i = await load(supabase, id);
+  if (!i || i.cancelled_at) return { ok: false, error: 'Not found.' };
+  const { saveMh } = await import('@/lib/mhAssessment');
+  const r = await saveMh(createAdminClient(), i, p, { staff: profile.id });
+  if (!r.ok) return r;
+  await audit(supabase, profile.id, 'induction.mh_assessment', `Recorded the manual handling assessment for ${r.name} (trainer ${p.trainerName.trim()})`);
+  refresh(i.temp_id, id);
+  return { ok: true, message: r.message };
+}

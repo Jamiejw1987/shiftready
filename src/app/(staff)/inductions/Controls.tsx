@@ -3,7 +3,8 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { CopyButton } from '@/components/Copy';
 import { prepareFile, uploadToSlot } from '@/lib/upload';
-import { sendInduction, resendInduction, inductionLink, updateInductionDetails, setChecked, reopenInduction, cancelInduction, siteSlotStaff, recordSiteStaff } from './actions';
+import { MhForm } from '@/components/MhForm';
+import { saveMhStaff, sendInduction, resendInduction, inductionLink, updateInductionDetails, setChecked, reopenInduction, cancelInduction, siteSlotStaff, recordSiteStaff } from './actions';
 import type { SendDetails } from '@/lib/inductionOps';
 
 type Msg = { ok: boolean; text: string } | null;
@@ -134,4 +135,10 @@ export function SitePhotoUpload({ slot, record, label = 'Upload photo of signed 
 
 export function StaffSiteUpload({ id }: { id: string }) {
   return <SitePhotoUpload slot={(type, size) => siteSlotStaff(id, type, size)} record={(paths) => recordSiteStaff(id, paths)} />;
+}
+
+export function StaffMh({ id, candidate, location, trainer }: { id: string; candidate: string; location: string; trainer: string }) {
+  const [open, setOpen] = useState(false);
+  if (!open) return <button className="btn ghost" onClick={() => setOpen(true)}>Do manual handling assessment</button>;
+  return <MhForm candidate={candidate} location={location} trainer={trainer} save={(p) => saveMhStaff(id, p)} />;
 }

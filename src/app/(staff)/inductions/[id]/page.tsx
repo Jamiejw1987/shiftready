@@ -4,7 +4,8 @@ import { requireStaff } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { loadFull } from '@/lib/inductionLoad';
 import { STATUS_PILL, fmtDay, fmtStamp, progress, statusOf, visiblePages } from '@/lib/inductions';
-import { InductionButtons, StaffSiteUpload } from '../Controls';
+import { InductionButtons, StaffSiteUpload, StaffMh } from '../Controls';
+import { hasMhSheets } from '@/lib/mhAssessment';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +29,10 @@ export default async function InductionReview({ params }: { params: { id: string
   const a = i.answers ?? {};
   const mk = new Map(marks.map((m) => [`${m.doc_id}:${m.page}`, m]));
   const sigs = marks.filter((m) => m.signature).sort((x, y) => x.at.localeCompare(y.at));
+  const mhOn = await hasMhSheets(db, i);
+  const { data: mhDone } = mhOn ? await db.from('induction_assessments').select('trainer_name,at').eq('induction_id', i.id).order('at', { ascending: false }).limit(1).maybeSingle() : { data: null };
+  const { data: me } = await supabase.auth.getUser();
+  const { data: myProfile } = me.user ? await supabase.from('profiles').select('full_name').eq('id', me.user.id).maybeSingle() : { data: null };
 
   return (
     <>
@@ -73,11 +78,20 @@ export default async function InductionReview({ params }: { params: { id: string
         </section>
       )}
 
+      {mhOn && st !== 'cancelled' && (
+        <section className="panel">
+          <h2>Manual handling assessment</h2>
+          {mhDone ? <p className="okmsg">✓ Done {fmtStamp(mhDone.at)}, trainer {mhDone.trainer_name}. It’s on their file and in the signed PDF.</p>
+            : <><p className="lede">Done in person on day one, usually from the site login. If you’re with them, you can do it here.</p>
+              <StaffMh id={i.id} candidate={`${temp.first_name} ${temp.last_name}`} location={a.site || pack.default_site || ''} trainer={myProfile?.full_name ?? ''} /></>}
+        </section>
+      )}
+
       <section className="panel">
         <h2>Day-one sign-off on site</h2>
         <p className="lede">Print the day-one sheet with their details already on it. On their first day, they and your site person sign and date it on paper; it goes to the client, and a photo of it comes in here (from the site login, or upload it below).</p>
         {siteFiles.length > 0 && <div className="tablewrap" style={{ marginBottom: 12 }}><table><tbody>
-          {siteFiles.map((s) => <tr key={s.id}><td>{s.filename ?? 'Photo'}<br /><span className="note">{fmtStamp(s.created_at)}</span></td><td style={{ textAlign: 'right' }}><a className="btn ghost small" href={`/api/docs/${s.id}`} target="_blank" rel="noopener noreferrer">Open</a></td></tr>)}
+          {siteFiles.map((s) => <tr key={s.id}><td>{s.kind === 'mh_assessment' ? 'Manual handling assessment' : s.filename ?? 'Photo'}<br /><span className="note">{fmtStamp(s.created_at)}</span></td><td style={{ textAlign: 'right' }}><a className="btn ghost small" href={`/api/docs/${s.id}`} target="_blank" rel="noopener noreferrer">Open</a></td></tr>)}
         </tbody></table></div>}
         {st !== 'cancelled' && <StaffSiteUpload id={i.id} />}
       </section>
