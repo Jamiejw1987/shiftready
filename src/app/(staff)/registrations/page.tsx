@@ -66,6 +66,7 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
     applyMessage(supabase),
     profile.role === 'admin' ? createAdminClient().from('app_secrets').select('value').eq('name', 'apply_key').maybeSingle() : Promise.resolve({ data: null }),
   ]);
+  const { data: packs } = await supabase.from('induction_packs').select('id,name').eq('active', true).order('name');
   const problems = [...(encryptionReady() ? [] : ['the encryption key (FIELD_ENCRYPTION_KEY) hasn’t been added in Vercel']), ...docProblems(docs)];
   const by = (id: string | null) => users?.find((u) => u.id === id)?.full_name ?? '-';
   const total = invitedCount ?? 0;
@@ -86,7 +87,7 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
         {problems.length > 0 && (
           <p className="alert" style={{ marginBottom: 14 }}>Registration links are switched off until: {problems.join('; ')}.{profile.role === 'admin' ? <> <Link href="/team/documents">Open Documents</Link></> : ' Ask an admin.'}</p>
         )}
-        <InviteForm disabled={problems.length > 0} base={appUrl()} applicantTemplate={applyText} />
+        <InviteForm disabled={problems.length > 0} base={appUrl()} applicantTemplate={applyText} packs={packs ?? []} />
       </section>
 
       <section className="panel">

@@ -35,6 +35,8 @@ export default async function RegisterPage({ params }: { params: { token: string
       db.from('temp_requests').select('id,kind,status,start_date,end_date,days,last_day,delivery,response_note,created_at').eq('temp_id', t.id).order('created_at', { ascending: false }).limit(8),
     ]);
     const waiting = t.status === 'review';
+    // A client induction still to do (sent with their registration link, or since).
+    const { data: inds } = await db.from('temp_inductions').select('token,induction_packs(name)').eq('temp_id', t.id).is('cancelled_at', null).is('signed_at', null).order('sent_at');
     return shell(
       <>
         <div className="state">
@@ -45,6 +47,13 @@ export default async function RegisterPage({ params }: { params: { token: string
             : t.status === 'active' ? 'You’ll get shift offers near you that match your skills.' : 'Please call the office if you have any questions.'}</p>
           {!waiting && !t.bank_on_file && <a className="btn blue" href={`/b/${params.token}`}>Add bank details</a>}
         </div>
+        {(inds ?? []).map((i) => (
+          <div key={i.token} className="state">
+            <div className="big">Next: your induction</div>
+            <p>Please complete the {(i.induction_packs as unknown as { name: string } | null)?.name ?? 'client induction'} before your first shift.</p>
+            <a className="btn blue" href={`/i/${i.token}`}>Start the induction</a>
+          </div>
+        ))}
         {!waiting && <SelfService token={params.token} requests={(reqs ?? []) as MyRequest[]} hasEmail={!!prof?.email} hasAddress={!!prof?.address1} />}
         {prof && <WtrChange token={params.token} optedOut={!!prof.wtr_opt_out} effective={prof.wtr_effective} lastName={t.last_name} />}
       </>,

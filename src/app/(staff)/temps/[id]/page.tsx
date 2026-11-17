@@ -12,6 +12,8 @@ import { CopyButton } from '@/components/Copy';
 import { JOB_TYPES } from '@/lib/format';
 import { loadAssignments, isCurrent } from '@/lib/ongoing';
 import { MessagesSwitch, WorkerOngoing } from '../../ongoing/Ongoing';
+import { SendInduction, InductionButtons } from '../../inductions/Controls';
+import { IND_COLS, STATUS_PILL, statusOf, fmtDay, type TempInduction } from '@/lib/inductions';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,6 +80,12 @@ export default async function TempRecordPage({ params }: { params: { id: string 
   const messagesOff = !!t.no_comms;
   const imported = !!t.imported_at;
   const showRecord = !!t.registered_at || imported;
+  // Client inductions (need supabase/2026-11-17-inductions.sql).
+  const [{ data: indRows, error: indErr }, { data: packRows }] = await Promise.all([
+    supabase.from('temp_inductions').select(`${IND_COLS},induction_packs(name)`).eq('temp_id', t.id).order('sent_at', { ascending: false }),
+    supabase.from('induction_packs').select('id,name,default_site,default_scope,default_arrival').eq('active', true).order('name'),
+  ]);
+  const inductions = ((indRows ?? []) as unknown as (TempInduction & { induction_packs: { name: string } | null })[]);
 
   return (
     <>
@@ -131,6 +139,34 @@ export default async function TempRecordPage({ params }: { params: { id: string 
         )}
         <HoursLimit id={t.id} cap={t.hours_cap ?? null} reason={t.hours_cap_reason ?? null} />
       </section>
+
+      {!indErr && (
+        <section className="panel">
+          <h2>Client inductions</h2>
+          <p className="note" style={{ marginTop: 0 }}>Client induction packs they read and sign on their phone. Check their signatures before they go to site; the day-one sheet is signed on paper on site and photographed in.</p>
+          {inductions.length > 0 && (
+            <div className="tablewrap" style={{ marginBottom: 12 }}><table>
+              <tbody>
+                {inductions.map((i) => {
+                  const st = statusOf(i);
+                  const [k, l] = STATUS_PILL[st];
+                  const a = i.answers ?? {};
+                  return (
+                    <tr key={i.id}>
+                      <td>
+                        <b>{i.induction_packs?.name ?? 'Induction'}</b> <span className={`pill ${k}`}>{l}</span>{a.footwear === false && <> <span className="pill bad">No safety boots</span></>}
+                        <div className="note">{[a.site, a.startDate ? `starts ${fmtDay(a.startDate)}` : '', a.arrival ? `arrive ${a.arrival}` : ''].filter(Boolean).join(' · ') || 'No site details yet'} · sent {day(i.sent_at)}</div>
+                        <div style={{ marginTop: 8 }}><InductionButtons id={i.id} status={st} details={{ site: a.site ?? '', scope: a.scope ?? '', startDate: a.startDate ?? '', arrival: a.arrival ?? '' }} /></div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table></div>
+          )}
+          {!messagesOff && t.status !== 'out' && <SendInduction tempId={t.id} registered={!!t.registered_at} packs={(packRows ?? []).map((p) => ({ id: p.id, name: p.name, site: p.default_site ?? '', scope: p.default_scope ?? '', arrival: p.default_arrival ?? '' }))} />}
+        </section>
+      )}
 
       {(feedback?.length || blocks?.length) ? (
         <section className="panel">

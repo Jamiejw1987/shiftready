@@ -31,6 +31,11 @@ export default async function TeamPage() {
         <Link className="btn ghost" href="/team/documents">Open documents</Link>
       </section>
       <section className="panel">
+        <h2>Client inductions</h2>
+        <p className="lede">Client induction packs (e.g. DHL) that temps read and sign on their phone, and the site supervisor logins for day-one sign-off.</p>
+        <Link className="btn ghost" href="/team/inductions">Open client inductions</Link>
+      </section>
+      <section className="panel">
         <h2>Audit trail</h2>
         <p className="lede">Who did what, and when. Latest 300 actions. Only admins can see this.</p>
         <div className="tablewrap"><table className="cards">

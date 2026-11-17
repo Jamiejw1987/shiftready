@@ -3,7 +3,8 @@ import { revalidatePath } from 'next/cache';
 import { requireStaff, audit } from '@/lib/auth';
 import { toE164, displayMobile } from '@/lib/phone';
 import { sendToTemp, sendMany } from '@/lib/sms';
-import { regInviteText } from '@/lib/texts';
+import { regInviteText, regWithInductionText, appUrl } from '@/lib/texts';
+import { createInduction } from '@/lib/inductionOps';
 import { applyMessageProblems, renderApplyMessage } from '@/lib/applyMessage';
 import { currentDocs, docProblems } from '@/lib/docs';
 import { encryptionReady } from '@/lib/crypto';
@@ -27,7 +28,7 @@ async function readyToRegister(supabase: Awaited<ReturnType<typeof requireStaff>
 }
 
 /** Creates an invited candidate and texts them their personal registration link. */
-export async function sendRegistrationLink(input: { first: string; last: string; mobile: string; message?: string; job?: string }): Promise<Result> {
+export async function sendRegistrationLink(input: { first: string; last: string; mobile: string; message?: string; job?: string; packId?: string }): Promise<Result> {
   const { supabase, profile } = await requireStaff();
   const m = checkMessage(input.message);
   if (m.error) return { ok: false, error: m.error };
@@ -45,10 +46,20 @@ export async function sendRegistrationLink(input: { first: string; last: string;
     .select('id,mobile,reg_token')
     .single();
   if (error || !t) return { ok: false, error: 'Couldn’t save. Try again.' };
-  const r = await sendToTemp({ db: supabase, temp: t, kind: 'registration', sentBy: profile.id, body: inviteBody(m.template, first, t.reg_token, input.job) });
-  await audit(supabase, profile.id, 'temp.invited', `Sent registration link to ${first} ${last} (${displayMobile(mobile)})${r.ok ? '' : ' - text failed'}`);
+  // A client induction sent with the registration link (one text with both links).
+  let body = inviteBody(m.template, first, t.reg_token, input.job);
+  let withInd = '';
+  if (input.packId) {
+    const c = await createInduction(supabase, { tempId: t.id, packId: input.packId, details: { site: '', scope: '', startDate: '', arrival: '' }, sentBy: profile.id });
+    if (c.ok) {
+      body = m.template ? `${body} Then complete the ${c.packName}: ${appUrl()}/i/${c.induction.token}` : regWithInductionText(first, t.reg_token, c.packName, c.induction.token);
+      withInd = ` with the ${c.packName}`;
+    } else withInd = ` (induction not added: ${c.error})`;
+  }
+  const r = await sendToTemp({ db: supabase, temp: t, kind: 'registration', sentBy: profile.id, body });
+  await audit(supabase, profile.id, 'temp.invited', `Sent registration link${withInd} to ${first} ${last} (${displayMobile(mobile)})${r.ok ? '' : ' - text failed'}`);
   revalidatePath('/registrations');
-  return r.ok ? { ok: true, message: `Registration link sent to ${first}.` } : { ok: true, message: `${first} added, but the text failed (${r.error}). Use Resend.` };
+  return r.ok ? { ok: true, message: `Registration link sent to ${first}${withInd}.` } : { ok: true, message: `${first} added, but the text failed (${r.error}). Use Resend.` };
 }
 
 /** Texts the registration link again, or for the first time to a temp who was added before registration existed. */
@@ -61,7 +72,11 @@ export async function resendRegistration(id: string): Promise<Result> {
   if (t.registered_at) return { ok: false, error: `${t.first_name} has already registered.` };
   if (t.status === 'out') return { ok: false, error: `${t.first_name} has opted out of messages.` };
   await supabase.from('temps').update({ reg_requested_at: new Date().toISOString() }).eq('id', id);
-  const r = await sendToTemp({ db: supabase, temp: t, kind: 'registration', sentBy: profile.id, body: regInviteText(t.first_name, t.reg_token) });
+  // Include a client induction that's waiting for them, so both links go in one text.
+  const { data: ind } = await supabase.from('temp_inductions').select('token,induction_packs(name)').eq('temp_id', id).is('cancelled_at', null).is('signed_at', null).order('sent_at', { ascending: false }).limit(1).maybeSingle();
+  const packName = (ind?.induction_packs as unknown as { name: string } | null)?.name;
+  const body = ind && packName ? regWithInductionText(t.first_name, t.reg_token, packName, ind.token) : regInviteText(t.first_name, t.reg_token);
+  const r = await sendToTemp({ db: supabase, temp: t, kind: 'registration', sentBy: profile.id, body });
   await audit(supabase, profile.id, 'temp.invite_resent', `Sent registration link to ${t.first_name} ${t.last_name}`);
   revalidatePath('/registrations');
   revalidatePath(`/temps/${id}`);

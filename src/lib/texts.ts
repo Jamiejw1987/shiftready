@@ -88,6 +88,12 @@ export const p45SentText = (first: string, delivery: string | null, note?: strin
 export const p45DeclinedText = (first: string, note?: string | null) =>
   `Hi ${first}, we couldn't process your P45 request yet.${note ? ` ${note}` : ' Please call the office.'} - Staff Selection`;
 
+/** Client induction (e.g. DHL). Sent on its own, or added to the registration text for someone who hasn't registered yet. */
+export const inductionText = (first: string, packName: string, token: string) =>
+  `Hi ${first}, before your first shift please complete the ${packName} on your phone: ${appUrl()}/i/${token} Read every page and sign as you go. It takes about 30 minutes and saves as you go. - Staff Selection`;
+export const regWithInductionText = (first: string, regToken: string, packName: string, indToken: string) =>
+  `Hi ${first}, Staff Selection UK here. Please register for temp work using your personal link: ${appUrl()}/r/${regToken} Then complete the ${packName}: ${appUrl()}/i/${indToken} Have your share code or passport ready. Reply STOP to opt out. - Staff Selection`;
+
 export const myLinkText = (first: string, token: string) =>
   `Hi ${first}, here's your Staff Selection link to request holiday or your P45. Keep it for next time: ${appUrl()}/me/${token} - Staff Selection`;
 

@@ -134,3 +134,12 @@ Client reports (**Clients > a client > Report**) are internal: pick the dates, c
 
 1. **Database:** Supabase > SQL Editor > New query. Paste all of `supabase/2026-11-05-driving.sql` and click **Run**. Safe to run again.
 2. That's it. "Driving" now appears as a type of work. Candidates who tick it give their licence number, categories, points, a photo of their licence and (ideally) a DVLA check code. The temp's record has a Driving licence panel with a link to GOV.UK's licence check, a button to text them for a new check code, and a place to record the result.
+
+## Client inductions (e.g. DHL) and site supervisor logins (Nov 2026)
+
+1. **Database:** Supabase > SQL Editor > New query. Paste all of `supabase/2026-11-17-inductions.sql` and click **Run**. Safe to run again.
+2. **Add the pack:** Team > Client inductions > New induction pack (name, client, site, scope of work, arrival time). Open it and press **Add PDFs**, choosing all the client's PDFs at once. They're added in file-name order (number them 01, 02…). Keep the page open until it finishes. The EVRi/DHL HSE induction form v12 is recognised automatically: every page is initialled, and pages 1 and 8 are printed for day one with the worker's details filled in.
+3. **Print-only pages:** for anything the temp shouldn't sign in the app (e.g. the manual handling practical assessment, signed by the trainer on site), open **Settings**, untick "Temps read it and sign it in the app" and put `all` in "Pages printed for the day-one paper sign-off".
+4. **Site logins:** same page, **Add a site login**. They sign in at `APP_URL/site`.
+
+How it works: send from a temp's record (**Send an induction**) or with the registration link on Sign-ups > temp reads every page on their phone, ticks "read" and "understood" and signs with their finger (they can't skip ahead; it saves as they go) > office is alerted, opens **Check signatures**, presses **Signatures checked: OK for site** > print the day-one sheet (their details already on it) > on day one they and your site person sign it on paper, it goes to the client, and the site person photographs it from `/site` > **Signed PDF** on their record gives the client's pages exactly as supplied, a signature strip under every page, the form filled in, the day-one photo and a full record of times and IP addresses.

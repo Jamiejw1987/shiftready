@@ -43,18 +43,19 @@ function InviteMessage({ text, setText, job, setJob, base, applicantTemplate, sa
   );
 }
 
-export function InviteForm({ disabled, base, applicantTemplate }: { disabled: boolean } & MsgProps) {
+export function InviteForm({ disabled, base, applicantTemplate, packs = [] }: { disabled: boolean; packs?: { id: string; name: string }[] } & MsgProps) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [f, setF] = useState({ first: '', last: '', mobile: '' });
   const [text, setText] = useState(STANDARD_INVITE_MESSAGE);
   const [job, setJob] = useState('');
+  const [packId, setPackId] = useState('');
   useEffect(() => setText(load(STANDARD_INVITE_MESSAGE)), []);
   const bad = applyMessageProblems(text).length > 0;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   function send() {
     start(async () => {
-      const r = await sendRegistrationLink({ ...f, message: text, job });
+      const r = await sendRegistrationLink({ ...f, message: text, job, packId });
       setMsg({ ok: r.ok, text: r.ok ? r.message! : r.error! });
       if (r.ok) { setF({ first: '', last: '', mobile: '' }); router.refresh(); }
     });
@@ -67,8 +68,14 @@ export function InviteForm({ disabled, base, applicantTemplate }: { disabled: bo
         <div className="f w2"><label className="l" htmlFor="iMob">Mobile</label><input id="iMob" type="tel" placeholder="07…" value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value })} /></div>
       </div>
       <InviteMessage text={text} setText={setText} job={job} setJob={setJob} base={base} applicantTemplate={applicantTemplate} sampleFirst={f.first.trim() || undefined} />
+      {packs.length > 0 && (
+        <div className="f" style={{ marginTop: 12, maxWidth: 420 }}><label className="l" htmlFor="iPack">Client induction <span className="note">sent with the registration link</span></label>
+          <select id="iPack" value={packId} onChange={(e) => setPackId(e.target.value)}>
+            <option value="">None</option>{packs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select></div>
+      )}
       <div className="bar">
-        {msg ? <p className={msg.ok ? 'okmsg' : 'err'}>{msg.text}</p> : <span className="note">They’ll get this text with their personal link.</span>}
+        {msg ? <p className={msg.ok ? 'okmsg' : 'err'}>{msg.text}</p> : <span className="note">They’ll get this text with their personal link{packId ? ' and the induction link' : ''}.</span>}
         <button className="btn blue" disabled={disabled || pending || bad} onClick={send}>{pending ? 'Sending…' : 'Send registration link'}</button>
       </div>
     </>
