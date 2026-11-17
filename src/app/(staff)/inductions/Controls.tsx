@@ -32,7 +32,7 @@ function DetailFields({ d, set }: { d: SendDetails; set: (d: SendDetails) => voi
 export type PackOpt = { id: string; name: string; site: string; scope: string; arrival: string };
 
 /** On the temp's record: pick a pack, check the details printed on the form, send. */
-export function SendInduction({ tempId, packs, registered }: { tempId: string; packs: PackOpt[]; registered: boolean }) {
+export function SendInduction({ tempId, packs, registered, noText = false }: { tempId: string; packs: PackOpt[]; registered: boolean; noText?: boolean }) {
   const { pending, msg, run } = useRun();
   const [open, setOpen] = useState(false);
   const [packId, setPackId] = useState(packs[0]?.id ?? '');
@@ -48,10 +48,11 @@ export function SendInduction({ tempId, packs, registered }: { tempId: string; p
         </select></div>
       <p className="note" style={{ margin: '8px 0' }}>Printed on the client’s form. You can change these later.</p>
       <DetailFields d={d} set={setD} />
-      {!registered && <p className="note">They haven’t registered yet: the text asks them to do the induction once they have. They can do it in either order.</p>}
+      {noText && <p className="note">Their messages are off, so ShiftReady won’t text them. It’s added to their record: use <b>Copy link</b> and send it to them yourself (e.g. WhatsApp).</p>}
+      {!noText && !registered && <p className="note">They haven’t registered yet: the text asks them to do the induction once they have. They can do it in either order.</p>}
       <div className="btnrow" style={{ justifyContent: 'flex-end', marginTop: 10 }}>
         <button className="btn ghost" onClick={() => setOpen(false)}>Cancel</button>
-        <button className="btn blue" disabled={pending || !packId} onClick={() => run(() => sendInduction(tempId, packId, d), () => setOpen(false))}>Send by text</button>
+        <button className="btn blue" disabled={pending || !packId} onClick={() => run(() => sendInduction(tempId, packId, d), () => setOpen(false))}>{noText ? 'Add induction' : 'Send by text'}</button>
       </div>
       <Note m={msg} />
     </div>

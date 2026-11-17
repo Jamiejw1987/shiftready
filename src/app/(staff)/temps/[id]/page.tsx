@@ -164,7 +164,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
               </tbody>
             </table></div>
           )}
-          {!messagesOff && t.status !== 'out' && <SendInduction tempId={t.id} registered={!!t.registered_at} packs={(packRows ?? []).map((p) => ({ id: p.id, name: p.name, site: p.default_site ?? '', scope: p.default_scope ?? '', arrival: p.default_arrival ?? '' }))} />}
+          {<SendInduction tempId={t.id} registered={!!t.registered_at} noText={messagesOff || t.status === 'out'} packs={(packRows ?? []).map((p) => ({ id: p.id, name: p.name, site: p.default_site ?? '', scope: p.default_scope ?? '', arrival: p.default_arrival ?? '' }))} />}
         </section>
       )}
 

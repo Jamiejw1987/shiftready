@@ -25,7 +25,7 @@ export async function sendInduction(tempId: string, packId: string, details: Sen
   const r = t.status === 'out' ? { ok: false, error: 'opted out of texts' } : await sendToTemp({ db: supabase, temp: t, kind: 'induction', sentBy: profile.id, body: inductionText(t.first_name, c.packName, c.induction.token) });
   await audit(supabase, profile.id, 'induction.sent', `Sent the ${c.packName} to ${t.first_name} ${t.last_name}${r.ok ? '' : ' - text not sent'}`);
   refresh(tempId);
-  return r.ok ? { ok: true, message: `${c.packName} sent to ${t.first_name}.` } : { ok: true, message: `Added, but the text wasn’t sent (${r.error}). Copy the link and send it another way.` };
+  return r.ok ? { ok: true, message: `${c.packName} sent to ${t.first_name}.` } : { ok: true, message: `Added. No text was sent (${r.error}): use Copy link and send it to ${t.first_name} yourself.` };
 }
 
 export async function resendInduction(id: string): Promise<Result> {
