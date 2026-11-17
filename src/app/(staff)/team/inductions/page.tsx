@@ -9,7 +9,7 @@ export default async function InductionsPage() {
   const { supabase } = await requireStaff({ admin: true });
   const [{ data: packs, error }, { data: docs }, { data: clients }, { data: sups }, { data: sent }] = await Promise.all([
     supabase.from('induction_packs').select('id,name,active,client_id,clients(name)').order('created_at'),
-    supabase.from('induction_docs').select('pack_id,page_count,in_app').is('archived_at', null),
+    supabase.from('induction_docs').select('*').is('archived_at', null),
     supabase.from('clients').select('id,name').eq('active', true).order('name'),
     createAdminClient().from('site_supervisors').select('id,username,full_name,client_id,active,last_login_at').order('full_name'),
     supabase.from('temp_inductions').select('pack_id').is('cancelled_at', null),
@@ -30,7 +30,7 @@ export default async function InductionsPage() {
               return (
                 <tr key={p.id}>
                   <td><Link href={`/team/inductions/${p.id}`}><b>{p.name}</b></Link><br />
-                    <span className="note">{(p.clients as unknown as { name: string } | null)?.name ?? 'Any client'} · {d.length} document{d.length === 1 ? '' : 's'}, {d.filter((x) => x.in_app).reduce((n, x) => n + x.page_count, 0)} pages to read · sent to {(sent ?? []).filter((s) => s.pack_id === p.id).length}</span></td>
+                    <span className="note">{(p.clients as unknown as { name: string } | null)?.name ?? 'Any client'} · {d.length} document{d.length === 1 ? '' : 's'}, {d.filter((x) => x.in_app).reduce((n, x) => n + x.page_count - ((x.hidden_pages as number[] | null)?.length ?? 0), 0)} pages to read · sent to {(sent ?? []).filter((s) => s.pack_id === p.id).length}</span></td>
                   <td style={{ textAlign: 'right' }}>{p.active ? <span className="pill ok">On</span> : <span className="pill mute">Off</span>}</td>
                 </tr>
               );
