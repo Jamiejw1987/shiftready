@@ -107,7 +107,7 @@ export async function registerDoc(packId: string, docId: string, title: string, 
     path: `${base}.pdf`, page_count: pages, page_sizes: sizes, page_images: images,
     template: tpl?.id ?? null, sign_mode: tpl?.defaults.sign_mode ?? 'document', site_pages: tpl?.defaults.site_pages ?? [],
   };
-  const hidden = tpl || sheets.length >= pages ? [] : sheets;
+  const hidden = tpl ? tpl.defaults.hidden_pages : sheets.length >= pages ? [] : sheets;
   let { error } = await supabase.from('induction_docs').insert({ ...row, hidden_pages: hidden });
   if (error && /hidden_pages/.test(error.message)) ({ error } = await supabase.from('induction_docs').insert(row));
   if (error) return { ok: false, error: 'Couldn’t save the document.' };

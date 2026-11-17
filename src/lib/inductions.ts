@@ -149,7 +149,10 @@ export const EVRI_HSE_V12 = {
     workerName: { x: 161, y: top(733), maxW: 74 }, workerSig: { x: 381, y: top(740), w: 46, h: 23 }, workerDate: { x: 481, y: top(733) },
   },
   /** Which pages the temp signs on (every page is initialled; these two carry the full declarations). */
-  defaults: { sign_mode: 'every_page' as const, site_pages: [1, 8] },
+  // Pages 1 and 8 carry the worker's details: ShiftReady fills them in on our side, so temps don't see them.
+  defaults: { sign_mode: 'every_page' as const, site_pages: [1, 8], hidden_pages: [1, 8] },
+  /** Pages ShiftReady fills in itself; kept in the signed PDF even when hidden from temps. */
+  filledPages: [1, 8],
 };
 export const TEMPLATES = [EVRI_HSE_V12];
 export const templateLabel = (id: string | null) => TEMPLATES.find((t) => t.id === id)?.label ?? null;

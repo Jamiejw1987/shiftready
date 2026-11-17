@@ -152,7 +152,9 @@ export async function buildSignedPdf(db: SupabaseClient, a: {
   for (const d of inApp) {
     const src = await PDFDocument.load(await download(db, d.path), { ignoreEncryption: true });
     // Pages temps never saw (the client's blank group sign-in sheets) are left out.
-    const shown = visiblePages(d).filter((n) => n <= src.getPageCount());
+    // The client's form pages we fill in ourselves (name, site, dates) stay in, even though temps don't see them.
+    const filled = d.template === EVRI_HSE_V12.id ? EVRI_HSE_V12.filledPages : [];
+    const shown = Array.from(new Set([...visiblePages(d), ...filled])).sort((x, y) => x - y).filter((n) => n <= src.getPageCount());
     const pages = await addSourcePages(out, src, shown.map((n) => n - 1));
     const docSig = mk.get(`${d.id}:0`);
     const docSigImg = await embedSig(out, docSig?.signature);
@@ -165,10 +167,13 @@ export async function buildSignedPdf(db: SupabaseClient, a: {
       const s = addStrip(page);
       const x = s.x0 + 16, yTop = s.y0 + STRIP - 13;
       text(page, c, `${det.name}  |  ${d.title}  |  page ${n} of ${d.page_count}`, x, yTop, 7.5, { bold: true, maxW: s.width - 190 });
-      text(page, c, m
-        ? `I have read this page: ${m.read_ok ? 'YES' : 'NO'}    I understand this page: ${m.understood_ok ? 'YES' : 'NO'}    ${fmtStamp(m.at)}${m.ip ? `  IP ${m.ip}` : ''}`
-        : 'Not confirmed', x, yTop - 11, 7, { maxW: s.width - 190 });
-      text(page, c, `Signed electronically in ShiftReady by Staff Selection UK. Ref ${ref}.`, x, yTop - 22, 6.5, { color: GREY });
+      const ours = d.hidden_pages.includes(n);
+      text(page, c, ours
+        ? 'Details filled in by Staff Selection UK from the worker’s record. Signed on paper on site on day one.'
+        : m
+          ? `I have read this page: ${m.read_ok ? 'YES' : 'NO'}    I understand this page: ${m.understood_ok ? 'YES' : 'NO'}    ${fmtStamp(m.at)}${m.ip ? `  IP ${m.ip}` : ''}`
+          : 'Not confirmed', x, yTop - 11, 7, { maxW: s.width - 190 });
+      text(page, c, `${ours ? 'Prepared' : 'Signed electronically'} in ShiftReady by Staff Selection UK. Ref ${ref}.`, x, yTop - 22, 6.5, { color: GREY });
       // Initials for this page, or the document signature on its last page.
       const boxX = s.x0 + s.width - 170;
       if (sig) { text(page, c, 'Initials:', boxX, yTop, 6.5, { color: GREY }); fitImage(page, sig, boxX, s.y0 + 4, 75, STRIP - 18); }

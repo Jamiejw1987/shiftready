@@ -10,3 +10,9 @@ update public.induction_docs
    and page_count > 1
    and template is null
    and (title ilike 'HSE0%' or title ilike 'SOM %');
+
+-- The EVRi / DHL HSE induction form: pages 1 and 8 hold the worker's details and the on-site sign-off.
+-- Staff Selection fills those in; temps read and initial pages 2 to 7.
+update public.induction_docs
+   set hidden_pages = '{1,8}'
+ where template = 'evri_hse_v12' and hidden_pages = '{}' and archived_at is null;
