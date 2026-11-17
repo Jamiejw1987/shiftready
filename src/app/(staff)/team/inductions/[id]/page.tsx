@@ -33,13 +33,13 @@ export default async function PackPage({ params }: { params: { id: string } }) {
 
       <section className="panel">
         <h2>Documents, in order</h2>
-        <p className="lede">The client’s PDFs exactly as supplied. Temps go through them in this order: {inApp.length} document{inApp.length === 1 ? '' : 's'}, {inApp.reduce((n, d) => n + d.page_count, 0)} pages.
+        <p className="lede">The client’s PDFs exactly as supplied. Temps go through them in this order: {inApp.length} document{inApp.length === 1 ? '' : 's'}, {inApp.reduce((n, d) => n + d.page_count - d.hidden_pages.length, 0)} pages.
           {sitePrint.length > 0 && <> Day-one paper sheets: {sitePrint.map((d) => `${d.title} (page${d.site_pages.length === 1 ? '' : 's'} ${d.site_pages.join(', ')})`).join('; ')}.</>}</p>
         <div className="tablewrap" style={{ marginBottom: 14 }}><table>
           <tbody>
             {docs.map((d, i) => (
               <DocRow key={d.id} first={i === 0} last={i === docs.length - 1} d={{
-                id: d.id, title: d.title, page_count: d.page_count, in_app: d.in_app, sign_mode: d.sign_mode, site_pages: d.site_pages,
+                id: d.id, title: d.title, page_count: d.page_count, in_app: d.in_app, sign_mode: d.sign_mode, site_pages: d.site_pages, hidden_pages: d.hidden_pages,
                 template: d.template, templateLabel: templateLabel(d.template), preview: url(d.page_images[0]),
               }} />
             ))}

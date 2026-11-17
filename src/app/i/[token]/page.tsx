@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { Logo } from '@/components/Logo';
-import { IND_COLS, docsFor, fmtDay, type Mark, type TempInduction } from '@/lib/inductions';
+import { IND_COLS, docsFor, fmtDay, visiblePages, type Mark, type TempInduction } from '@/lib/inductions';
 import { Flow, type FlowDoc } from './Flow';
 
 export const dynamic = 'force-dynamic';
@@ -36,12 +36,12 @@ export default async function InductionPage({ params }: { params: { token: strin
 
   const docs = (await docsFor(db, i.doc_ids)).filter((d) => d.in_app);
   const { data: marks } = await db.from('induction_marks').select('doc_id,page,read_ok,understood_ok,signature').eq('induction_id', i.id);
-  const all = docs.flatMap((d) => d.page_images);
+  const all = docs.flatMap((d) => visiblePages(d).map((n) => d.page_images[n - 1]).filter(Boolean));
   const { data: urls } = all.length ? await db.storage.from('documents').createSignedUrls(all, 6 * 3600) : { data: [] };
   const url = new Map((urls ?? []).map((u) => [u.path, u.signedUrl]));
   const flowDocs: FlowDoc[] = docs.map((d) => ({
     id: d.id, title: d.title, signMode: d.sign_mode, hasForm: !!d.template,
-    pages: d.page_images.map((p, k) => ({ url: url.get(p ?? '') ?? '', w: d.page_sizes[k]?.[0] ?? 595, h: d.page_sizes[k]?.[1] ?? 842 })),
+    pages: visiblePages(d).map((n) => ({ n, url: url.get(d.page_images[n - 1] ?? '') ?? '', w: d.page_sizes[n - 1]?.[0] ?? 595, h: d.page_sizes[n - 1]?.[1] ?? 842 })),
   }));
   const a = i.answers ?? {};
 

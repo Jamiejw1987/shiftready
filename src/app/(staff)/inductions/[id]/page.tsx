@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { requireStaff } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { loadFull } from '@/lib/inductionLoad';
-import { STATUS_PILL, fmtDay, fmtStamp, progress, statusOf } from '@/lib/inductions';
+import { STATUS_PILL, fmtDay, fmtStamp, progress, statusOf, visiblePages } from '@/lib/inductions';
 import { InductionButtons, StaffSiteUpload } from '../Controls';
 
 export const dynamic = 'force-dynamic';
@@ -89,10 +89,10 @@ export default async function InductionReview({ params }: { params: { id: string
             {docs.filter((d) => d.in_app).map((d) => (
               <tr key={d.id}>
                 <td><b>{d.title}</b><br /><span className="note">
-                  {Array.from({ length: d.page_count }, (_, k) => k + 1).map((n) => (mk.get(`${d.id}:${n}`)?.read_ok && mk.get(`${d.id}:${n}`)?.understood_ok ? '✓' : '·')).join(' ')}
+                  {visiblePages(d).map((n) => (mk.get(`${d.id}:${n}`)?.read_ok && mk.get(`${d.id}:${n}`)?.understood_ok ? '✓' : '·')).join(' ')}
                 </span></td>
                 <td className="note" style={{ textAlign: 'right' }}>{(() => {
-                  const last = d.sign_mode === 'document' ? mk.get(`${d.id}:0`) : mk.get(`${d.id}:${d.page_count}`);
+                  const last = d.sign_mode === 'document' ? mk.get(`${d.id}:0`) : mk.get(`${d.id}:${visiblePages(d).at(-1)}`);
                   return last?.signature ? `Signed ${fmtStamp(last.at)}` : 'Not signed';
                 })()}</td>
               </tr>

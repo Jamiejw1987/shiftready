@@ -88,14 +88,14 @@ export function DocUploader({ packId }: { packId: string }) {
   );
 }
 
-export type DocRowData = { id: string; title: string; page_count: number; in_app: boolean; sign_mode: 'document' | 'every_page'; site_pages: number[]; template: string | null; templateLabel: string | null; preview: string | null };
+export type DocRowData = { id: string; title: string; page_count: number; in_app: boolean; sign_mode: 'document' | 'every_page'; site_pages: number[]; hidden_pages: number[]; template: string | null; templateLabel: string | null; preview: string | null };
 
 export function DocRow({ d, first, last }: { d: DocRowData; first: boolean; last: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState<Msg>(null);
-  const [f, setF] = useState({ title: d.title, inApp: d.in_app, signMode: d.sign_mode, sitePages: d.site_pages.join(', ') });
+  const [f, setF] = useState({ title: d.title, inApp: d.in_app, signMode: d.sign_mode, sitePages: d.site_pages.join(', '), hiddenPages: d.hidden_pages.join(', ') });
   const run = (fn: () => Promise<{ ok: boolean; error?: string; message?: string }>) =>
     start(async () => { const r = await fn(); setMsg(r.message || r.error ? { ok: r.ok, text: r.ok ? r.message ?? '' : r.error ?? '' } : null); router.refresh(); });
   return (
@@ -104,6 +104,7 @@ export function DocRow({ d, first, last }: { d: DocRowData; first: boolean; last
         <b>{d.title}</b> <span className="note">· {d.page_count} page{d.page_count === 1 ? '' : 's'}</span>
         <div className="btnrow" style={{ marginTop: 4 }}>
           {d.in_app ? <span className="pill blue">{d.sign_mode === 'every_page' ? 'Read, tick and initial every page' : 'Read and tick every page, sign at the end'}</span> : <span className="pill mute">Not read in the app</span>}
+          {d.in_app && d.hidden_pages.length > 0 && <span className="pill mute">Hidden from temps: page{d.hidden_pages.length === 1 ? '' : 's'} {d.hidden_pages.join(', ')}</span>}
           {d.site_pages.length > 0 && <span className="pill warn">Day one on paper: page{d.site_pages.length === 1 ? '' : 's'} {d.site_pages.join(', ')}</span>}
           {d.templateLabel && <span className="pill ok">Details printed on it</span>}
         </div>
@@ -116,6 +117,8 @@ export function DocRow({ d, first, last }: { d: DocRowData; first: boolean; last
                 <option value="document">Tick every page, sign once at the end</option>
                 <option value="every_page">Tick and initial every page</option>
               </select></div>}
+            {f.inApp && <div className="f"><label className="l">Pages temps don’t see <span className="note">e.g. the blank group sign-in sheet. Blank = show every page</span></label>
+              <input value={f.hiddenPages} onChange={(e) => setF({ ...f, hiddenPages: e.target.value })} /></div>}
             <div className="f"><label className="l">Pages printed for the day-one paper sign-off <span className="note">e.g. 1, 8 or all. Blank = none</span></label>
               <input value={f.sitePages} onChange={(e) => setF({ ...f, sitePages: e.target.value })} /></div>
             <div className="btnrow">

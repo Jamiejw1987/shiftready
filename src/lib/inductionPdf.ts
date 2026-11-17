@@ -1,7 +1,7 @@
 import 'server-only';
 import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont, type PDFPage, type PDFImage } from 'pdf-lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { EVRI_HSE_V12, STATUS_PILL, briefingCode, fmtDay, fmtStamp, statusOf, type InductionDoc, type InductionPack, type Mark, type TempInduction } from './inductions';
+import { EVRI_HSE_V12, STATUS_PILL, briefingCode, visiblePages, fmtDay, fmtStamp, statusOf, type InductionDoc, type InductionPack, type Mark, type TempInduction } from './inductions';
 
 type Temp = { first_name: string; last_name: string; mobile: string };
 type SiteFile = { path: string; filename: string | null; created_at: string };
@@ -151,11 +151,13 @@ export async function buildSignedPdf(db: SupabaseClient, a: {
   const inApp = a.docs.filter((d) => d.in_app);
   for (const d of inApp) {
     const src = await PDFDocument.load(await download(db, d.path), { ignoreEncryption: true });
-    const pages = await addSourcePages(out, src, src.getPageIndices());
+    // Pages temps never saw (the client's blank group sign-in sheets) are left out.
+    const shown = visiblePages(d).filter((n) => n <= src.getPageCount());
+    const pages = await addSourcePages(out, src, shown.map((n) => n - 1));
     const docSig = mk.get(`${d.id}:0`);
     const docSigImg = await embedSig(out, docSig?.signature);
     for (let k = 0; k < pages.length; k++) {
-      const n = k + 1;
+      const n = shown[k];
       const page = pages[k];
       const m = mk.get(`${d.id}:${n}`);
       const sig = await embedSig(out, m?.signature);
@@ -170,7 +172,7 @@ export async function buildSignedPdf(db: SupabaseClient, a: {
       // Initials for this page, or the document signature on its last page.
       const boxX = s.x0 + s.width - 170;
       if (sig) { text(page, c, 'Initials:', boxX, yTop, 6.5, { color: GREY }); fitImage(page, sig, boxX, s.y0 + 4, 75, STRIP - 18); }
-      if (n === pages.length && docSigImg) {
+      if (k === pages.length - 1 && docSigImg) {
         text(page, c, 'Signed:', boxX + 82, yTop, 6.5, { color: GREY });
         fitImage(page, docSigImg, boxX + 82, s.y0 + 4, 75, STRIP - 18);
         text(page, c, fmtStamp(docSig!.at), boxX + 82, s.y0 + 2, 5.5, { color: GREY });
@@ -212,7 +214,7 @@ export async function buildSignedPdf(db: SupabaseClient, a: {
   ];
   for (const d of inApp) {
     lines.push({ t: d.title, bold: true, gap: true });
-    for (let n = 1; n <= d.page_count; n++) {
+    for (const n of visiblePages(d)) {
       const m = mk.get(`${d.id}:${n}`);
       const t = `Page ${n}: ${m ? `read ${m.read_ok ? 'YES' : 'NO'}, understood ${m.understood_ok ? 'YES' : 'NO'} · ${fmtStamp(m.at)}${m.ip ? ` · IP ${m.ip}` : ''}` : 'not confirmed'}`;
       lines.push(m?.signature ? { t, img: await embedSig(out, m.signature) } : { t });

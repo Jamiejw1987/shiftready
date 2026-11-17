@@ -14,6 +14,8 @@ export type InductionDoc = {
   id: string; pack_id: string; position: number; title: string; path: string; page_count: number;
   page_sizes: [number, number][]; page_images: string[]; template: string | null; in_app: boolean;
   sign_mode: 'document' | 'every_page'; site_pages: number[]; archived_at: string | null;
+  /** Pages temps don't see, e.g. the client's blank group sign-in sheet ("Record of Instruction"). */
+  hidden_pages: number[];
 };
 export type InductionPack = {
   id: string; name: string; client_id: string | null; default_site: string | null; default_scope: string | null;
@@ -31,7 +33,12 @@ export type Mark = {
   signed_name: string | null; at: string; ip: string | null; user_agent: string | null;
 };
 
-export const DOC_COLS = 'id,pack_id,position,title,path,page_count,page_sizes,page_images,template,in_app,sign_mode,site_pages,archived_at';
+// '*' so pages keep working before supabase/2026-11-17b-hidden-pages.sql has been run.
+export const DOC_COLS = '*';
+const norm = (d: InductionDoc): InductionDoc => ({ ...d, hidden_pages: d.hidden_pages ?? [] });
+/** Page numbers the temp actually sees. */
+export const visiblePages = (d: Pick<InductionDoc, 'page_count' | 'hidden_pages'>) =>
+  Array.from({ length: d.page_count }, (_, i) => i + 1).filter((n) => !(d.hidden_pages ?? []).includes(n));
 export const IND_COLS = 'id,temp_id,pack_id,doc_ids,token,answers,sent_by,sent_at,started_at,signed_at,signed_ip,checked_at,checked_by,site_signed_at,site_by_staff,site_by_supervisor,cancelled_at';
 
 export type IndStatus = 'cancelled' | 'sent' | 'in_progress' | 'signed' | 'checked' | 'complete';
@@ -57,7 +64,7 @@ export type Step = { docId: string; page: number };
 export function stepsFor(docs: InductionDoc[]): Step[] {
   const out: Step[] = [];
   for (const d of docs.filter((x) => x.in_app)) {
-    for (let p = 1; p <= d.page_count; p++) out.push({ docId: d.id, page: p });
+    for (const p of visiblePages(d)) out.push({ docId: d.id, page: p });
     if (d.sign_mode === 'document') out.push({ docId: d.id, page: 0 });
   }
   return out;
@@ -81,13 +88,13 @@ export function progress(docs: InductionDoc[], marks: Pick<Mark, 'doc_id' | 'pag
 export async function docsFor(db: SupabaseClient, ids: string[]): Promise<InductionDoc[]> {
   if (!ids.length) return [];
   const { data } = await db.from('induction_docs').select(DOC_COLS).in('id', ids);
-  const by = new Map(((data ?? []) as InductionDoc[]).map((d) => [d.id, d]));
+  const by = new Map(((data ?? []) as InductionDoc[]).map((d) => [d.id, norm(d)]));
   return ids.map((id) => by.get(id)).filter(Boolean) as InductionDoc[];
 }
 
 export async function activeDocs(db: SupabaseClient, packId: string): Promise<InductionDoc[]> {
   const { data } = await db.from('induction_docs').select(DOC_COLS).eq('pack_id', packId).is('archived_at', null).order('position').order('created_at');
-  return (data ?? []) as InductionDoc[];
+  return ((data ?? []) as InductionDoc[]).map(norm);
 }
 
 export const fmtDay = (iso: string | null | undefined) =>

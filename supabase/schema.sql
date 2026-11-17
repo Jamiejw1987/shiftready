@@ -1334,3 +1334,6 @@ create policy induction_marks_staff_read on public.induction_marks for select to
 
 -- Supervisors' password hashes are never readable through the API: admins manage them through the app's server.
 drop policy if exists site_supervisors_none on public.site_supervisors;
+
+-- ===== Hidden pages in client induction documents (17 Nov 2026, also in 2026-11-17b-hidden-pages.sql) =====
+alter table public.induction_docs add column if not exists hidden_pages integer[] not null default '{}';

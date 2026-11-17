@@ -4,11 +4,11 @@ import { useRouter } from 'next/navigation';
 import { SignaturePad } from '@/components/SignaturePad';
 import { saveFootwear, saveMark, finish } from './actions';
 
-export type FlowDoc = { id: string; title: string; signMode: 'document' | 'every_page'; hasForm: boolean; pages: { url: string; w: number; h: number }[] };
+export type FlowDoc = { id: string; title: string; signMode: 'document' | 'every_page'; hasForm: boolean; pages: { n: number; url: string; w: number; h: number }[] };
 type Step =
   | { kind: 'intro' }
   | { kind: 'details'; docId: string }
-  | { kind: 'page'; doc: FlowDoc; d: number; page: number }
+  | { kind: 'page'; doc: FlowDoc; d: number; page: number; idx: number }
   | { kind: 'sign'; doc: FlowDoc; d: number }
   | { kind: 'finish' };
 
@@ -34,7 +34,7 @@ export function Flow({ token, first, name, packName, details, footwear: initialF
     const out: Step[] = [{ kind: 'intro' }];
     docs.forEach((doc, d) => {
       if (doc.hasForm) out.push({ kind: 'details', docId: doc.id });
-      doc.pages.forEach((_, k) => out.push({ kind: 'page', doc, d, page: k + 1 }));
+      doc.pages.forEach((p, k) => out.push({ kind: 'page', doc, d, page: p.n, idx: k }));
       if (doc.signMode === 'document') out.push({ kind: 'sign', doc, d });
     });
     out.push({ kind: 'finish' });
@@ -121,14 +121,14 @@ export function Flow({ token, first, name, packName, details, footwear: initialF
   );
 
   if (step.kind === 'page') {
-    const p = step.doc.pages[step.page - 1];
+    const p = step.doc.pages[step.idx];
     const already = done.has(`${step.doc.id}:${step.page}`);
     const needSig = step.doc.signMode === 'every_page';
     const ready = read && understood && (!needSig || !!sig);
     return (
       <>
         <div className="ind-head">
-          <span className="note">Document {step.d + 1} of {docs.length} · page {step.page} of {step.doc.pages.length}</span>
+          <span className="note">Document {step.d + 1} of {docs.length} · page {step.idx + 1} of {step.doc.pages.length}</span>
           <span className="doc">{step.doc.title}</span>
           {bar}
         </div>

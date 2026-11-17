@@ -90,35 +90,44 @@ export async function registerDoc(packId: string, docId: string, title: string, 
   }
   if (sizes.length !== pages) return { ok: false, error: `${title}: page count didn’t match. Try again.` };
 
-  let text = '';
+  let pageText: string[] = [];
   try {
     const { getDocumentProxy, extractText } = await import('unpdf');
-    const r = await extractText(await getDocumentProxy(bytes.slice()), { mergePages: true });
-    text = (r.text as unknown as string) || '';
+    const r = await extractText(await getDocumentProxy(bytes.slice()), { mergePages: false });
+    pageText = (r.text as unknown as string[]) || [];
   } catch { /* scanned pages have no text: fine */ }
+  const text = pageText.join('\n');
+  // The client's blank group sign-in sheet for briefings done on site: temps sign electronically instead.
+  const sheets = pageText.map((t, i) => (/Record of Instruction/i.test(t) ? i + 1 : 0)).filter(Boolean);
   const tpl = TEMPLATES.find((t) => t.detect(text, pages)) ?? null;
 
   const { data: last } = await supabase.from('induction_docs').select('position').eq('pack_id', packId).order('position', { ascending: false }).limit(1).maybeSingle();
-  const { error } = await supabase.from('induction_docs').insert({
+  const row = {
     id: docId, pack_id: packId, position: (last?.position ?? -1) + 1, title: title.trim().slice(0, 140) || 'Document',
     path: `${base}.pdf`, page_count: pages, page_sizes: sizes, page_images: images,
     template: tpl?.id ?? null, sign_mode: tpl?.defaults.sign_mode ?? 'document', site_pages: tpl?.defaults.site_pages ?? [],
-  });
+  };
+  const hidden = tpl || sheets.length >= pages ? [] : sheets;
+  let { error } = await supabase.from('induction_docs').insert({ ...row, hidden_pages: hidden });
+  if (error && /hidden_pages/.test(error.message)) ({ error } = await supabase.from('induction_docs').insert(row));
   if (error) return { ok: false, error: 'Couldn’t save the document.' };
   await audit(supabase, profile.id, 'induction.doc_added', `Added "${title}" (${pages} pages) to induction pack ${packId}`);
   revalidatePath(`/team/inductions/${packId}`);
-  return { ok: true, message: tpl ? `Recognised as the ${tpl.label}: details will be printed on it.` : 'Added.' };
+  return { ok: true, message: tpl ? `Recognised as the ${tpl.label}: details will be printed on it.` : hidden.length ? `Added. Page ${hidden.join(', ')} (blank sign-in sheet) is hidden from temps.` : 'Added.' };
 }
 
-export async function updateDoc(id: string, d: { title: string; inApp: boolean; signMode: 'document' | 'every_page'; sitePages: string }): Promise<Result> {
+export async function updateDoc(id: string, d: { title: string; inApp: boolean; signMode: 'document' | 'every_page'; sitePages: string; hiddenPages: string }): Promise<Result> {
   const { supabase, profile } = await requireStaff({ admin: true });
   const { data: doc } = await supabase.from('induction_docs').select('pack_id,page_count').eq('id', id).single();
   if (!doc) return { ok: false, error: 'Not found.' };
   const site = parsePages(d.sitePages, doc.page_count);
+  const hidden = parsePages(d.hiddenPages, doc.page_count);
+  if (d.inApp && hidden.length >= doc.page_count) return { ok: false, error: 'You can’t hide every page.' };
   if (!d.inApp && !site.length) return { ok: false, error: 'If temps don’t read it in the app, set which pages are printed for day one.' };
-  await supabase.from('induction_docs').update({
-    title: d.title.trim().slice(0, 140) || 'Document', in_app: d.inApp, sign_mode: d.signMode === 'every_page' ? 'every_page' : 'document', site_pages: site,
+  const { error } = await supabase.from('induction_docs').update({
+    title: d.title.trim().slice(0, 140) || 'Document', in_app: d.inApp, sign_mode: d.signMode === 'every_page' ? 'every_page' : 'document', site_pages: site, hidden_pages: hidden,
   }).eq('id', id);
+  if (error) return { ok: false, error: 'Couldn’t save. Has supabase/2026-11-17b-hidden-pages.sql been run?' };
   await audit(supabase, profile.id, 'induction.doc_updated', `Updated "${d.title}" in induction pack ${doc.pack_id}`);
   revalidatePath(`/team/inductions/${doc.pack_id}`);
   return { ok: true, message: 'Saved. Applies to inductions sent from now on.' };
