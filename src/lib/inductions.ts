@@ -136,10 +136,13 @@ export const EVRI_HSE_V12 = {
     start: { x: 192, y: top(233) }, arrival: { x: 386, y: top(233) },
     footwearYes: { x: 502, y: top(276), rx: 11 }, footwearNo: { x: 528, y: top(276), rx: 10 },   // ring the printed "Yes or No"
     workerName: { x: 233, y: top(684), maxW: 84 }, workerSig: { x: 360, y: top(688), w: 122, h: 26 }, workerDate: { x: 513, y: top(684) },
+    repName: { x: 233, y: top(713), maxW: 84 }, repSig: { x: 360, y: top(717), w: 122, h: 26 }, repDate: { x: 513, y: top(713) },
+    // "Confirm on completion" cell for points 1 to 4: [top, bottom] from the top of the page, x from 516 to 571.
+    confirmX: 516, confirmW: 55, confirmRows: [[355, 372], [372, 573], [573, 590], [590, 608]] as [number, number][],
   },
   p8: {
     site: { x: 242, y: top(127) }, name: { x: 242, y: top(143) }, agency: { x: 242, y: top(159) }, commenced: { x: 242, y: top(175) },
-    relevantX: 349, dateX: 384,
+    relevantX: 349, dateX: 382, instructorX: 446, instructorW: 130,
     rows: {
       'WH2': 217, 'WH7': 234, 'WH11': 251, 'WH12': 268, 'WH13': 285, 'WH14': 302, 'WH16': 319, 'WH17': 336, 'WH-T18': 353,
       'WH30': 370, 'WH-T35': 387, 'WH38': 404, 'WH-T2': 421, 'WH-T13': 438, 'WH-T40': 455, 'WH-T42': 471, 'T13': 492,

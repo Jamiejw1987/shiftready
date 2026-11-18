@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation';
 import { CopyButton } from '@/components/Copy';
 import { prepareFile, uploadToSlot } from '@/lib/upload';
 import { MhForm } from '@/components/MhForm';
-import { saveMhStaff, sendInduction, resendInduction, inductionLink, updateInductionDetails, setChecked, reopenInduction, cancelInduction, siteSlotStaff, recordSiteStaff } from './actions';
+import { DayOneForm } from '@/components/DayOneForm';
+import { saveDayOneStaff, saveMhStaff, sendInduction, resendInduction, inductionLink, updateInductionDetails, setChecked, reopenInduction, cancelInduction, siteSlotStaff, recordSiteStaff } from './actions';
 import type { SendDetails } from '@/lib/inductionOps';
 
 type Msg = { ok: boolean; text: string } | null;
@@ -141,4 +142,10 @@ export function StaffMh({ id, candidate, location, trainer }: { id: string; cand
   const [open, setOpen] = useState(false);
   if (!open) return <button className="btn ghost" onClick={() => setOpen(true)}>Do manual handling assessment</button>;
   return <MhForm candidate={candidate} location={location} trainer={trainer} save={(p) => saveMhStaff(id, p)} />;
+}
+
+export function StaffDayOne({ id, candidate, rep }: { id: string; candidate: string; rep: string }) {
+  const [open, setOpen] = useState(false);
+  if (!open) return <button className="btn blue" onClick={() => setOpen(true)}>Do day-one sign-off</button>;
+  return <DayOneForm candidate={candidate} rep={rep} save={(p) => saveDayOneStaff(id, p)} />;
 }

@@ -169,7 +169,7 @@ export async function buildSignedPdf(db: SupabaseClient, a: {
       text(page, c, `${det.name}  |  ${d.title}  |  page ${n} of ${d.page_count}`, x, yTop, 7.5, { bold: true, maxW: s.width - 190 });
       const ours = d.hidden_pages.includes(n);
       text(page, c, ours
-        ? 'Details filled in by Staff Selection UK from the worker’s record. Signed on paper on site on day one.'
+        ? 'Details filled in by Staff Selection UK from the worker’s record. Signed on site on day one: see the day-one sign-off.'
         : m
           ? `I have read this page: ${m.read_ok ? 'YES' : 'NO'}    I understand this page: ${m.understood_ok ? 'YES' : 'NO'}    ${fmtStamp(m.at)}${m.ip ? `  IP ${m.ip}` : ''}`
           : 'Not confirmed', x, yTop - 11, 7, { maxW: s.width - 190 });
@@ -255,6 +255,53 @@ export async function buildDayOnePdf(db: SupabaseClient, a: { induction: TempInd
   if (!any) {
     const page = out.addPage([595.28, 841.89]);
     text(page, c, 'No pages in this pack are set to be printed for day one.', 40, 780, 12, { bold: true });
+  }
+  return out.save();
+}
+
+/**
+ * The day-one sign-off done in the app: page 1 (Part 2 footwear, points 1 to 4 initialled, Part 3 signed by the
+ * worker and the site representative) and page 8 (SOM briefings: date instructed, instructor, worker signature),
+ * on the client's own form.
+ */
+export async function buildDayOneSignedPdf(db: SupabaseClient, a: {
+  induction: TempInduction; pack: InductionPack; docs: InductionDoc[]; temp: Temp;
+  footwear: boolean; initials: Record<string, string>; repName: string; workerSig: string; repSig: string; somSig: string; date: string;
+}) {
+  const form = a.docs.find((d) => d.template === EVRI_HSE_V12.id);
+  if (!form) throw new Error('This pack has no EVRi / DHL induction form.');
+  const out = await PDFDocument.create();
+  const c: Ctx = { out, font: await out.embedFont(StandardFonts.Helvetica), bold: await out.embedFont(StandardFonts.HelveticaBold) };
+  const det = { ...details(a.induction, a.temp, a.pack, a.docs), footwear: a.footwear };
+  out.setTitle(`Day one sign-off - ${det.name}`);
+  const src = await PDFDocument.load(await download(db, form.path), { ignoreEncryption: true });
+  const [p1, p8] = await addSourcePages(out, src, [0, 7]);
+  const T = EVRI_HSE_V12;
+  const workerSig = await embedSig(out, a.workerSig), repSig = await embedSig(out, a.repSig), somSig = await embedSig(out, a.somSig);
+
+  // Page 1: details, footwear, initials for points 1-4, both signatures.
+  fillEvri(p1, 1, c, { ...det, sig: workerSig, sigDate: a.date });
+  for (const [k, [t0, t1]] of T.p1.confirmRows.entries()) {
+    const img = await embedSig(out, a.initials[String(k + 1)]);
+    p1.drawRectangle({ x: T.p1.confirmX + 0.5, y: 841.92 - t1 + 0.6, width: T.p1.confirmW - 1, height: t1 - t0 - 1.2, color: rgb(1, 1, 1) });
+    const h = Math.min(t1 - t0 - 3, 24);
+    if (img) fitImage(p1, img, T.p1.confirmX + 3, 841.92 - (t0 + t1) / 2 - h / 2, T.p1.confirmW - 6, h);
+  }
+  text(p1, c, a.repName, T.p1.repName.x, T.p1.repName.y, 8, { maxW: T.p1.repName.maxW });
+  if (repSig) fitImage(p1, repSig, T.p1.repSig.x, T.p1.repSig.y, T.p1.repSig.w, T.p1.repSig.h);
+  text(p1, c, a.date, T.p1.repDate.x, T.p1.repDate.y, 8);
+
+  // Page 8: SOM briefings table and the worker's confirmation.
+  fillEvri(p8, 8, c, { ...det, sig: somSig, sigDate: a.date });
+  for (const code of det.relevant) {
+    const t = T.p8.rows[code];
+    if (t == null) continue;
+    text(p8, c, a.date, T.p8.dateX, 841.92 - t - 12, 7);
+    text(p8, c, a.repName, T.p8.instructorX, 841.92 - t - 12, 7, { maxW: T.p8.instructorW });
+  }
+  for (const page of [p1, p8]) {
+    const { x, y, width } = page.getMediaBox();
+    text(page, c, `Completed on site in ShiftReady by Staff Selection UK on ${a.date}. Signatures given on screen. Ref ${a.induction.id.slice(0, 8).toUpperCase()}.`, x + 20, y + 6, 6.5, { color: GREY, maxW: width - 40 });
   }
   return out.save();
 }

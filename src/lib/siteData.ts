@@ -7,7 +7,7 @@ export type SiteRow = {
   key: string; tempId: string; name: string;
   /** Their shift today, if they're booked; null for someone who's been sent the induction but isn't booked today. */
   shift: { client: string; site: string; date: string; start: string; end: string } | null;
-  induction: { id: string; pack: string; status: IndStatus; signed: boolean; checked: boolean; siteDone: boolean; site: string; mh: 'none' | 'todo' | 'done' } | null;
+  induction: { id: string; pack: string; status: IndStatus; signed: boolean; checked: boolean; siteDone: boolean; site: string; mh: 'none' | 'todo' | 'done'; form: boolean } | null;
 };
 
 type Ind = TempInduction & { induction_packs: { name: string; client_id: string | null; default_site: string | null } | null; temps: { first_name: string; last_name: string } | null };
@@ -45,14 +45,17 @@ export async function bookedForSupervisor(sup: Supervisor): Promise<SiteRow[]> {
 
   // Which packs include the manual handling assessment sheets, and who has already been assessed.
   const docIds = Array.from(new Set(allInds.flatMap((i) => i.doc_ids)));
-  const mhDocs = new Set((await docsFor(db, docIds)).filter((d) => /manual handling practical/i.test(d.title)).map((d) => d.id));
-  const { data: done } = allInds.length ? await db.from('induction_assessments').select('induction_id').in('induction_id', allInds.map((i) => i.id)) : { data: [] };
+  const allDocs = await docsFor(db, docIds);
+  const mhDocs = new Set(allDocs.filter((d) => /manual handling practical/i.test(d.title)).map((d) => d.id));
+  const formDocs = new Set(allDocs.filter((d) => d.template === 'evri_hse_v12').map((d) => d.id));
+  const { data: done } = allInds.length ? await db.from('induction_assessments').select('induction_id').eq('kind', 'mh_practical').in('induction_id', allInds.map((i) => i.id)) : { data: [] };
   const assessed = new Set((done ?? []).map((d) => d.induction_id));
 
   const view = (i: Ind, site: string): NonNullable<SiteRow['induction']> => ({
     id: i.id, pack: i.induction_packs?.name ?? 'Induction', status: statusOf(i), signed: !!i.signed_at, checked: !!i.checked_at, siteDone: !!i.site_signed_at,
     site: i.answers?.site || i.induction_packs?.default_site || site,
     mh: i.doc_ids.some((x) => mhDocs.has(x)) ? (assessed.has(i.id) ? 'done' : 'todo') : 'none',
+    form: i.doc_ids.some((x) => formDocs.has(x)),
   });
 
   const rows: SiteRow[] = [];

@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 import { SitePhotoUpload } from '../(staff)/inductions/Controls';
-import { siteSignIn, siteUploadSlot, siteRecordUpload, saveMhSite } from './actions';
+import { siteSignIn, siteUploadSlot, siteRecordUpload, saveMhSite, saveDayOneSite } from './actions';
+import { DayOneForm } from '@/components/DayOneForm';
 import { MhForm } from '@/components/MhForm';
 import type { SiteRow } from '@/lib/siteData';
 
@@ -35,6 +36,7 @@ const PILL: Record<string, [string, string]> = {
 export function SiteList({ rows, trainer }: { rows: SiteRow[]; trainer: string }) {
   const [open, setOpen] = useState<string | null>(null);
   const [mh, setMh] = useState<string | null>(null);
+  const [d1, setD1] = useState<string | null>(null);
   const [q, setQ] = useState('');
   if (!rows.length) return <div className="state"><div className="badge mute">–</div><div className="big">Nobody to see yet</div><p>No one is booked today and nobody is waiting for their day one.</p></div>;
   const shown = rows.filter((r) => !q.trim() || r.name.toLowerCase().includes(q.trim().toLowerCase()));
@@ -63,10 +65,16 @@ export function SiteList({ rows, trainer }: { rows: SiteRow[]; trainer: string }
                 {r.induction.mh === 'todo' && (mh === r.induction.id
                   ? <MhForm candidate={r.name} location={r.induction.site} trainer={trainer} save={(p) => saveMhSite(r.induction!.id, p)} />
                   : <button className="btn blue" onClick={() => setMh(r.induction!.id)}>Do manual handling assessment</button>)}
-                {r.induction.siteDone && <p className="okmsg">Photo already uploaded. You can add another if the first wasn’t clear.</p>}
-                <a className="btn ghost" href={`/api/inductions/${r.induction.id}/dayone`} target="_blank" rel="noopener noreferrer">Open the day-one sheet to print</a>
-                <SitePhotoUpload camera label={r.induction.siteDone ? 'Add another photo' : 'Take photo of signed sheet'}
-                  slot={(type, size) => siteUploadSlot(r.induction!.id, type, size)} record={(paths) => siteRecordUpload(r.induction!.id, paths)} />
+                {r.induction.siteDone && <p className="okmsg">✓ Day-one sign-off done and on their file.</p>}
+                {!r.induction.siteDone && r.induction.form && (d1 === r.induction.id
+                  ? <DayOneForm candidate={r.name} rep={trainer} save={(p) => saveDayOneSite(r.induction!.id, p)} />
+                  : <button className="btn blue" onClick={() => setD1(r.induction!.id)}>Do day-one sign-off</button>)}
+                {!r.induction.siteDone && (
+                  <details><summary className="note" style={{ cursor: 'pointer' }}>Done it on paper instead? Upload a photo</summary>
+                    <div style={{ marginTop: 8 }}><SitePhotoUpload camera label="Take photo of signed sheet"
+                      slot={(type, size) => siteUploadSlot(r.induction!.id, type, size)} record={(paths) => siteRecordUpload(r.induction!.id, paths)} /></div>
+                  </details>
+                )}
               </>
             ) : <p className="alert bad">They haven’t finished the induction on their phone. Don’t let them start: call the office.</p>)}
             {isOpen && !r.induction && <p className="alert bad">No induction has been sent to them. Call the office before they start.</p>}

@@ -64,3 +64,15 @@ export async function saveMhSite(inductionId: string, p: import('@/lib/mhAssessm
   await createAdminClient().from('audit_log').insert({ actor: null, action: 'induction.mh_assessment', detail: `${a.sup.full_name} (site login ${a.sup.username}) recorded the manual handling assessment for ${r.name}` });
   return { ok: true, message: r.message };
 }
+
+/** DHL's day-one sign-off done on screen by the supervisor and the worker. */
+export async function saveDayOneSite(inductionId: string, p: import('@/lib/dayOneItems').DayOneInput): Promise<Result> {
+  const a = await allowed(inductionId);
+  if (!a) return { ok: false, error: 'You can’t do this one. Call the office.' };
+  const { saveDayOne } = await import('@/lib/dayOne');
+  const ip = (headers().get('x-forwarded-for') || '').split(',')[0].trim().slice(0, 60) || null;
+  const r = await saveDayOne(createAdminClient(), a.i, p, { supervisor: a.sup.id, ip });
+  if (!r.ok) return r;
+  await createAdminClient().from('audit_log').insert({ actor: null, action: 'induction.day_one', detail: `${a.sup.full_name} (site login ${a.sup.username}) completed the day-one sign-off for ${r.name}` });
+  return { ok: true, message: r.message };
+}

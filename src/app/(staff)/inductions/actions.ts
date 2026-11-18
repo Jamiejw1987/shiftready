@@ -129,3 +129,16 @@ export async function saveMhStaff(id: string, p: import('@/lib/mhAssessment').Mh
   refresh(i.temp_id, id);
   return { ok: true, message: r.message };
 }
+
+/** DHL's day-one sign-off done on screen by office staff. */
+export async function saveDayOneStaff(id: string, p: import('@/lib/dayOneItems').DayOneInput): Promise<Result> {
+  const { supabase, profile } = await requireStaff();
+  const i = await load(supabase, id);
+  if (!i || i.cancelled_at) return { ok: false, error: 'Not found.' };
+  const { saveDayOne } = await import('@/lib/dayOne');
+  const r = await saveDayOne(createAdminClient(), i, p, { staff: profile.id });
+  if (!r.ok) return r;
+  await audit(supabase, profile.id, 'induction.day_one', `Completed the day-one sign-off for ${r.name} (site rep ${p.repName.trim()})`);
+  refresh(i.temp_id, id);
+  return { ok: true, message: r.message };
+}

@@ -4,7 +4,8 @@ import { requireStaff } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { loadFull } from '@/lib/inductionLoad';
 import { STATUS_PILL, fmtDay, fmtStamp, progress, statusOf, visiblePages } from '@/lib/inductions';
-import { InductionButtons, StaffSiteUpload, StaffMh } from '../Controls';
+import { InductionButtons, StaffSiteUpload, StaffMh, StaffDayOne } from '../Controls';
+import { hasDayOneForm } from '@/lib/dayOne';
 import { hasMhSheets } from '@/lib/mhAssessment';
 
 export const dynamic = 'force-dynamic';
@@ -30,7 +31,8 @@ export default async function InductionReview({ params }: { params: { id: string
   const mk = new Map(marks.map((m) => [`${m.doc_id}:${m.page}`, m]));
   const sigs = marks.filter((m) => m.signature).sort((x, y) => x.at.localeCompare(y.at));
   const mhOn = await hasMhSheets(db, i);
-  const { data: mhDone } = mhOn ? await db.from('induction_assessments').select('trainer_name,at').eq('induction_id', i.id).order('at', { ascending: false }).limit(1).maybeSingle() : { data: null };
+  const formOn = await hasDayOneForm(db, i);
+  const { data: mhDone } = mhOn ? await db.from('induction_assessments').select('trainer_name,at').eq('induction_id', i.id).eq('kind', 'mh_practical').order('at', { ascending: false }).limit(1).maybeSingle() : { data: null };
   const { data: me } = await supabase.auth.getUser();
   const { data: myProfile } = me.user ? await supabase.from('profiles').select('full_name').eq('id', me.user.id).maybeSingle() : { data: null };
 
@@ -89,11 +91,13 @@ export default async function InductionReview({ params }: { params: { id: string
 
       <section className="panel">
         <h2>Day-one sign-off on site</h2>
-        <p className="lede">Print the day-one sheet with their details already on it. On their first day, they and your site person sign and date it on paper; it goes to the client, and a photo of it comes in here (from the site login, or upload it below).</p>
+        {i.site_signed_at ? <p className="okmsg">✓ Done {fmtStamp(i.site_signed_at)}. It’s on their file and in the signed PDF.</p>
+          : <p className="lede">Done on site on day one, usually from the site login: they initial each point on DHL’s form, then they and your site person sign. If you’re with them, do it here.</p>}
+        {!i.site_signed_at && formOn && st !== 'cancelled' && i.signed_at && <div style={{ marginBottom: 12 }}><StaffDayOne id={i.id} candidate={`${temp.first_name} ${temp.last_name}`} rep={myProfile?.full_name ?? ''} /></div>}
         {siteFiles.length > 0 && <div className="tablewrap" style={{ marginBottom: 12 }}><table><tbody>
           {siteFiles.map((s) => <tr key={s.id}><td>{s.kind === 'mh_assessment' ? 'Manual handling assessment' : s.filename ?? 'Photo'}<br /><span className="note">{fmtStamp(s.created_at)}</span></td><td style={{ textAlign: 'right' }}><a className="btn ghost small" href={`/api/docs/${s.id}`} target="_blank" rel="noopener noreferrer">Open</a></td></tr>)}
         </tbody></table></div>}
-        {st !== 'cancelled' && <StaffSiteUpload id={i.id} />}
+        {st !== 'cancelled' && !i.site_signed_at && <details><summary className="note" style={{ cursor: 'pointer' }}>Done it on paper instead? Upload a photo</summary><div style={{ marginTop: 8 }}><StaffSiteUpload id={i.id} /></div></details>}
       </section>
 
       <section className="panel">

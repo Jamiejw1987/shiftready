@@ -22,10 +22,10 @@ export default async function SitePage() {
       <section className="card"><div className="in">
         <b>How it works</b>
         <ol style={{ margin: 0, paddingLeft: 20 }}>
-          <li>Do the manual handling assessment in the app: tap Yes or No for each check, then you both sign.</li>
-          <li>Show them the fire exits and assembly point, toilets, canteen and welfare, smoking area and banned items, and do the site tour.</li>
-          <li>You both sign and date the paper day-one sheet. It goes to the client.</li>
-          <li>Find them below (search by name), tap their name and take a clear photo of the signed sheet.</li>
+          <li>Find them below (search by name) and tap their name.</li>
+          <li><b>Manual handling assessment:</b> watch them, tap Yes or No for each check, then you both sign.</li>
+          <li><b>Day-one sign-off:</b> show them the fire exits and assembly point, site rules, toilets, washing facilities and canteen. They initial each point on screen, then you both sign.</li>
+          <li>Both save straight to their file. Nothing to print or hand in.</li>
         </ol>
       </div></section>
       <SiteList rows={rows} trainer={sup.full_name} />
