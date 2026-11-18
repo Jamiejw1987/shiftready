@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { Logo } from '@/components/Logo';
 import { IND_COLS, docsFor, fmtDay, visiblePages, type Mark, type TempInduction } from '@/lib/inductions';
 import { Flow, type FlowDoc } from './Flow';
+import { finish } from './actions';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Induction | ShiftReady', robots: { index: false } };
@@ -22,6 +23,8 @@ export default async function InductionPage({ params }: { params: { token: strin
     db.from('temps').select('first_name,last_name').eq('id', i.temp_id).single(),
     db.from('induction_packs').select('name,default_site,default_scope,default_arrival').eq('id', i.pack_id).single(),
   ]);
+  // Everything done but Submit never pressed: submit it now.
+  if (!i.signed_at && !i.cancelled_at && (await finish(params.token)).ok) i.signed_at = new Date().toISOString();
   if (i.cancelled_at || !t || !pack)
     return shell(<div className="state"><div className="badge mute">–</div><div className="big">Link not active</div><p>Please call the office.</p></div>);
   if (i.signed_at)

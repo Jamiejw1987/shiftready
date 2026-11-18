@@ -61,6 +61,7 @@ export function Flow({ token, first, name, packName, details, footwear: initialF
   const save = (docId: string, page: number, s: string | null) => start(async () => {
     const r = await saveMark(token, { docId, page, read, understood, signature: s });
     if (!r.ok) { setErr(r.error ?? 'Couldn’t save.'); return; }
+    if (r.signed) { router.refresh(); return; }
     setDone((x) => new Set(x).add(`${docId}:${page}`));
     next();
   });
@@ -115,6 +116,7 @@ export function Flow({ token, first, name, packName, details, footwear: initialF
       {nav(<button className="btn blue" disabled={footwear == null || pending} onClick={() => start(async () => {
         const r = await saveFootwear(token, footwear!);
         if (!r.ok) { setErr(r.error ?? 'Couldn’t save.'); return; }
+        if (r.signed) { router.refresh(); return; }
         next();
       })}>Next</button>)}
     </>
@@ -171,6 +173,7 @@ export function Flow({ token, first, name, packName, details, footwear: initialF
           : <button className="btn blue" disabled={!sig || pending} onClick={() => { setRead(true); setUnderstood(true); start(async () => {
             const r = await saveMark(token, { docId: step.doc.id, page: 0, read: true, understood: true, signature: sig });
             if (!r.ok) { setErr(r.error ?? 'Couldn’t save.'); return; }
+            if (r.signed) { router.refresh(); return; }
             setDone((x) => new Set(x).add(`${step.doc.id}:0`));
             next();
           }); }}>{pending ? 'Saving…' : 'Sign and continue'}</button>)}

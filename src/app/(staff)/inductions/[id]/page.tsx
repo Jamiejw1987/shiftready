@@ -4,7 +4,7 @@ import { requireStaff } from '@/lib/auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { loadFull } from '@/lib/inductionLoad';
 import { STATUS_PILL, fmtDay, fmtStamp, progress, statusOf, visiblePages } from '@/lib/inductions';
-import { InductionButtons, StaffSiteUpload, StaffMh, StaffDayOne } from '../Controls';
+import { InductionButtons, StaffSiteUpload, StaffMh, StaffDayOne, MarkSigned } from '../Controls';
 import { hasDayOneForm } from '@/lib/dayOne';
 import { hasMhSheets } from '@/lib/mhAssessment';
 
@@ -46,6 +46,9 @@ export default async function InductionReview({ params }: { params: { id: string
           <span className="pill mute">{p.done} of {p.total} pages and signatures</span>
           {a.footwear === false && <span className="pill bad">Said they have no safety footwear</span>}
         </div>
+        {!i.signed_at && !i.cancelled_at && p.total > 0 && (p.done < p.total
+          ? <p className="note" style={{ marginTop: 0 }}>{p.total - p.done} page{p.total - p.done === 1 ? '' : 's'} or signature{p.total - p.done === 1 ? '' : 's'} still to do{a.footwear == null ? ', plus the safety boots question' : ''}. See <b>Page by page</b> below: dots are pages not done yet.</p>
+          : <div style={{ marginBottom: 12 }}><p className="note" style={{ marginTop: 0 }}>Every page and signature is done, but Submit wasn’t pressed.</p><MarkSigned id={i.id} /></div>)}
         <dl className="kv" style={{ marginBottom: 14 }}>
           <dt>Worker</dt><dd>{temp.first_name} {temp.last_name}</dd>
           <dt>Site</dt><dd>{a.site || pack.default_site || '-'}</dd>

@@ -5,7 +5,7 @@ import { CopyButton } from '@/components/Copy';
 import { prepareFile, uploadToSlot } from '@/lib/upload';
 import { MhForm } from '@/components/MhForm';
 import { DayOneForm } from '@/components/DayOneForm';
-import { saveDayOneStaff, saveMhStaff, sendInduction, resendInduction, inductionLink, updateInductionDetails, setChecked, reopenInduction, cancelInduction, siteSlotStaff, recordSiteStaff } from './actions';
+import { markSignedStaff, saveDayOneStaff, saveMhStaff, sendInduction, resendInduction, inductionLink, updateInductionDetails, setChecked, reopenInduction, cancelInduction, siteSlotStaff, recordSiteStaff } from './actions';
 import type { SendDetails } from '@/lib/inductionOps';
 
 type Msg = { ok: boolean; text: string } | null;
@@ -148,4 +148,9 @@ export function StaffDayOne({ id, candidate, rep }: { id: string; candidate: str
   const [open, setOpen] = useState(false);
   if (!open) return <button className="btn blue" onClick={() => setOpen(true)}>Do day-one sign-off</button>;
   return <DayOneForm candidate={candidate} rep={rep} save={(p) => saveDayOneStaff(id, p)} />;
+}
+
+export function MarkSigned({ id }: { id: string }) {
+  const { pending, msg, run } = useRun();
+  return <><button className="btn blue small" disabled={pending} onClick={() => run(() => markSignedStaff(id))}>Every page is done: mark as signed</button><Note m={msg} /></>;
 }

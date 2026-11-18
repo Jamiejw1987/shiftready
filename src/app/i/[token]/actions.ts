@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { notifyStaff } from '@/lib/clients';
 import { IND_COLS, docsFor, markComplete, progress, stepsFor, type TempInduction, type Mark } from '@/lib/inductions';
 
-type Result = { ok: boolean; error?: string };
+type Result = { ok: boolean; error?: string; signed?: boolean };
 const UUID = /^[0-9a-f-]{36}$/i;
 const who = () => {
   const h = headers();
@@ -26,7 +26,8 @@ export async function saveFootwear(token: string, yes: boolean): Promise<Result>
   if (!o) return { ok: false, error: 'This link isn’t active. Please call the office.' };
   if (o.i.signed_at) return { ok: false, error: 'Already signed.' };
   await o.db.from('temp_inductions').update({ answers: { ...o.i.answers, footwear: yes }, started_at: o.i.started_at ?? new Date().toISOString() }).eq('id', o.i.id);
-  return { ok: true };
+  const f = await finish(token);
+  return { ok: true, signed: f.ok };
 }
 
 /** Saves one page (ticks and, where needed, initials) or the signature for a whole document (page 0). */
@@ -59,7 +60,9 @@ export async function saveMark(token: string, m: { docId: string; page: number; 
   }, { onConflict: 'induction_id,doc_id,page' });
   if (error) return { ok: false, error: 'Couldn’t save. Check your signal and try again.' };
   if (!o.i.started_at) await o.db.from('temp_inductions').update({ started_at: new Date().toISOString() }).eq('id', o.i.id);
-  return { ok: true };
+  // Last page or signature done: submit it for them, so nobody is left 'part done' by not pressing Submit.
+  const f = await finish(token);
+  return { ok: true, signed: f.ok };
 }
 
 /** Finishes the induction once every page and signature is in. */

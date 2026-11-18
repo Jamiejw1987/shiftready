@@ -142,3 +142,22 @@ export async function saveDayOneStaff(id: string, p: import('@/lib/dayOneItems')
   refresh(i.temp_id, id);
   return { ok: true, message: r.message };
 }
+
+/** They've done every page and signature but never pressed Submit: mark it signed for them. */
+export async function markSignedStaff(id: string): Promise<Result> {
+  const { supabase, profile } = await requireStaff();
+  const i = await load(supabase, id);
+  if (!i || i.cancelled_at) return { ok: false, error: 'Not found.' };
+  if (i.signed_at) return { ok: true, message: 'Already signed.' };
+  const db = createAdminClient();
+  const { docsFor, progress } = await import('@/lib/inductions');
+  const docs = await docsFor(db, i.doc_ids);
+  const { data: marks } = await db.from('induction_marks').select('doc_id,page,read_ok,understood_ok,signature').eq('induction_id', id);
+  const p = progress(docs, (marks ?? []) as never);
+  if (p.done < p.total) return { ok: false, error: `They still have ${p.total - p.done} pages or signatures to do. Resend the link.` };
+  const last = (marks ?? []).length ? await db.from('induction_marks').select('at,ip').eq('induction_id', id).order('at', { ascending: false }).limit(1).maybeSingle() : { data: null };
+  await db.from('temp_inductions').update({ signed_at: last.data?.at ?? new Date().toISOString(), signed_ip: last.data?.ip ?? null }).eq('id', id);
+  await audit(supabase, profile.id, 'induction.marked_signed', `Marked induction ${id.slice(0, 8)} as signed: every page and signature was done but Submit wasn't pressed`);
+  refresh(i.temp_id, id);
+  return { ok: true, message: 'Marked as signed. Check their signatures below.' };
+}
