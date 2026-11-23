@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Induction | ShiftReady', robots: { index: false } };
 const UUID = /^[0-9a-f-]{36}$/i;
 
-export default async function InductionPage({ params }: { params: { token: string } }) {
+export default async function InductionPage({ params, searchParams }: { params: { token: string }; searchParams?: { from?: string } }) {
   if (!UUID.test(params.token)) notFound();
   const db = createAdminClient();
   const { data } = await db.from('temp_inductions').select(IND_COLS).eq('token', params.token).maybeSingle();
@@ -34,6 +34,7 @@ export default async function InductionPage({ params }: { params: { token: strin
         <div className="big">All signed, {t.first_name}</div>
         <p>Thanks for completing the {pack.name}. On your first day, someone will show you around site and you’ll sign one last sheet on paper.</p>
         <p>Bring: safety boots, your hi-vis, gloves, photo ID and a padlock for your locker.</p>
+        {searchParams?.from === 'site' && <a className="btn blue" href="/site">Back to the site list</a>}
       </div>,
     );
 

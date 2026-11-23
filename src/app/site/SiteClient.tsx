@@ -26,8 +26,8 @@ export function SiteLoginForm() {
 
 const PILL: Record<string, [string, string]> = {
   none: ['bad', 'No induction: call the office'],
-  sent: ['bad', 'Hasn’t done the induction: call the office'],
-  in_progress: ['bad', 'Induction not finished: call the office'],
+  sent: ['bad', 'Induction not started'],
+  in_progress: ['warn', 'Induction part done'],
   signed: ['warn', 'Signed, office still checking'],
   checked: ['blue', 'Ready for day one'],
   complete: ['ok', 'Day one done'],
@@ -79,7 +79,13 @@ export function SiteList({ rows, trainer }: { rows: SiteRow[]; trainer: string }
                   </details>
                 )}
               </>
-            ) : <p className="alert bad">They haven’t finished the induction on their phone. Don’t let them start: call the office.</p>)}
+            ) : (
+              <>
+                <p className="alert bad">{r.induction.status === 'sent' ? 'They haven’t started the induction yet.' : 'They haven’t finished the induction yet.'} They can do it now on this device: hand it to them to read and sign each page.</p>
+                <a className="btn blue" href={`/i/${r.induction.token}?from=site`}>Do their induction on this device</a>
+                <p className="note" style={{ margin: 0 }}>When they’ve finished, come back here and refresh: the manual handling and day-one buttons will appear.</p>
+              </>
+            ))}
             {isOpen && !r.induction && <p className="alert bad">No induction has been sent to them. Call the office before they start.</p>}
           </div></section>
           </div>

@@ -7,7 +7,7 @@ export type SiteRow = {
   key: string; tempId: string; name: string;
   /** Their shift today, if they're booked; null for someone who's been sent the induction but isn't booked today. */
   shift: { client: string; site: string; date: string; start: string; end: string } | null;
-  induction: { id: string; pack: string; status: IndStatus; signed: boolean; checked: boolean; siteDone: boolean; site: string; mh: 'none' | 'todo' | 'done'; form: boolean } | null;
+  induction: { id: string; pack: string; status: IndStatus; signed: boolean; checked: boolean; siteDone: boolean; site: string; mh: 'none' | 'todo' | 'done'; form: boolean; token: string } | null;
 };
 
 /** "DHL", "DHL Coventry", "dhl coventry " all match the client "DHL Coventry". */
@@ -66,6 +66,7 @@ export async function bookedForSupervisor(sup: Supervisor): Promise<SiteRow[]> {
     site: i.answers?.site || i.induction_packs?.default_site || site,
     mh: i.doc_ids.some((x) => mhDocs.has(x)) ? (assessed.has(i.id) ? 'done' : 'todo') : 'none',
     form: i.doc_ids.some((x) => formDocs.has(x)),
+    token: i.token,   // so the temp can finish the induction on the supervisor's tablet
   });
 
   const rows: SiteRow[] = [];
