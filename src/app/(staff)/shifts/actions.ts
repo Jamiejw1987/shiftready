@@ -8,7 +8,7 @@ import { sendMany, sendToTemp } from '@/lib/sms';
 import { offerText, offerWa, promotedText, promotedWa, noShowText, replyAccepted, appUrl, seriesOfferText, seriesBookedText, confirmAskText } from '@/lib/texts';
 import { displayMobile } from '@/lib/phone';
 import { shiftWhen, JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
-import { bookingsNear, overlaps, overCap, capMessage } from '@/lib/clash';
+import { bookingsNear, clashes, overCap, capMessage } from '@/lib/clash';
 import { seriesWhen, dayLabel } from '@/lib/series';
 import { randomUUID } from 'crypto';
 import { afterBookingChange, blockedFor, clientAudit, scoresFor } from '@/lib/clients';
@@ -86,14 +86,23 @@ async function matchTemps(supabase: Awaited<ReturnType<typeof requireStaff>>['su
 }
 
 /** How many temps a shift would go to, before sending. */
-export async function previewReach(sitePostcode: string, jobType: string, radius: number, requestId?: string) {
+export async function previewReach(sitePostcode: string, jobType: string, radius: number, requestId?: string, when?: { date: string; start: string; end: string }) {
   const { supabase } = await requireStaff();
   if (!looksLikePostcode(sitePostcode)) return { ok: false as const, error: 'Enter the site’s full postcode to see who it goes to.' };
   const point = await geocodePostcode(sitePostcode);
   if (!point) return { ok: false as const, error: 'Site postcode not found.' };
   const clientId = requestId ? (await supabase.from('client_requests').select('client_id').eq('id', requestId).maybeSingle()).data?.client_id ?? null : null;
-  const list = await matchTemps(supabase, point, jobType, radius, clientId);
-  return { ok: true as const, count: list.length, temps: asRecipients(list) };
+  let list = await matchTemps(supabase, point, jobType, radius, clientId);
+  // Leave out anyone who already has a shift that day: they won't be sent it.
+  let busy = 0;
+  if (when && /^\d{4}-\d{2}-\d{2}$/.test(when.date) && /^\d{2}:\d{2}$/.test(when.start) && /^\d{2}:\d{2}$/.test(when.end)) {
+    const s = { shift_date: when.date, start_time: when.start, end_time: when.end };
+    const booked = await bookingsNear(supabase, list.map((t) => t.id), when.date);
+    const free = list.filter((t) => !(booked.get(t.id) ?? []).some((b) => clashes(b, s)));
+    busy = list.length - free.length;
+    list = free;
+  }
+  return { ok: true as const, count: list.length, busy, temps: asRecipients(list) };
 }
 
 export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false; error: string } | never> {
@@ -154,11 +163,11 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
     redirect(`/shifts/${shift.id}?manual=1`);
   }
   const matched = without(await matchTemps(supabase, point, input.jobType, input.radius, shift.client_id ?? null), input.exclude);
-  // Skip anyone already booked on a shift at the same time.
+  // Skip anyone who already has a shift that day (booked or provisionally accepted).
   const booked = await bookingsNear(supabase, matched.map((t) => t.id), shift.shift_date);
   // ...and anyone it would take over their weekly hours limit.
   const capped = await overCap(supabase, matched.map((t) => t.id), shift);
-  const temps = matched.filter((t) => !capped.has(t.id) && !(booked.get(t.id) ?? []).some((b) => overlaps(b, shift)));
+  const temps = matched.filter((t) => !capped.has(t.id) && !(booked.get(t.id) ?? []).some((b) => clashes(b, shift)));
   const busy = matched.length - temps.length;
   let sent = 0, failed = 0;
   if (temps.length) {
@@ -174,7 +183,7 @@ export async function createAndSendShift(input: ShiftInput): Promise<{ ok: false
     });
     sent = res.sent; failed = res.failed;
   }
-  await audit(supabase, profile.id, 'shift.sent', `Sent ${shift.client} shift (${shiftWhen(shift)}, ${shift.heads} needed) to ${sent} temps${failed ? `, ${failed} texts failed` : ''}${busy ? `. ${busy} already booked at that time were skipped` : ''}`);
+  await audit(supabase, profile.id, 'shift.sent', `Sent ${shift.client} shift (${shiftWhen(shift)}, ${shift.heads} needed) to ${sent} temps${failed ? `, ${failed} texts failed` : ''}${busy ? `. ${busy} already have a shift that day were skipped` : ''}`);
   revalidatePath('/shifts');
   redirect(`/shifts/${shift.id}?sent=${sent}&failed=${failed}&busy=${busy}`);
 }
@@ -250,7 +259,7 @@ export async function deleteShift(shiftId: string) {
 
 /**
  * Takes a booked temp off a shift without recording a no-show (double booking, change of plan, client request).
- * The first person on standby who's free at that time is moved up and texted; otherwise the place reopens.
+ * The first person on standby who has no other shift that day is moved up and texted; otherwise the place reopens.
  */
 export async function removeFromShift(offerId: string) {
   const { supabase, profile } = await requireStaff();
@@ -263,11 +272,11 @@ export async function removeFromShift(offerId: string) {
   let detail = `Took ${t.first_name} ${t.last_name} off ${s.client} (${shiftWhen(s)})`;
   if (t.status !== 'out') await sendToTemp({ db, temp: { id: o.temp_id, mobile: t.mobile }, kind: 'system', offerId, sentBy: profile.id, body: `Hi ${t.first_name}, you've been taken off the ${s.client} shift on ${shiftWhen(s)}. You don't need to attend. Call the office if you have any questions. - Staff Selection` });
 
-  // Move up the first person on standby who isn't booked elsewhere at that time.
+  // Move up the first person on standby who has no other shift that day.
   const { data: standby } = await db.from('offers').select('id,temp_id,token,temps(first_name,last_name,mobile)').eq('shift_id', s.id).eq('status', 'standby').order('standby_at');
   const booked = await bookingsNear(db, (standby ?? []).map((x) => x.temp_id), s.shift_date);
   const capped = await overCap(db, (standby ?? []).map((x) => x.temp_id), s);
-  const next = (standby ?? []).find((x) => !capped.has(x.temp_id) && !(booked.get(x.temp_id) ?? []).some((b) => b.id !== s.id && overlaps(b, s)));
+  const next = (standby ?? []).find((x) => !capped.has(x.temp_id) && !(booked.get(x.temp_id) ?? []).some((b) => b.id !== s.id && clashes(b, s)));
   if (next && s.status !== 'cancelled') {
     await db.from('offers').update({ status: 'accepted', responded_at: new Date().toISOString(), standby_at: null }).eq('id', next.id);
     const pt = next.temps as unknown as { first_name: string; last_name: string; mobile: string };
@@ -284,7 +293,7 @@ export async function removeFromShift(offerId: string) {
   return { ok: true };
 }
 
-/** Temps who'd be new for this shift: matching, within the radius, not sent it before, and not booked elsewhere at that time. */
+/** Temps who'd be new for this shift: matching, within the radius, not sent it before, and with no other shift that day. */
 async function newTempsFor(supabase: Awaited<ReturnType<typeof requireStaff>>['supabase'], shiftId: string, radius: number) {
   const { data: s } = await supabase.from('shifts').select('*').eq('id', shiftId).maybeSingle();
   if (!s || s.lat == null || s.lng == null) return { s: null, temps: [] as (Temp & { miles: number })[], busy: 0 };
@@ -294,7 +303,7 @@ async function newTempsFor(supabase: Awaited<ReturnType<typeof requireStaff>>['s
   const fresh = matched.filter((t) => !sent.has(t.id));
   const booked = await bookingsNear(supabase, fresh.map((t) => t.id), s.shift_date);
   const capped = await overCap(supabase, fresh.map((t) => t.id), s);
-  const temps = fresh.filter((t) => !capped.has(t.id) && !(booked.get(t.id) ?? []).some((b) => overlaps(b, s)));
+  const temps = fresh.filter((t) => !capped.has(t.id) && !(booked.get(t.id) ?? []).some((b) => clashes(b, s)));
   return { s, temps, busy: fresh.length - temps.length, leftOut: leftOutOf([s]) };
 }
 
@@ -331,7 +340,7 @@ export async function sendToMore(shiftId: string, radius: number, exclude: strin
   await rememberLeftOut(supabase, { id: s.id }, exclude);
   await audit(supabase, profile.id, 'shift.sent_more', `Sent ${s.client} shift (${shiftWhen(s)}) to ${res.sent} more temps${res.failed ? `, ${res.failed} failed` : ''}${radius > Number(s.radius_miles) ? `, radius now ${radius} mi` : ''}`);
   revalidatePath(`/shifts/${s.id}`);
-  return { ok: true, message: `Sent to ${res.sent} more temp${res.sent === 1 ? '' : 's'}${res.failed ? ` (${res.failed} failed)` : ''}${busy ? `. ${busy} already booked at that time were skipped` : ''}.` };
+  return { ok: true, message: `Sent to ${res.sent} more temp${res.sent === 1 ? '' : 's'}${res.failed ? ` (${res.failed} failed)` : ''}${busy ? `. ${busy} already have a shift that day were skipped` : ''}.` };
 }
 
 /** Finds active temps by name or mobile to book onto a shift by hand. */
@@ -358,7 +367,7 @@ export async function findTempsForShift(shiftId: string, q: string) {
     stars: scores.get(t.id)?.overall ?? null,
     id: t.id, name: `${t.first_name} ${t.last_name}`, mobile: displayMobile(t.mobile), postcode: t.postcode, status: t.status,
     onShift: (mine ?? []).some((o) => o.temp_id === t.id && o.status === 'accepted'),
-    clash: s ? (booked.get(t.id) ?? []).some((b: { id: string }) => b.id !== s.id && overlaps(b as never, s)) : false,
+    clash: s ? (booked.get(t.id) ?? []).some((b: { id: string }) => b.id !== s.id && clashes(b as never, s)) : false,
     overHours: capped.has(t.id) ? capMessage(t.first_name, capped.get(t.id)!) : '',
   }));
 }
@@ -377,8 +386,8 @@ export async function addToShift(shiftId: string, tempId: string, mode: BookMode
   if (t.status !== 'active') return { ok: false, error: `${t.first_name} isn’t active (${t.status === 'hold' ? 'on hold' : 'hasn’t opted in yet'}), so can’t be booked.` };
   const { count } = await supabase.from('offers').select('id', { count: 'exact', head: true }).eq('shift_id', s.id).eq('status', 'accepted');
   if ((count ?? 0) >= s.heads) return { ok: false, error: 'This shift is already full. Take someone off first, or increase the heads.' };
-  const clash = (await bookingsNear(supabase, [t.id], s.shift_date)).get(t.id)?.find((b) => b.id !== s.id && overlaps(b, s));
-  if (clash) return { ok: false, error: `${t.first_name} is already booked on ${clash.client} at that time.` };
+  const clash = (await bookingsNear(supabase, [t.id], s.shift_date)).get(t.id)?.find((b) => b.id !== s.id && clashes(b, s));
+  if (clash) return { ok: false, error: `${t.first_name} already has a shift that day (${clash.client}). One shift a day.` };
   const cap = (await overCap(supabase, [t.id], s)).get(t.id);
   if (cap) return { ok: false, error: `${capMessage(t.first_name, cap)} They can’t be booked on.` };
   if ((await blockedFor(supabase, s.client_id ?? null)).has(t.id)) return { ok: false, error: `${s.client} asked for ${t.first_name} not to return, so they can’t be booked on. An admin can lift this on the client’s page.` };
@@ -428,7 +437,7 @@ export async function updateShift(shiftId: string, e: ShiftEdit) {
   const updated = { ...s, heads, pay_rate: pay, start_time: e.start, end_time: e.end, duties, ppe };
   await supabase.from('shifts').update({ heads, pay_rate: pay, start_time: e.start, end_time: e.end, duties, ppe, status: booked.length >= heads ? 'filled' : 'open' }).eq('id', s.id);
 
-  // Fill any new places from standby, in the order people joined it, skipping anyone now booked elsewhere at that time.
+  // Fill any new places from standby, in the order people joined it, skipping anyone who now has another shift that day.
   let promoted = 0;
   const free = heads - booked.length;
   if (free > 0) {
@@ -437,7 +446,7 @@ export async function updateShift(shiftId: string, e: ShiftEdit) {
     const capped = await overCap(supabase, standby.map((o) => o.temp_id), updated);
     for (const o of standby) {
       if (promoted >= free) break;
-      if (capped.has(o.temp_id) || (busy.get(o.temp_id) ?? []).some((b) => b.id !== s.id && overlaps(b, updated))) continue;
+      if (capped.has(o.temp_id) || (busy.get(o.temp_id) ?? []).some((b) => b.id !== s.id && clashes(b, updated))) continue;
       await supabase.from('offers').update({ status: 'accepted', responded_at: new Date().toISOString(), standby_at: null }).eq('id', o.id);
       const t = o.temps as unknown as { first_name: string; mobile: string };
       const info = { first: t.first_name, client: s.client, when: shiftWhen(updated), token: o.token };
@@ -484,7 +493,7 @@ async function offerSeries(supabase: Db, profile: Me, days: DayRow[], temps: (Te
   const capped = new Map<string, Set<string>>(); // day id -> temps it would take over their weekly limit
   for (const day of days) capped.set(day.id, new Set((await overCap(supabase, temps.map((t) => t.id), day)).keys()));
   const rows = temps.flatMap((t) => days
-    .filter((day) => !capped.get(day.id)!.has(t.id) && !(booked.get(t.id) ?? []).some((b) => b.id !== day.id && overlaps(b, day)))
+    .filter((day) => !capped.get(day.id)!.has(t.id) && !(booked.get(t.id) ?? []).some((b) => b.id !== day.id && clashes(b, day)))
     .map((day) => ({ shift_id: day.id, temp_id: t.id, distance_miles: Math.round(t.miles * 10) / 10 })));
   if (!rows.length) return { sent: 0, failed: 0, people: 0 };
   const { data: offers } = await supabase.from('offers').upsert(rows, { onConflict: 'shift_id,temp_id', ignoreDuplicates: true }).select('id,temp_id,token,shift_id');
@@ -592,7 +601,7 @@ export async function seriesBook(seriesId: string, offerIds: string[], ask = tru
     if (d.status === 'cancelled') { skipped.push(`${dayLabel(d.shift_date)} is cancelled`); continue; }
     if ((count.get(d.id) ?? 0) >= d.heads) { skipped.push(`${dayLabel(d.shift_date)} is full`); continue; }
     if (t.status !== 'active') { skipped.push(`${t.first_name} isn’t active`); continue; }
-    const clash = (await bookingsNear(supabase, [o.temp_id], d.shift_date)).get(o.temp_id)?.find((b) => b.id !== d.id && overlaps(b, d));
+    const clash = (await bookingsNear(supabase, [o.temp_id], d.shift_date)).get(o.temp_id)?.find((b) => b.id !== d.id && clashes(b, d));
     if (clash) { skipped.push(`${t.first_name} is booked elsewhere on ${dayLabel(d.shift_date)}`); continue; }
     if ((await overCap(supabase, [o.temp_id], d)).has(o.temp_id)) { skipped.push(`${t.first_name} would go over their weekly hours limit on ${dayLabel(d.shift_date)}`); continue; }
     await supabase.from('offers').update({ status: 'accepted', responded_at: new Date().toISOString(), standby_at: null, awaiting_confirm: ask, confirm_asked_at: ask ? new Date().toISOString() : null }).eq('id', o.id);

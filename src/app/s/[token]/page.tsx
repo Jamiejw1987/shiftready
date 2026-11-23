@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { Logo } from '@/components/Logo';
 import { shiftWhen, shiftHours, fmtDate, hhmm } from '@/lib/format';
 import { OfferPanel } from './OfferPanel';
+import { findClash } from '@/lib/clash';
 import { SeriesPanel } from './SeriesPanel';
 import { seriesWhen } from '@/lib/series';
 
@@ -55,6 +56,8 @@ export default async function OfferPage({ params }: { params: { token: string } 
     standbyPos = count ?? 0;
   }
   const past = s.shift_date < new Date().toISOString().slice(0, 10);
+  // One shift a day: if they already have another shift that day, they can't take this one.
+  const other = !past && s.status !== 'cancelled' && !['accepted', 'interested'].includes(o.status) ? await findClash(db, o.temp_id, s) : null;
 
   return (
     <main className="tpage">
@@ -68,7 +71,8 @@ export default async function OfferPage({ params }: { params: { token: string } 
           offerStatus={o.status === 'declined' && o.decline_reason === 'Removed by office' ? 'removed' : o.status === 'accepted' && o.awaiting_confirm ? 'awaiting' : o.status}
           interestOnly={!!(s as unknown as { confirm_first?: boolean }).confirm_first}
           standbyPos={standbyPos}
-          shiftState={s.status === 'cancelled' ? 'cancelled' : past ? 'past' : (filled ?? 0) >= s.heads ? 'full' : 'open'}
+          shiftState={s.status === 'cancelled' ? 'cancelled' : past ? 'past' : other ? 'busy' : (filled ?? 0) >= s.heads ? 'full' : 'open'}
+          otherShift={other ? `${other.client}, ${shiftWhen(other)}` : null}
           placesLeft={Math.max(0, s.heads - (filled ?? 0))}
           shift={{
             client: s.client, site: `${s.site}, ${s.site_postcode}`, when: `${fmtDate(s.shift_date)}, ${hhmm(s.start_time)}-${hhmm(s.end_time)}`,

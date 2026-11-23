@@ -34,12 +34,13 @@ export function ShiftForm({ prefill, requestId }: { prefill?: Prefill; requestId
   useEffect(() => {
     const t = setTimeout(async () => {
       if (!f.sitePostcode.trim()) { setTemps([]); return setReach(''); }
-      const r = await previewReach(f.sitePostcode, f.jobType, parseFloat(f.radius) || 0, requestId);
+      const r = await previewReach(f.sitePostcode, f.jobType, parseFloat(f.radius) || 0, requestId, multi ? undefined : { date: f.date, start: f.start, end: f.end });
       setTemps(r.ok ? r.temps : []);
-      setReach(r.ok ? `${r.count} active temp${r.count === 1 ? '' : 's'} cleared for ${f.jobType} within ${f.radius} miles` : r.error);
+      setReach(r.ok ? `${r.count} active temp${r.count === 1 ? '' : 's'} cleared for ${f.jobType} within ${f.radius} miles${r.busy ? ` (${r.busy} left out: already have a shift that day)` : ''}` : r.error);
     }, 500);
     return () => clearTimeout(t);
-  }, [f.sitePostcode, f.jobType, f.radius]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.sitePostcode, f.jobType, f.radius, f.date, f.start, f.end, multi]);
 
   function send() {
     setErr('');

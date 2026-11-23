@@ -5,7 +5,7 @@ import { respond, confirmBooking } from './actions';
 
 type Props = {
   token: string; firstName: string; tempActive: boolean; bankUrl: string | null; offerStatus: string; standbyPos: number;
-  shiftState: 'open' | 'full' | 'cancelled' | 'past'; placesLeft: number;
+  shiftState: 'open' | 'full' | 'cancelled' | 'past' | 'busy'; placesLeft: number; otherShift?: string | null;
   /** Client-requested shift: saying yes puts them on the list for the office to confirm, it doesn't book them. */
   interestOnly?: boolean;
   shift: { client: string; site: string; when: string; whenShort: string; hours: number; pay: number; role: string; duties: string[]; ppe: string[]; miles: number | null };
@@ -38,7 +38,7 @@ export function OfferPanel(p: Props) {
       if (r.result === 'error') setErr('Something went wrong. Please try again, or call the office.');
       if (r.result === 'not_active') setErr('Your profile is on hold. Please call the office.');
       if (r.result === 'hours') setErr('Sorry, this shift would put you over the hours you’re allowed to work that week, so you can’t take it. Call the office if you think this is wrong.');
-      if (r.result === 'clash') setErr('You’re already booked on another shift at this time, so you can’t take this one. Call the office if you need to swap.');
+      if (r.result === 'clash') setErr('You already have a shift that day, so you can’t take this one. Call the office if you need to swap.');
       if (r.result === 'closed') setErr('Sorry, this shift isn’t available to you. Please call the office if you have any questions.');
       setDeclining(false);
       router.refresh();
@@ -59,6 +59,7 @@ export function OfferPanel(p: Props) {
     return <State badge="✓" kind="ok" title="Shift confirmed" text={`${s.client}, ${s.when}. Arrive 10 minutes early at ${s.site}. We'll text you a reminder the day before.`}>
       {p.bankUrl && <><p style={{ color: 'var(--ink)', fontWeight: 600 }}>Before your first shift, add your bank details so we can pay you.</p><a className="btn blue" href={p.bankUrl}>Add bank details</a></>}</State>;
   if (p.shiftState === 'past') return <State badge="–" kind="mute" title="This shift has passed" text="Keep an eye on your texts for new shifts." />;
+  if (p.shiftState === 'busy') return <State badge="!" kind="mute" title="You already have a shift that day" text={`You’re already down for ${p.otherShift ?? 'another shift'}, so you can’t take ${s.client} as well. Call the office if you’d rather swap.`} />;
   if (!p.tempActive) return <State badge="!" kind="mute" title="Can’t accept right now" text="Your profile isn’t active for shift offers. Please call the office." />;
   if (p.offerStatus === 'declined')
     return <State badge="–" kind="mute" title="Shift declined" text="Thanks for letting us know. We'll keep sending shifts that suit you.">

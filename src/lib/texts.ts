@@ -56,7 +56,7 @@ export const replyDeclined = (client: string, when: string) => `Thanks for letti
 export const replyStandby = (client: string, when: string) =>
   `You're on standby for ${client} ${when}. We'll message you straight away if a place comes up. - Staff Selection`;
 export const replyClash = (client: string, when: string) =>
-  `You're already booked on another shift at that time, so you can't take ${client} ${when}. Call the office if you need to swap. - Staff Selection`;
+  `You already have a shift that day, so you can't take ${client} ${when}. Call the office if you need to swap. - Staff Selection`;
 export const replyHours = (client: string, when: string) =>
   `Sorry, taking ${client} ${when} would put you over the hours you're allowed to work that week, so we can't book you on. Call the office if you think this is wrong. - Staff Selection`;
 export const REPLY_NO_OFFER = "We couldn't find an open shift offer for you just now. Keep an eye out for the next one. - Staff Selection";

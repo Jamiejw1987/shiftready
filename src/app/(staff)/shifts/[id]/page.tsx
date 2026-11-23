@@ -73,7 +73,7 @@ export default async function ShiftBoard({ params, searchParams }: { params: { i
         )}
         {req?.status === 'cancelled' && req.cancelled_by_client && !cancelled && <p className="alert bad" style={{ marginBottom: 10 }}>{s.client} cancelled this request. Cancel the shift below so booked temps get a text.</p>}
         {searchParams.manual && <p className="okmsg">Shift created. Nobody has been texted: use Add someone by hand below to book people on, or Send to more temps if you change your mind.</p>}
-        {searchParams.sent && <p className="okmsg">Offer texted to {searchParams.sent} temps{Number(searchParams.failed) ? `. ${searchParams.failed} texts failed` : ''}{Number(searchParams.busy) ? `. ${searchParams.busy} already booked at that time were skipped` : ''}. This page updates every 15 seconds.</p>}
+        {searchParams.sent && <p className="okmsg">Offer texted to {searchParams.sent} temps{Number(searchParams.failed) ? `. ${searchParams.failed} texts failed` : ''}{Number(searchParams.busy) ? `. ${searchParams.busy} already have a shift that day were skipped` : ''}. This page updates every 15 seconds.</p>}
         {cancelled
           ? <p className="err">This shift was cancelled. Booked temps were texted.</p>
           : <div className="board" style={{ marginTop: 12 }}>
