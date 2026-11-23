@@ -19,7 +19,7 @@ export default async function SitePage() {
       <div className="ind-head">
         <span className="note">Signed in as {sup.full_name} · <form action={siteSignOut} style={{ display: 'inline' }}><button className="linkbtn" style={{ background: 'none', border: 0, padding: 0, color: 'var(--blue-deep)', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>sign out</button></form></span>
         <span className="doc">Day one sign-off</span>
-        <span className="note">{nice}. Everyone booked today, then everyone who’s been sent the induction and still needs their day one.</span>
+        <span className="note">{nice}. Everyone booked today, then everyone who’s been sent the induction: still to do first, then done.</span>
       </div>
       <section className="card"><div className="in">
         <b>How it works</b>

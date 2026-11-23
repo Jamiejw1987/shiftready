@@ -40,7 +40,9 @@ export function SiteList({ rows, trainer }: { rows: SiteRow[]; trainer: string }
   const [q, setQ] = useState('');
   if (!rows.length) return <div className="state"><div className="badge mute">–</div><div className="big">Nobody to see yet</div><p>Nobody is booked on today’s shifts for your site, and nobody has been sent the induction in ShiftReady. If people are here for day one, ask the office to send them the induction (or book them on today’s shift), then refresh.</p></div>;
   const shown = rows.filter((r) => !q.trim() || r.name.toLowerCase().includes(q.trim().toLowerCase()));
-  const firstOther = shown.findIndex((r) => !r.shift);
+  const done = (r: SiteRow) => !!r.induction?.siteDone && r.induction.mh !== 'todo';
+  const firstOther = shown.findIndex((r) => !r.shift && !done(r));
+  const firstDone = shown.findIndex((r) => !r.shift && done(r));
   return (
     <>
       <input type="search" placeholder="Search by name" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search by name" />
@@ -53,6 +55,7 @@ export function SiteList({ rows, trainer }: { rows: SiteRow[]; trainer: string }
         return (
           <div key={r.key} style={{ display: 'contents' }}>
           {idx === firstOther && <h2 className="sech" style={{ margin: '8px 0 0' }}>Waiting for day one</h2>}
+          {idx === firstDone && <h2 className="sech" style={{ margin: '8px 0 0' }}>Day one done</h2>}
           <section className="card"><div className="in" style={{ gap: 10 }}>
             <button onClick={() => setOpen(isOpen ? null : r.key)} style={{ all: 'unset', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 4 }} aria-expanded={isOpen}>
               <b style={{ fontSize: 18 }}>{r.name}</b>

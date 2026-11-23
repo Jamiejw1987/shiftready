@@ -42,9 +42,8 @@ export async function bookedForSupervisor(sup: Supervisor): Promise<SiteRow[]> {
 
   // 2. Every live induction for this supervisor's client (or every client if they're not tied to one).
   const sel = `${IND_COLS},induction_packs!inner(name,client_id,default_site),temps(first_name,last_name)`;
-  let iq = db.from('temp_inductions').select(sel).is('cancelled_at', null).order('sent_at', { ascending: false }).limit(500);
-  if (sup.client_id) iq = iq.eq('induction_packs.client_id', sup.client_id);
-  const { data: liveRaw, error: indErr } = await iq;
+  // Everyone sent an induction shows, whichever client the pack or the login is set to.
+  const { data: liveRaw, error: indErr } = await db.from('temp_inductions').select(sel).is('cancelled_at', null).order('sent_at', { ascending: false }).limit(1000);
   if (indErr) throw new Error(`Couldn’t load inductions (${indErr.message})`);
   const bookedIds = Array.from(new Set((offers ?? []).map((o) => o.temp_id)));
   const { data: bookedIndsRaw } = bookedIds.length
@@ -76,7 +75,7 @@ export async function bookedForSupervisor(sup: Supervisor): Promise<SiteRow[]> {
     const t = o.temps as unknown as { first_name: string; last_name: string };
     const mine = allInds.filter((i) => i.temp_id === o.temp_id);
     const i = mine.find((x) => x.induction_packs?.client_id && (x.induction_packs.client_id === s.client_id || (!s.client_id && x.induction_packs.client_id === sup.client_id)))
-      ?? mine.find((x) => !x.induction_packs?.client_id) ?? (sup.client_id ? null : mine[0] ?? null);
+      ?? mine.find((x) => !x.induction_packs?.client_id) ?? mine[0] ?? null;
     if (i) shown.add(i.id);
     rows.push({
       key: `o:${o.id}`, tempId: o.temp_id, name: `${t.first_name} ${t.last_name}`,
@@ -87,15 +86,15 @@ export async function bookedForSupervisor(sup: Supervisor): Promise<SiteRow[]> {
   // Sent the induction, not booked today, day one not finished yet.
   const others: SiteRow[] = [];
   for (const i of allInds) {
-    if (shown.has(i.id) || (sup.client_id && i.induction_packs?.client_id !== sup.client_id)) continue;
+    if (shown.has(i.id)) continue;
     const v = view(i, '');
-    const dayOneDone = v.siteDone && v.mh !== 'todo';
-    if (dayOneDone) continue;
     shown.add(i.id);
     others.push({ key: `i:${i.id}`, tempId: i.temp_id, name: `${i.temps?.first_name ?? ''} ${i.temps?.last_name ?? ''}`.trim(), shift: null, induction: v });
   }
   rows.sort((a, b) => a.shift!.start.localeCompare(b.shift!.start) || a.name.localeCompare(b.name));
-  others.sort((a, b) => a.name.localeCompare(b.name));
+  // Still to do first, then people whose day one is finished.
+  const finished = (r: SiteRow) => !!r.induction?.siteDone && r.induction.mh !== 'todo';
+  others.sort((a, b) => Number(finished(a)) - Number(finished(b)) || a.name.localeCompare(b.name));
   return [...rows, ...others];
 }
 
