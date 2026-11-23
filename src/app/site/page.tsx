@@ -9,7 +9,9 @@ export const metadata = { title: 'Day one | ShiftReady', robots: { index: false 
 
 export default async function SitePage() {
   const sup = await requireSupervisor();
-  const rows = await bookedForSupervisor(sup);
+  let rows: Awaited<ReturnType<typeof bookedForSupervisor>> = [];
+  let problem = '';
+  try { rows = await bookedForSupervisor(sup); } catch (e) { problem = (e as Error).message; }
   const { today } = siteDays();
   const nice = new Date(today + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   return (
@@ -28,7 +30,7 @@ export default async function SitePage() {
           <li>Both save straight to their file. Nothing to print or hand in.</li>
         </ol>
       </div></section>
-      <SiteList rows={rows} trainer={sup.full_name} />
+      {problem ? <p className="alert bad">Something went wrong loading the list: {problem}. Call the office.</p> : <SiteList rows={rows} trainer={sup.full_name} />}
     </div></main>
   );
 }

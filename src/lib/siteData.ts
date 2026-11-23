@@ -10,6 +10,14 @@ export type SiteRow = {
   induction: { id: string; pack: string; status: IndStatus; signed: boolean; checked: boolean; siteDone: boolean; site: string; mh: 'none' | 'todo' | 'done'; form: boolean } | null;
 };
 
+/** "DHL", "DHL Coventry", "dhl coventry " all match the client "DHL Coventry". */
+export function sameClient(a: string | null | undefined, b: string | null | undefined) {
+  const n = (x: string) => x.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!a || !b) return false;
+  const x = n(a), y = n(b);
+  return !!x && !!y && (x === y || x.includes(y) || y.includes(x) || x.split(' ')[0] === y.split(' ')[0]);
+}
+
 type Ind = TempInduction & { induction_packs: { name: string; client_id: string | null; default_site: string | null } | null; temps: { first_name: string; last_name: string } | null };
 
 /**
@@ -22,10 +30,12 @@ export async function bookedForSupervisor(sup: Supervisor): Promise<SiteRow[]> {
   const { today, yesterday } = siteDays();
 
   // 1. Booked today.
-  let q = db.from('shifts').select('id,client,client_id,site,shift_date,start_time,end_time').in('shift_date', [yesterday, today]).neq('status', 'cancelled');
-  if (sup.client_id) q = q.eq('client_id', sup.client_id);
-  const { data: shifts } = await q;
-  const list = (shifts ?? []).filter((s) => s.shift_date === today || s.end_time <= s.start_time);   // last night's only if it ran past midnight
+  const { data: shifts, error: shiftErr } = await db.from('shifts').select('id,client,client_id,site,shift_date,start_time,end_time').in('shift_date', [yesterday, today]).neq('status', 'cancelled');
+  if (shiftErr) throw new Error(`Couldn’t load today’s shifts (${shiftErr.message})`);
+  // Shifts the office adds directly only carry the client's name, not the link to the client, so match on either.
+  const { data: myClient } = sup.client_id ? await db.from('clients').select('name').eq('id', sup.client_id).maybeSingle() : { data: null };
+  const forMe = (s: { client: string | null; client_id: string | null }) => !sup.client_id || s.client_id === sup.client_id || (!s.client_id && sameClient(s.client, myClient?.name));
+  const list = (shifts ?? []).filter((s) => forMe(s) && (s.shift_date === today || s.end_time <= s.start_time));   // last night's only if it ran past midnight
   const { data: offers } = list.length
     ? await db.from('offers').select('id,shift_id,temp_id,temps(first_name,last_name)').in('shift_id', list.map((s) => s.id)).eq('status', 'accepted')
     : { data: [] };
@@ -34,7 +44,8 @@ export async function bookedForSupervisor(sup: Supervisor): Promise<SiteRow[]> {
   const sel = `${IND_COLS},induction_packs!inner(name,client_id,default_site),temps(first_name,last_name)`;
   let iq = db.from('temp_inductions').select(sel).is('cancelled_at', null).order('sent_at', { ascending: false }).limit(500);
   if (sup.client_id) iq = iq.eq('induction_packs.client_id', sup.client_id);
-  const { data: liveRaw } = await iq;
+  const { data: liveRaw, error: indErr } = await iq;
+  if (indErr) throw new Error(`Couldn’t load inductions (${indErr.message})`);
   const bookedIds = Array.from(new Set((offers ?? []).map((o) => o.temp_id)));
   const { data: bookedIndsRaw } = bookedIds.length
     ? await db.from('temp_inductions').select(sel).in('temp_id', bookedIds).is('cancelled_at', null).order('sent_at', { ascending: false })
@@ -64,7 +75,7 @@ export async function bookedForSupervisor(sup: Supervisor): Promise<SiteRow[]> {
     const s = list.find((x) => x.id === o.shift_id)!;
     const t = o.temps as unknown as { first_name: string; last_name: string };
     const mine = allInds.filter((i) => i.temp_id === o.temp_id);
-    const i = mine.find((x) => x.induction_packs?.client_id && x.induction_packs.client_id === s.client_id)
+    const i = mine.find((x) => x.induction_packs?.client_id && (x.induction_packs.client_id === s.client_id || (!s.client_id && x.induction_packs.client_id === sup.client_id)))
       ?? mine.find((x) => !x.induction_packs?.client_id) ?? (sup.client_id ? null : mine[0] ?? null);
     if (i) shown.add(i.id);
     rows.push({

@@ -38,7 +38,7 @@ export function SiteList({ rows, trainer }: { rows: SiteRow[]; trainer: string }
   const [mh, setMh] = useState<string | null>(null);
   const [d1, setD1] = useState<string | null>(null);
   const [q, setQ] = useState('');
-  if (!rows.length) return <div className="state"><div className="badge mute">–</div><div className="big">Nobody to see yet</div><p>No one is booked today and nobody is waiting for their day one.</p></div>;
+  if (!rows.length) return <div className="state"><div className="badge mute">–</div><div className="big">Nobody to see yet</div><p>Nobody is booked on today’s shifts for your site, and nobody has been sent the induction in ShiftReady. If people are here for day one, ask the office to send them the induction (or book them on today’s shift), then refresh.</p></div>;
   const shown = rows.filter((r) => !q.trim() || r.name.toLowerCase().includes(q.trim().toLowerCase()));
   const firstOther = shown.findIndex((r) => !r.shift);
   return (
