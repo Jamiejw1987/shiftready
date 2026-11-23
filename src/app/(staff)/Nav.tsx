@@ -11,6 +11,7 @@ export function Nav({ admin, payroll = false, waiting = 0, toCheck = 0, clientNe
     { href: '/planner', label: 'Planner' },
     { href: '/shifts', label: 'Shifts' },
     { href: '/jobs', label: 'Jobs' },
+    { href: '/pools', label: 'Pools' },
     { href: '/client-requests', label: 'Client requests' },
     { href: '/clients', label: 'Clients' },
     { href: '/requests', label: 'Requests' },

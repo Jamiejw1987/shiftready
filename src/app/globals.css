@@ -440,3 +440,26 @@ table.week td.wk-no { text-align: center; color: var(--line-strong); }
 .jobcard-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 14px; }
 .jobbar { height: 6px; background: var(--line); border-radius: 999px; overflow: hidden; }
 .jobbar span { display: block; height: 100%; background: var(--blue); border-radius: 999px; }
+
+/* Pools: a site's regular workers, the days they want, and texting them at short notice */
+.pool-search { display: flex; gap: 8px; max-width: 460px; }
+.pool-search input { flex: 1; }
+.pool-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.pool-mini { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-top: 4px; }
+.pool-mini span { display: flex; flex-direction: column; align-items: center; padding: 4px 0; border-radius: 6px; background: var(--bg); color: var(--muted); font-size: 12px; }
+.pool-mini span i { font-style: normal; font-size: 11px; }
+.pool-mini span.on { background: var(--ok-soft); color: var(--ok); }
+table.pool th, table.pool td { padding: 6px; vertical-align: middle; }
+table.pool .pool-who { position: sticky; left: 0; background: var(--panel); z-index: 1; min-width: 190px; text-align: left; }
+table.pool tr.picked .pool-who, table.pool tr.picked td { background: var(--blue-soft); }
+.pool-all, .pool-name { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.pool-all input, .pool-name input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--blue); flex: none; }
+.pool-name > span { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.pool-day, .pool-cell { text-align: center; width: 46px; }
+.pool-dayhead { display: flex; flex-direction: column; align-items: center; width: 42px; padding: 4px 0; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--panel); font: 700 12px var(--f-body); color: var(--ink); cursor: pointer; }
+.pool-dayhead span { font-weight: 600; color: var(--muted); font-size: 11px; }
+.pool-dayhead.on { background: var(--blue); border-color: var(--blue); color: #fff; } .pool-dayhead.on span { color: #fff; }
+.pool-tog { width: 38px; height: 38px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--field); cursor: pointer; font-weight: 800; color: #fff; font-size: 16px; }
+.pool-tog:hover { border-color: var(--ok); }
+.pool-tog.on { background: var(--ok); border-color: var(--ok); }
+@media (max-width: 520px) { table.pool .pool-who { min-width: 150px; max-width: 170px; } .pool-day, .pool-cell { width: 40px; } .pool-tog { width: 34px; height: 34px; } .pool-dayhead { width: 36px; } }
