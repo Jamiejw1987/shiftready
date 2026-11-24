@@ -463,3 +463,5 @@ table.pool tr.picked .pool-who, table.pool tr.picked td { background: var(--blue
 .pool-tog:hover { border-color: var(--ok); }
 .pool-tog.on { background: var(--ok); border-color: var(--ok); }
 @media (max-width: 520px) { table.pool .pool-who { min-width: 150px; max-width: 170px; } .pool-day, .pool-cell { width: 40px; } .pool-tog { width: 34px; height: 34px; } .pool-dayhead { width: 36px; } }
+.pool-date { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; }
+.pool-date input { width: auto; max-width: 200px; }

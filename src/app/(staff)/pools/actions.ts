@@ -4,9 +4,29 @@ import { requireStaff, audit } from '@/lib/auth';
 import { displayMobile } from '@/lib/phone';
 import { sendSms, sendMany } from '@/lib/sms';
 import { appUrl } from '@/lib/texts';
+import { bookingsNear } from '@/lib/clash';
 
 type Result = { ok: boolean; error?: string; message?: string };
 const SETUP = 'Couldn’t save. Has supabase/2026-11-23b-pools.sql been run in Supabase?';
+const isDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d + 'T12:00:00Z'));
+
+/** Temps (by id) who already have a shift on this date, booked or provisionally accepted, with the client. */
+async function bookedOn(db: Awaited<ReturnType<typeof requireStaff>>['supabase'], tempIds: string[], date: string) {
+  const near = await bookingsNear(db, tempIds, date);
+  const out = new Map<string, string>();
+  for (const [id, list] of near) { const b = list.find((x) => x.shift_date === date); if (b) out.set(id, b.client); }
+  return out;
+}
+
+/** Who in this pool already has a shift on this date, so the page can grey them out. */
+export async function poolBookedOn(poolId: string, date: string): Promise<Record<string, string>> {
+  const { supabase } = await requireStaff();
+  if (!isDate(date)) return {};
+  const { data } = await supabase.from('pool_members').select('id,temp_id').eq('pool_id', poolId);
+  const booked = await bookedOn(supabase, (data ?? []).map((m) => m.temp_id), date);
+  return Object.fromEntries((data ?? []).filter((m) => booked.has(m.temp_id)).map((m) => [m.id, booked.get(m.temp_id)!]));
+}
+
 const cleanDays = (days: number[]) => [...new Set(days.filter((d) => Number.isInteger(d) && d >= 1 && d <= 7))].sort();
 
 /** Which days of the week a pool member wants to work (1 = Mon ... 7 = Sun). */
@@ -63,9 +83,10 @@ export async function addToPool(poolId: string, tempId: string): Promise<Result>
 }
 
 /** Mass text to the people ticked in a pool. Only opted-in temps get it; anyone with messages switched off is skipped. */
-export async function sendPoolText(poolId: string, memberIds: string[], body: string): Promise<Result> {
+export async function sendPoolText(poolId: string, memberIds: string[], body: string, date: string): Promise<Result> {
   const { supabase, profile } = await requireStaff();
   const text = body.trim();
+  if (!isDate(date)) return { ok: false, error: 'Pick the date the shift is on, so anyone already working that day is left out.' };
   if (!text) return { ok: false, error: 'Write a message first.' };
   if (text.length > 600) return { ok: false, error: 'Keep the message under 600 characters.' };
   if (!memberIds.length) return { ok: false, error: 'Tick who to send it to.' };
@@ -76,14 +97,17 @@ export async function sendPoolText(poolId: string, memberIds: string[], body: st
   if (!p) return { ok: false, error: 'Pool not found. Refresh the page.' };
   type T = { id: string; first_name: string; mobile: string; status: string; reg_token: string | null };
   const temps = (members ?? []).map((m) => m.temps as unknown as T | null).filter((t): t is T => !!t);
-  const active = temps.filter((t) => t.status === 'active');
-  const notIn = temps.length - active.length;
-  if (!active.length) return { ok: false, error: 'None of the people ticked have opted in to texts, so nothing was sent.' };
+  // Never text anyone who already has a shift that day (booked or provisionally accepted).
+  const booked = await bookedOn(supabase, temps.map((t) => t.id), date);
+  const active = temps.filter((t) => t.status === 'active' && !booked.has(t.id));
+  const busy = temps.filter((t) => booked.has(t.id)).length;
+  const notIn = temps.length - active.length - busy;
+  if (!active.length) return { ok: false, error: busy ? 'Everyone ticked already has a shift that day, so nothing was sent.' : 'None of the people ticked have opted in to texts, so nothing was sent.' };
   const res = await sendMany(active, (t) =>
     sendSms({ db: supabase, to: t.mobile, body: text.replace(/\{first\}/g, t.first_name).replace(/\{link\}/g, `${appUrl()}/me/${t.reg_token}`), kind: 'bulk', tempId: t.id, sentBy: profile.id }),
   );
-  await audit(supabase, profile.id, 'sms.pool', `Texted ${res.sent} in the ${p.client} (${p.site}) pool: "${text.slice(0, 60)}${text.length > 60 ? '...' : ''}"`);
-  const extra = [res.failed ? `${res.failed} failed` : '', res.off ? `${res.off} not sent: messages switched off` : '', notIn ? `${notIn} not sent: not opted in to texts` : ''].filter(Boolean);
+  await audit(supabase, profile.id, 'sms.pool', `Texted ${res.sent} in the ${p.client} (${p.site}) pool for ${date}${busy ? ` (${busy} skipped: already working that day)` : ''}: "${text.slice(0, 60)}${text.length > 60 ? '...' : ''}"`);
+  const extra = [busy ? `${busy} not sent: already have a shift that day` : '', res.failed ? `${res.failed} failed` : '', res.off ? `${res.off} not sent: messages switched off` : '', notIn ? `${notIn} not sent: not opted in to texts` : ''].filter(Boolean);
   return { ok: true, message: `Sent to ${res.sent} ${res.sent === 1 ? 'person' : 'people'}${extra.length ? `. ${extra.join('. ')}` : ''}.` };
 }
 

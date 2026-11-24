@@ -1486,3 +1486,30 @@ join public.pools p on p.client_key = lower(regexp_replace(btrim(s.client), '\s+
 where o.status = 'accepted'
 group by p.id, o.temp_id
 on conflict (pool_id, temp_id) do update set last_shift = greatest(public.pool_members.last_shift, excluded.last_shift);
+
+-- ================= One shift a day guard (also in 2026-11-24-one-shift-a-day-guard.sql) =================
+
+create or replace function public.one_shift_a_day()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare d date; other text;
+begin
+  if new.status not in ('accepted', 'interested') then return new; end if;
+  if tg_op = 'UPDATE' and old.status in ('accepted', 'interested') and old.shift_id = new.shift_id then return new; end if;
+  -- One at a time per temp, so two accepts at the same moment can't both get through.
+  perform pg_advisory_xact_lock(hashtext('one_shift_a_day:' || new.temp_id::text));
+  select shift_date into d from public.shifts where id = new.shift_id;
+  if d is null then return new; end if;
+  select s.client into other
+    from public.offers o join public.shifts s on s.id = o.shift_id
+   where o.temp_id = new.temp_id and o.id <> new.id and o.shift_id <> new.shift_id
+     and o.status in ('accepted', 'interested') and s.status <> 'cancelled' and s.shift_date = d
+   limit 1;
+  if other is not null then
+    raise exception 'This temp already has a shift on % (%). One shift a day.', to_char(d, 'DD Mon'), other using errcode = 'P0001';
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists offers_one_shift_a_day on public.offers;
+create trigger offers_one_shift_a_day before insert or update of status, shift_id on public.offers
+  for each row execute function public.one_shift_a_day();
