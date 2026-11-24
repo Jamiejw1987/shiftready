@@ -2,6 +2,7 @@
 import { useState, useTransition } from 'react';
 import { checkStarters, downloadStarters } from './actions';
 import type { StarterResult } from '@/lib/starters';
+import { TempLink } from '@/components/TempLink';
 
 export function PayrollClient() {
   const [text, setText] = useState('');
@@ -61,7 +62,7 @@ export function PayrollClient() {
             <h3 style={{ margin: '0 0 8px' }}>Matched ({res.matched.length})</h3>
             {!res.matched.length ? <p className="note">Nobody matched yet.</p> : (
               <div className="tablewrap"><table className="cards"><thead><tr><th>Name in ShiftReady</th><th>You pasted</th><th></th></tr></thead><tbody>
-                {res.matched.map((m) => <tr key={m.id}><td><b>{m.name}</b></td><td className="mono" data-l="You pasted">{m.line}</td>
+                {res.matched.map((m) => <tr key={m.id}><td><TempLink id={m.id} newTab><b>{m.name}</b></TempLink></td><td className="mono" data-l="You pasted">{m.line}</td>
                   <td>{m.noBank ? <span className="pill warn">No bank details yet</span> : <span className="pill ok">Ready</span>}</td></tr>)}
               </tbody></table></div>
             )}

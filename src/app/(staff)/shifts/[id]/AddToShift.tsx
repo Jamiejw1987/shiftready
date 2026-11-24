@@ -2,6 +2,7 @@
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { findTempsForShift, addToShift } from '../actions';
+import { TempLink } from '@/components/TempLink';
 
 type Hit = Awaited<ReturnType<typeof findTempsForShift>>[number];
 
@@ -31,7 +32,7 @@ export function AddToShift({ id }: { id: string }) {
             const block = h.onShift ? 'Already booked on' : h.blocked ? 'Client asked not to have them back' : h.clash ? 'Has a shift that day' : h.overHours ? 'Over weekly hours limit' : h.status !== 'active' ? (h.status === 'hold' ? 'On hold' : 'Not opted in') : '';
             return (
               <div key={h.id} className="slot" style={{ marginTop: 0 }}>
-                <span><b>{h.name}</b> <span className="note">{h.mobile}{h.postcode ? ` · ${h.postcode}` : ''}</span>{h.clientStars != null && <> <span className="pill blue">★ {h.clientStars.toFixed(1)} here</span></>}{h.stars != null && <> <span className="pill mute">★ {h.stars.toFixed(1)}</span></>}</span>
+                <span><TempLink id={h.id} newTab><b>{h.name}</b></TempLink> <span className="note">{h.mobile}{h.postcode ? ` · ${h.postcode}` : ''}</span>{h.clientStars != null && <> <span className="pill blue">★ {h.clientStars.toFixed(1)} here</span></>}{h.stars != null && <> <span className="pill mute">★ {h.stars.toFixed(1)}</span></>}</span>
                 {block ? <span className="pill mute" title={h.overHours || undefined}>{block}</span> : (
                   <button className="btn blue small" disabled={pending} onClick={() => start(async () => {
                     const r = await addToShift(id, h.id, mode);

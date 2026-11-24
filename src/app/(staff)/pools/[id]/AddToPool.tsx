@@ -2,6 +2,7 @@
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { findTempsForPool, addToPool } from '../actions';
+import { TempLink } from '@/components/TempLink';
 
 type Hit = Awaited<ReturnType<typeof findTempsForPool>>[number];
 
@@ -26,7 +27,7 @@ export function AddToPool({ poolId }: { poolId: string }) {
       <input type="search" aria-label="Find a temp" placeholder="Search name or mobile" value={q} onChange={(e) => { setQ(e.target.value); setMsg(null); }} autoComplete="off" style={{ maxWidth: 420 }} />
       {hits.map((h) => (
         <div key={h.id} className="slot" style={{ marginTop: 0 }}>
-          <span><b>{h.name}</b> <span className="note">{h.mobile}{h.postcode ? ` · ${h.postcode}` : ''}</span></span>
+          <span><TempLink id={h.id} newTab><b>{h.name}</b></TempLink> <span className="note">{h.mobile}{h.postcode ? ` · ${h.postcode}` : ''}</span></span>
           {h.inPool ? <span className="pill mute">Already in pool</span> : (
             <button className="btn blue small" disabled={pending} onClick={() => start(async () => {
               const r = await addToPool(poolId, h.id);

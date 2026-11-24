@@ -2,10 +2,11 @@ import Link from 'next/link';
 import { requireStaff } from '@/lib/auth';
 import { hhmm } from '@/lib/format';
 import { AutoRefresh } from './AutoRefresh';
+import { TempLink } from '@/components/TempLink';
 
 export const dynamic = 'force-dynamic';
 
-type Offer = { status: string; awaiting_confirm: boolean | null; checkin_reply: string | null; checkin_sent_at: string | null; temps: { first_name: string; last_name: string } | null };
+type Offer = { temp_id: string; status: string; awaiting_confirm: boolean | null; checkin_reply: string | null; checkin_sent_at: string | null; temps: { first_name: string; last_name: string } | null };
 type Shift = { id: string; client: string; site: string; site_postcode: string; job_type: string; shift_date: string; start_time: string; end_time: string; heads: number; offers: Offer[] | null };
 
 const SLOTS = [
@@ -33,7 +34,7 @@ export default async function PlannerPage({ searchParams }: { searchParams: { d?
   const to = week ? addDays(from, 6) : day;
 
   const { data } = await supabase.from('shifts')
-    .select('id,client,site,site_postcode,job_type,shift_date,start_time,end_time,heads,offers(status,awaiting_confirm,checkin_reply,checkin_sent_at,temps(first_name,last_name))')
+    .select('id,client,site,site_postcode,job_type,shift_date,start_time,end_time,heads,offers(temp_id,status,awaiting_confirm,checkin_reply,checkin_sent_at,temps(first_name,last_name))')
     .gte('shift_date', from).lte('shift_date', to).neq('status', 'cancelled')
     .order('start_time');
   const shifts = (data ?? []) as unknown as Shift[];
@@ -55,7 +56,7 @@ export default async function PlannerPage({ searchParams }: { searchParams: { d?
   const person = (o: Offer) => {
     const name = o.temps ? `${o.temps.first_name} ${o.temps.last_name}`.trim() : 'Unknown';
     const mark = o.status === 'noshow' ? ['bad', 'no-show'] : o.checkin_reply === 'yes' ? ['ok', '✓'] : o.checkin_reply === 'no' ? ['bad', 'can’t make it'] : o.checkin_sent_at ? ['warn', '?'] : o.awaiting_confirm ? ['warn', 'to confirm'] : null;
-    return <div key={name + o.status} className="pl-name">{name}{mark && <span className={`pl-mark ${mark[0]}`}> {mark[1]}</span>}</div>;
+    return <div key={o.temp_id + o.status} className="pl-name"><TempLink id={o.temp_id}>{name}</TempLink>{mark && <span className={`pl-mark ${mark[0]}`}> {mark[1]}</span>}</div>;
   };
 
   return (
@@ -102,12 +103,13 @@ export default async function PlannerPage({ searchParams }: { searchParams: { d?
                   const names = (s.offers ?? []).filter((o) => o.status === 'accepted' || o.status === 'noshow');
                   const standby = (s.offers ?? []).filter((o) => o.status === 'standby').length;
                   return (
-                    <Link key={s.id} href={`/shifts/${s.id}`} className={`pl-shift ${f < s.heads ? 'short' : 'full'}`}>
+                    <div key={s.id} className={`pl-shift ${f < s.heads ? 'short' : 'full'}`}>
+                      <Link href={`/shifts/${s.id}`} className="pl-cover" aria-label={`Open the ${hhmm(s.start_time)} ${s.job_type} shift`} />
                       <div className="pl-top"><b>{hhmm(s.start_time)}–{hhmm(s.end_time)}</b><span>{f}/{s.heads}</span></div>
                       <div className="pl-job">{s.job_type}</div>
                       {names.map(person)}
                       {f < s.heads && <div className="pl-gap">{s.heads - f} to fill{standby ? ` · ${standby} on standby` : ''}</div>}
-                    </Link>
+                    </div>
                   );
                 })}</td>;
               })}</tr>

@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { displayMobile } from '@/lib/phone';
 import { setMessagesOff, addOngoing, endOngoing, findWorkers } from './actions';
+import { TempLink } from '@/components/TempLink';
 
 type Msg = { ok: boolean; text: string } | null;
 const Note = ({ m }: { m: Msg }) => (m ? <p className={m.ok ? 'okmsg' : 'err'} style={{ marginTop: 10 }}>{m.text}</p> : null);
@@ -190,7 +191,7 @@ export function ClientOngoing({ clientId, clientName, sites, current, past }: { 
             {found.length > 0 && (
               <div className="tablewrap" style={{ marginTop: 6 }}><table><tbody>
                 {found.map((t) => (
-                  <tr key={t.id}><td><b>{t.first_name} {t.last_name}</b> <span className="note">{displayMobile(t.mobile)}{t.postcode ? ` · ${t.postcode}` : ''}</span></td>
+                  <tr key={t.id}><td><TempLink id={t.id} newTab><b>{t.first_name} {t.last_name}</b></TempLink> <span className="note">{displayMobile(t.mobile)}{t.postcode ? ` · ${t.postcode}` : ''}</span></td>
                     <td style={{ textAlign: 'right' }}>{onHere.has(t.id) ? <span className="pill ok">Already here</span> : <button className="btn ghost small" onClick={() => { setPick(t); setMsg(null); }}>Choose</button>}</td></tr>
                 ))}
               </tbody></table></div>
@@ -199,7 +200,7 @@ export function ClientOngoing({ clientId, clientName, sites, current, past }: { 
           </div>
         ) : (
           <>
-            <p style={{ margin: 0 }}><b>{pick.first_name} {pick.last_name}</b> <button className="btn ghost small" onClick={() => { setPick(null); setQ(''); }}>Change</button></p>
+            <p style={{ margin: 0 }}><TempLink id={pick.id} newTab><b>{pick.first_name} {pick.last_name}</b></TempLink> <button className="btn ghost small" onClick={() => { setPick(null); setQ(''); }}>Change</button></p>
             <div className="form">
               <div className="f w2"><label className="l" htmlFor="ogSite2">Site (optional)</label>
                 <select id="ogSite2" value={f.siteId} disabled={!sites.length} onChange={(e) => setF({ ...f, siteId: e.target.value })}>

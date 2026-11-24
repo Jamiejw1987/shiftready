@@ -2,6 +2,7 @@
 import { useState, useTransition } from 'react';
 import { checkTimesheets, downloadTimesheets } from './actions';
 import type { ConvertResult, MatchRow } from '@/lib/timesheets';
+import { TempLink } from '@/components/TempLink';
 
 const hoursText = (r: MatchRow) => r.lines.map((l) => `${l.hours}h @ £${l.rate.toFixed(2)}`).join(' + ') || 'No hours';
 
@@ -121,7 +122,7 @@ export function TimesheetConverter() {
               <div className="tablewrap"><table className="cards"><thead><tr><th>Name in timesheet</th><th>In ShiftReady</th><th>Site</th><th>Hours</th><th></th></tr></thead><tbody>
                 {matched.map((r) => <tr key={r.key}>
                   <td>{r.fileName}{r.timesheets > 1 && <div className="note">{r.timesheets} timesheets combined</div>}</td>
-                  <td data-l="In ShiftReady"><b>{r.match!.name}</b></td>
+                  <td data-l="In ShiftReady"><TempLink id={r.match!.id} newTab><b>{r.match!.name}</b></TempLink></td>
                   <td data-l="Site">{r.site}</td>
                   <td data-l="Hours" className="mono">{hoursText(r)}</td>
                   <td>{r.match!.hasNi ? <span className="pill ok">NI on file</span> : <span className="pill warn">No NI on file</span>}</td>

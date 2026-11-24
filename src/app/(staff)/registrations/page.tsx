@@ -10,6 +10,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { applyEndpoint, applyMessage } from '@/lib/applications';
 import { ApplyAddress, ApplyMessage, RetryButton } from './ApplyClient';
 import { InvitedSearch } from './InvitedSearch';
+import { TempLink } from '@/components/TempLink';
 
 const OUTCOME: Record<string, [string, string]> = {
   texted: ['ok', 'Link texted'],
@@ -140,7 +141,7 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
           <tbody>
             {(review ?? []).map((t) => (
               <tr key={t.id}>
-                <td><b>{t.first_name} {t.last_name}</b>{t.needs_admin_review && <><br /><span className="pill warn">Call first: declared health or convictions</span></>}</td>
+                <td><TempLink id={t.id}><b>{t.first_name} {t.last_name}</b></TempLink>{t.needs_admin_review && <><br /><span className="pill warn">Call first: declared health or convictions</span></>}</td>
                 <td className="num" data-l="Mobile">{displayMobile(t.mobile)}</td>
                 <td className="mono" data-l="Postcode">{t.postcode}</td>
                 <td data-l="Right to work">{t.rtw_checked_at ? <span className="pill ok">Checked</span> : <span className="pill warn">{t.rtw_route === 'share_code' ? 'Share code to check' : 'Passport to see'}</span>}</td>
@@ -161,7 +162,7 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
           <tbody>
             {(due ?? []).map((t) => (
               <tr key={t.id} className={t.rtw_expires! < today ? 'bad' : ''}>
-                <td><b>{t.first_name} {t.last_name}</b></td>
+                <td><TempLink id={t.id}><b>{t.first_name} {t.last_name}</b></TempLink></td>
                 <td data-l="Expires">{new Date(t.rtw_expires + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}{t.rtw_expires! < today && ' (expired)'}</td>
                 <td data-l="Status">{t.status === 'hold' ? <span className="pill mute">On hold</span> : <span className="pill ok">Active</span>}</td>
                 <td><Link className="btn ghost small" href={`/temps/${t.id}`}>Open</Link></td>
@@ -181,7 +182,7 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
           <tbody>
             {(invited ?? []).map((t) => (
               <tr key={t.id}>
-                <td><b>{t.first_name} {t.last_name}</b></td>
+                <td><TempLink id={t.id}><b>{t.first_name} {t.last_name}</b></TempLink></td>
                 <td className="num" data-l="Mobile">{displayMobile(t.mobile)}</td>
                 <td data-l="Sent" title={t.reg_requested_at ? fmtDateTime(t.reg_requested_at) : ''}>{ago(t.reg_requested_at)}</td>
                 <td data-l="By">{by(t.added_by)}</td>

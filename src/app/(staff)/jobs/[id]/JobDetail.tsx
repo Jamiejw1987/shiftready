@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { setJobStatus, deleteJob, findTempsForJob, addCandidate, setCandidate, type JobInput } from '../actions';
 import { JobForm } from '../JobForm';
+import { TempLink } from '@/components/TempLink';
 
 type Msg = { ok: boolean; text: string } | null;
 function useRun() {
@@ -84,7 +85,7 @@ export function AddCandidate({ jobId }: { jobId: string }) {
       <input type="search" aria-label="Find a temp" placeholder="Search name or mobile" value={q} onChange={(e) => { setQ(e.target.value); setMsg(null); }} autoComplete="off" />
       {hits.map((h) => (
         <div key={h.id} className="slot" style={{ marginTop: 0 }}>
-          <span><b>{h.name}</b> <span className="note">{h.mobile}{h.postcode ? ` · ${h.postcode}` : ''}</span>{h.status !== 'active' && <> <span className="pill mute">{h.status === 'invited' || h.status === 'review' ? 'Not registered yet' : h.status === 'hold' ? 'On hold' : 'Not opted in'}</span></>}</span>
+          <span><TempLink id={h.id} newTab><b>{h.name}</b></TempLink> <span className="note">{h.mobile}{h.postcode ? ` · ${h.postcode}` : ''}</span>{h.status !== 'active' && <> <span className="pill mute">{h.status === 'invited' || h.status === 'review' ? 'Not registered yet' : h.status === 'hold' ? 'On hold' : 'Not opted in'}</span></>}</span>
           {h.onJob ? <span className="pill mute">Already on this job</span> : (
             <button className="btn blue small" disabled={pending} onClick={() => run(() => addCandidate(jobId, h.id, as), () => { setQ(''); setHits([]); })}>Add</button>
           )}

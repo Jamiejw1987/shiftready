@@ -9,6 +9,7 @@ import { AddToShift } from './AddToShift';
 import { EditShift } from './EditShift';
 import { ConfirmInterested } from './ConfirmInterested';
 import { scoresFor, byScore } from '@/lib/clients';
+import { TempLink } from '@/components/TempLink';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,7 +35,7 @@ export default async function ShiftBoard({ params, searchParams }: { params: { i
   const confirmed = offers.filter((o) => o.status === 'accepted').sort((a, b) => (a.responded_at ?? '').localeCompare(b.responded_at ?? ''));
   const standby = offers.filter((o) => o.status === 'standby').sort((a, b) => (a.standby_at ?? '').localeCompare(b.standby_at ?? ''));
   const declined = offers.filter((o) => o.status === 'declined');
-  const name = (o: OfferRow) => (o.temps ? `${o.temps.first_name} ${o.temps.last_name}` : 'Deleted temp');
+  const name = (o: OfferRow) => (o.temps ? <TempLink id={o.temp_id}>{o.temps.first_name} {o.temps.last_name}</TempLink> : 'Deleted temp');
   const cancelled = s.status === 'cancelled';
 
   // Temps say they're interested, the office rings them and confirms (all shifts unless set to first come, first served).

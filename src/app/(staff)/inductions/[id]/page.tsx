@@ -7,6 +7,7 @@ import { STATUS_PILL, fmtDay, fmtStamp, progress, statusOf, visiblePages } from 
 import { InductionButtons, StaffSiteUpload, StaffMh, StaffDayOne, MarkSigned } from '../Controls';
 import { hasDayOneForm } from '@/lib/dayOne';
 import { hasMhSheets } from '@/lib/mhAssessment';
+import { TempLink } from '@/components/TempLink';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,7 +51,7 @@ export default async function InductionReview({ params }: { params: { id: string
           ? <p className="note" style={{ marginTop: 0 }}>{p.total - p.done} page{p.total - p.done === 1 ? '' : 's'} or signature{p.total - p.done === 1 ? '' : 's'} still to do{a.footwear == null ? ', plus the safety boots question' : ''}. See <b>Page by page</b> below: dots are pages not done yet.</p>
           : <div style={{ marginBottom: 12 }}><p className="note" style={{ marginTop: 0 }}>Every page and signature is done, but Submit wasn’t pressed.</p><MarkSigned id={i.id} /></div>)}
         <dl className="kv" style={{ marginBottom: 14 }}>
-          <dt>Worker</dt><dd>{temp.first_name} {temp.last_name}</dd>
+          <dt>Worker</dt><dd><TempLink id={temp.id}>{temp.first_name} {temp.last_name}</TempLink></dd>
           <dt>Site</dt><dd>{a.site || pack.default_site || '-'}</dd>
           <dt>Scope of work</dt><dd>{a.scope || pack.default_scope || '-'}</dd>
           <dt>Start date</dt><dd>{a.startDate ? fmtDay(a.startDate) : '-'}</dd>

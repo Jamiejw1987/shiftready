@@ -1,5 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
+import { TempLink } from './TempLink';
 
 export type PickTemp = { id: string; name: string; miles: number; leftOut?: boolean };
 
@@ -50,7 +51,7 @@ export function RecipientPicker({ temps, excluded, setExcluded, startOpen = fals
               <li key={t.id}>
                 <label className={excluded.has(t.id) ? 'off' : ''}>
                   <input type="checkbox" checked={!excluded.has(t.id)} onChange={() => toggle(t.id)} />
-                  <span className="pick-name">{t.name}{t.leftOut && <span className="pill mute" style={{ marginLeft: 6 }}>left out last time</span>}</span>
+                  <span className="pick-name"><TempLink id={t.id} newTab>{t.name}</TempLink>{t.leftOut && <span className="pill mute" style={{ marginLeft: 6 }}>left out last time</span>}</span>
                   <span className="pick-mi">{t.miles} mi</span>
                 </label>
               </li>
