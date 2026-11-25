@@ -25,5 +25,8 @@ export function fmtDateTime(iso: string) {
   });
 }
 
+/** decline_reason when the office quietly passes over someone who said they're interested. They aren't told, and still get other shifts. */
+export const PASSED_OVER = 'Passed over by office';
+
 export const JOB_TYPES = ['Warehouse', 'FLT counterbalance', 'Production', 'Cleaning', 'Driving'] as const;
 export const PPE_OPTIONS = ['Safety boots', 'Hi-vis vest', 'Thermal layers', 'Gloves'] as const;

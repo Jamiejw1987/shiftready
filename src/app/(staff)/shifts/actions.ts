@@ -7,7 +7,7 @@ import { geocodePostcode, looksLikePostcode, milesBetween, normalisePostcode } f
 import { sendMany, sendToTemp } from '@/lib/sms';
 import { offerText, offerWa, promotedText, promotedWa, noShowText, replyAccepted, appUrl, seriesOfferText, seriesBookedText, confirmAskText } from '@/lib/texts';
 import { displayMobile } from '@/lib/phone';
-import { shiftWhen, JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
+import { shiftWhen, JOB_TYPES, PPE_OPTIONS, PASSED_OVER } from '@/lib/format';
 import { bookingsNear, clashes, overCap, capMessage } from '@/lib/clash';
 import { seriesWhen, dayLabel } from '@/lib/series';
 import { randomUUID } from 'crypto';
@@ -254,6 +254,25 @@ export async function deleteShift(shiftId: string) {
   if (error) return { ok: false, error: 'Couldn’t delete. Try again.' };
   await audit(supabase, profile.id, 'shift.deleted', `Deleted ${s.client} shift (${shiftWhen(s)})`);
   revalidatePath('/shifts');
+  return { ok: true };
+}
+
+/**
+ * Quietly passes over someone who said they're interested: takes them off this shift's interested list without
+ * texting them. Nothing counts against them and they still get other shift offers. If they open the link or reply
+ * again they're told the shift is covered.
+ */
+export async function passOver(offerId: string) {
+  const { supabase, profile } = await requireStaff();
+  const db = createAdminClient();
+  const { data: o } = await db.from('offers').select('id,status,shift_id,temps(first_name,last_name),shifts(client,shift_date,start_time,end_time)').eq('id', offerId).maybeSingle();
+  if (!o || o.status !== 'interested') return { ok: false, error: 'They’re not on the interested list any more. Refresh the page.' };
+  const { error } = await db.from('offers').update({ status: 'declined', decline_reason: PASSED_OVER, standby_at: null, awaiting_confirm: false }).eq('id', offerId).eq('status', 'interested');
+  if (error) return { ok: false, error: 'Couldn’t update. Try again.' };
+  const t = o.temps as unknown as { first_name: string; last_name: string } | null;
+  const s = o.shifts as unknown as { client: string; shift_date: string; start_time: string; end_time: string };
+  await audit(supabase, profile.id, 'offer.passed_over', `Passed over ${t?.first_name} ${t?.last_name} for ${s.client} (${shiftWhen(s)}). Not told.`);
+  revalidatePath(`/shifts/${o.shift_id}`);
   return { ok: true };
 }
 

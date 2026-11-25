@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { respondToOffer, type OfferAction } from '@/lib/offerFlow';
 import { awaitingFor, answerBooking } from '@/lib/confirm';
+import { PASSED_OVER } from '@/lib/format';
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
@@ -35,7 +36,7 @@ export async function setAvailability(token: string, offerIds: string[]) {
   const now = new Date().toISOString();
   let yes = 0;
   for (const m of mine ?? []) {
-    if (m.status === 'accepted' || m.status === 'noshow' || (m.status === 'declined' && m.decline_reason === 'Removed by office')) continue;
+    if (m.status === 'accepted' || m.status === 'noshow' || (m.status === 'declined' && (m.decline_reason === 'Removed by office' || m.decline_reason === PASSED_OVER))) continue;
     const available = offerIds.includes(m.id);
     if (available) yes++;
     await db.from('offers').update({ available, available_at: now, ppe_confirmed: available || undefined, responded_at: now }).eq('id', m.id);

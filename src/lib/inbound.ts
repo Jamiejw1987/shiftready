@@ -1,12 +1,12 @@
 import 'server-only';
+import { PASSED_OVER } from './format';
 import { createAdminClient } from './supabase/admin';
 import { sendSms, sendToTemp } from './sms';
 import { respondToOffer, type OfferAction } from './offerFlow';
 import { awaitingFor, answerBooking } from './confirm';
 import { shiftWhen } from './format';
 import {
-  appUrl, replyInterested, REPLY_CLOSED, OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD, REPLY_ATTENDED, replyClash, replyHours, confirmedReply,
-} from './texts';
+  appUrl, replyInterested, REPLY_CLOSED, OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD, REPLY_ATTENDED, replyClash, replyHours, confirmedReply, replyPassed } from './texts';
 
 /**
  * Twilio calls this when a temp replies by text or WhatsApp (set as the "A message comes in" webhook
@@ -159,7 +159,7 @@ export async function handleInbound(params: Record<string, string>): Promise<voi
   if (s.series_id && (action === 'accept' || action === 'decline')) {
     const { data: days } = await db.from('shifts').select('id').eq('series_id', s.series_id).neq('status', 'cancelled').gte('shift_date', today);
     const { data: mine } = await db.from('offers').select('id,status,decline_reason').eq('temp_id', t.id).in('shift_id', (days ?? []).map((d) => d.id));
-    const open = (mine ?? []).filter((m) => !(m.status === 'accepted' || m.status === 'noshow' || (m.status === 'declined' && m.decline_reason === 'Removed by office')));
+    const open = (mine ?? []).filter((m) => !(m.status === 'accepted' || m.status === 'noshow' || (m.status === 'declined' && (m.decline_reason === 'Removed by office' || m.decline_reason === PASSED_OVER))));
     const yes = action === 'accept';
     const now = new Date().toISOString();
     for (const m of open) await db.from('offers').update({ available: yes, available_at: now, responded_at: now, ...(yes ? { ppe_confirmed: true } : {}) }).eq('id', m.id);
@@ -178,6 +178,7 @@ export async function handleInbound(params: Record<string, string>): Promise<voi
   else if (result === 'full') await reply(replyFull(s.client, when));
   else if (result === 'clash') await reply(replyClash(s.client, when));
   else if (result === 'hours') await reply(replyHours(s.client, when));
+  else if (result === 'passed') await reply(replyPassed(t.first_name, s.client, when));
   else if (result === 'removed') await reply(`You were taken off ${s.client} ${when}. Please call the office if you have any questions. - Staff Selection`);
   else if (result === 'declined') await reply(replyDeclined(s.client, when));
   else if (result === 'standby') await reply(replyStandby(s.client, when));

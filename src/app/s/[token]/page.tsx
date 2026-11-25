@@ -6,6 +6,7 @@ import { OfferPanel } from './OfferPanel';
 import { findClash } from '@/lib/clash';
 import { SeriesPanel } from './SeriesPanel';
 import { seriesWhen } from '@/lib/series';
+import { PASSED_OVER } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Shift offer | ShiftReady' };
@@ -34,7 +35,7 @@ export default async function OfferPage({ params }: { params: { token: string } 
       const m = (mine ?? []).find((x) => x.shift_id === d.id);
       if (!m) return [];
       return [{ offerId: m.id, date: d.shift_date, booked: m.status === 'accepted', awaiting: m.status === 'accepted' && !!m.awaiting_confirm, available: m.available as boolean | null,
-        closed: d.status === 'cancelled' || d.shift_date < today || (m.status === 'declined' && m.decline_reason === 'Removed by office') || m.status === 'noshow' }];
+        closed: d.status === 'cancelled' || d.shift_date < today || (m.status === 'declined' && (m.decline_reason === 'Removed by office' || m.decline_reason === PASSED_OVER)) || m.status === 'noshow' }];
     });
     return (
       <main className="tpage">
@@ -68,7 +69,7 @@ export default async function OfferPage({ params }: { params: { token: string } 
           firstName={t.first_name}
           tempActive={t.status === 'active'}
           bankUrl={t.registered_at && !t.bank_on_file ? `/b/${t.reg_token}` : null}
-          offerStatus={o.status === 'declined' && o.decline_reason === 'Removed by office' ? 'removed' : o.status === 'accepted' && o.awaiting_confirm ? 'awaiting' : o.status}
+          offerStatus={o.status === 'declined' && o.decline_reason === 'Removed by office' ? 'removed' : o.status === 'declined' && o.decline_reason === PASSED_OVER ? 'passed' : o.status === 'accepted' && o.awaiting_confirm ? 'awaiting' : o.status}
           interestOnly={!!(s as unknown as { confirm_first?: boolean }).confirm_first}
           standbyPos={standbyPos}
           shiftState={s.status === 'cancelled' ? 'cancelled' : past ? 'past' : other ? 'busy' : (filled ?? 0) >= s.heads ? 'full' : 'open'}

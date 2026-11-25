@@ -53,6 +53,7 @@ export function OfferPanel(p: Props) {
         <button className="btn blue" disabled={pending} onClick={() => start(async () => { const r = await confirmBooking(p.token, true); if (!r.ok) setErr('Something went wrong. Please call the office.'); router.refresh(); })}>Yes, I’ll be there</button>
         <button className="btn ghost" disabled={pending} onClick={() => start(async () => { const r = await confirmBooking(p.token, false); if (!r.ok) setErr('Something went wrong. Please call the office.'); router.refresh(); })}>I can’t do it</button>
       </div></State>;
+  if (p.offerStatus === 'passed') return <State badge="–" kind="mute" title="This shift is covered" text={`Thanks ${p.firstName}, we’ve got this shift covered this time. We’ll keep texting you about other shifts.`} />;
   if (p.offerStatus === 'removed') return <State badge="–" kind="mute" title="Taken off this shift" text="The office has taken you off this shift, so you don’t need to attend. Call the office if you have any questions." />;
   if (p.offerStatus === 'noshow') return <State badge="!" kind="mute" title="Marked as no-show" text="Your consultant recorded you as not attending this shift. Call the office if this is wrong." />;
   if (p.offerStatus === 'accepted')

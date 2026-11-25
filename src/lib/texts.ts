@@ -49,6 +49,8 @@ export const replyAccepted = (client: string, when: string, site: string, bankTo
   `You're booked: ${client}, ${when}, ${site}. Please arrive 10 minutes early.${bankToken ? ` Before your first shift, add your bank details so we can pay you: ${appUrl()}/b/${bankToken}` : " We'll remind you the day before."} - Staff Selection`;
 export const replyFull = (client: string, when: string) =>
   `Sorry, ${client} ${when} has just been filled. Reply STANDBY to go on standby in case someone drops out. - Staff Selection`;
+export const replyPassed = (first: string, client: string, when: string) =>
+  `Thanks ${first}, we've got ${client} ${when} covered this time. We'll keep texting you about other shifts. - Staff Selection`;
 export const replyInterested = (first: string, client: string, when: string) =>
   `Thanks ${first}, you're provisionally accepted for ${client} ${when}, awaiting approval from our team. We'll call you to confirm. You're not booked until then. - Staff Selection`;
 export const REPLY_CLOSED = 'Sorry, this shift is no longer available to you. Please call the office if you have any questions. - Staff Selection';

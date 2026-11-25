@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { sendSms } from './sms';
-import { shiftWhen } from './format';
+import { shiftWhen, PASSED_OVER } from './format';
 import { findClash, overCap } from './clash';
 
 export type OfferAction = 'accept' | 'decline' | 'standby' | 'alerts' | 'reset';
@@ -17,6 +17,8 @@ export async function respondToOffer(db: SupabaseClient, token: string, action: 
   const { data: o } = await db.from('offers').select('temp_id,status,decline_reason,shifts(id,shift_date,start_time,end_time)').eq('token', token).maybeSingle();
   // Someone the office took off a shift can't put themselves back on it.
   if (o?.status === 'declined' && o.decline_reason === 'Removed by office' && action !== 'decline') return 'removed';
+  // Quietly passed over by the office: they can't put themselves back on, and aren't told why.
+  if (o?.status === 'declined' && o.decline_reason === PASSED_OVER) return 'passed';
   if (action === 'accept') {
     // Nobody can be booked on two shifts that overlap.
     const s = o?.shifts as unknown as { id: string; shift_date: string; start_time: string; end_time: string } | null;

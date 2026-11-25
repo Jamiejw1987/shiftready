@@ -10,6 +10,7 @@ import { EditShift } from './EditShift';
 import { ConfirmInterested } from './ConfirmInterested';
 import { scoresFor, byScore } from '@/lib/clients';
 import { TempLink } from '@/components/TempLink';
+import { PASSED_OVER } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,12 +87,12 @@ export default async function ShiftBoard({ params, searchParams }: { params: { i
                 ? <div className="col"><h3>Interested <span className="count">{interested.length}</span></h3>
                     {interested.length ? interested.map((o) => (
                       <div key={o.id} className="slot"><span>{name(o)}<br /><span className="note">{o.temps && displayMobile(o.temps.mobile)}{o.distance_miles != null ? ` · ${o.distance_miles} mi` : ''}</span><br />{starLine(o.temp_id) ?? <span className="note">No ratings yet</span>}</span>
-                        {confirmed.length < s.heads && <ConfirmInterested shiftId={s.id} tempId={o.temp_id} first={o.temps?.first_name ?? ''} />}</div>
+                        <ConfirmInterested shiftId={s.id} tempId={o.temp_id} offerId={o.id} first={o.temps?.first_name ?? ''} full={confirmed.length >= s.heads} /></div>
                     )) : <div className="slot empty">Nobody yet. Temps who reply YES appear here.</div>}</div>
                 : <div className="col"><h3>Standby <span className="count">{standby.length}</span></h3>
                     {standby.length ? standby.map((o, i) => <div key={o.id} className="slot"><span>{i + 1}. {name(o)}</span></div>) : <div className="slot empty">Nobody yet</div>}</div>}
               <div className="col"><h3>Declined <span className="count">{declined.length}</span></h3>
-                {declined.length ? declined.map((o) => <div key={o.id} className="slot"><span>{name(o)}</span>{o.decline_reason && <span className="pill mute">{o.decline_reason}</span>}</div>) : <div className="slot empty">None</div>}</div>
+                {declined.length ? declined.map((o) => <div key={o.id} className="slot"><span>{name(o)}</span>{o.decline_reason && <span className="pill mute" title={o.decline_reason === PASSED_OVER ? 'Passed over by the office. They weren’t told and still get other shifts.' : undefined}>{o.decline_reason === PASSED_OVER ? 'Passed over · not told' : o.decline_reason}</span>}</div>) : <div className="slot empty">None</div>}</div>
             </div>}
         {!cancelled && !s.series_id && confirmed.length < s.heads && s.shift_date >= new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' }) && <SendMore id={s.id} radius={Number(s.radius_miles)} />}
         {!cancelled && confirmed.length < s.heads && <AddToShift id={s.id} />}
