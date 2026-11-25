@@ -258,6 +258,34 @@ export async function deleteShift(shiftId: string) {
 }
 
 /**
+ * The office has called a booked temp and they've said they're coming: confirms them without waiting for a text.
+ * Clears "waiting for them to confirm" and answers the day-before "still coming?" check-in, so nobody is chased.
+ * Nothing is texted to the temp.
+ */
+export async function confirmByPhone(offerId: string) {
+  const { supabase, profile } = await requireStaff();
+  const db = createAdminClient();
+  const { data: o } = await db.from('offers').select('id,status,shift_id,awaiting_confirm,checkin_sent_at,checkin_reply,temps(first_name,last_name),shifts(client,shift_date,start_time,end_time)').eq('id', offerId).maybeSingle();
+  if (!o || o.status !== 'accepted') return { ok: false, error: 'They’re not booked on this shift any more. Refresh the page.' };
+  const checkinOpen = !!o.checkin_sent_at && !o.checkin_reply;
+  if (!o.awaiting_confirm && !checkinOpen) return { ok: false, error: 'Already confirmed. Refresh the page.' };
+  const now = new Date().toISOString();
+  const { error } = await db.from('offers').update({
+    awaiting_confirm: false,
+    ...(o.awaiting_confirm ? { responded_at: now } : {}),
+    ...(checkinOpen ? { checkin_reply: 'phone', checkin_replied_at: now, checkin_alerted_at: now } : {}),
+  }).eq('id', offerId);
+  if (error) return { ok: false, error: 'Couldn’t confirm. Try again.' };
+  const t = o.temps as unknown as { first_name: string; last_name: string } | null;
+  const s = o.shifts as unknown as { client: string; shift_date: string; start_time: string; end_time: string };
+  await audit(supabase, profile.id, 'offer.confirmed_by_phone', `Confirmed ${t?.first_name} ${t?.last_name} by phone for ${s.client} (${shiftWhen(s)})`);
+  // Client-requested shifts: the client only sees them, and hears it's full, once they've confirmed.
+  if (o.awaiting_confirm) await afterBookingChange(db, o.shift_id);
+  revalidatePath(`/shifts/${o.shift_id}`); revalidatePath('/planner');
+  return { ok: true };
+}
+
+/**
  * Quietly passes over someone who said they're interested: takes them off this shift's interested list without
  * texting them. Nothing counts against them and they still get other shift offers. If they open the link or reply
  * again they're told the shift is covered.

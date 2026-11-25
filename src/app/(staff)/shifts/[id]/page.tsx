@@ -11,11 +11,12 @@ import { ConfirmInterested } from './ConfirmInterested';
 import { scoresFor, byScore } from '@/lib/clients';
 import { TempLink } from '@/components/TempLink';
 import { PASSED_OVER } from '@/lib/format';
+import { ConfirmByPhone } from './ConfirmByPhone';
 
 export const dynamic = 'force-dynamic';
 
 type OfferRow = {
-  id: string; temp_id: string; status: string; decline_reason: string | null; awaiting_confirm: boolean; checkin_sent_at: string | null; checkin_reply: string | null; standby_at: string | null; distance_miles: number | null; responded_at: string | null;
+  id: string; temp_id: string; status: string; decline_reason: string | null; awaiting_confirm: boolean; checkin_sent_at: string | null; checkin_reply: string | null; checkin_alerted_at: string | null; standby_at: string | null; distance_miles: number | null; responded_at: string | null;
   temps: { first_name: string; last_name: string; mobile: string; registered_at: string | null; bank_on_file: boolean } | null;
 };
 
@@ -29,13 +30,15 @@ export default async function ShiftBoard({ params, searchParams }: { params: { i
   if (!s) notFound();
   const { data: offersRaw } = await supabase
     .from('offers')
-    .select('id,temp_id,status,decline_reason,awaiting_confirm,checkin_sent_at,checkin_reply,standby_at,distance_miles,responded_at,temps(first_name,last_name,mobile,registered_at,bank_on_file)')
+    .select('id,temp_id,status,decline_reason,awaiting_confirm,checkin_sent_at,checkin_reply,checkin_alerted_at,standby_at,distance_miles,responded_at,temps(first_name,last_name,mobile,registered_at,bank_on_file)')
     .eq('shift_id', s.id)
     .order('distance_miles');
   const offers = (offersRaw ?? []) as unknown as OfferRow[];
   const confirmed = offers.filter((o) => o.status === 'accepted').sort((a, b) => (a.responded_at ?? '').localeCompare(b.responded_at ?? ''));
   const standby = offers.filter((o) => o.status === 'standby').sort((a, b) => (a.standby_at ?? '').localeCompare(b.standby_at ?? ''));
   const declined = offers.filter((o) => o.status === 'declined');
+  // Day-before "still coming?" text sent and not answered. (Messages-off workers are never sent one: sent and chased are stamped together.)
+  const checkinOpen = (o: OfferRow) => !!o.checkin_sent_at && !o.checkin_reply && o.checkin_alerted_at !== o.checkin_sent_at;
   const name = (o: OfferRow) => (o.temps ? <TempLink id={o.temp_id}>{o.temps.first_name} {o.temps.last_name}</TempLink> : 'Deleted temp');
   const cancelled = s.status === 'cancelled';
 
@@ -81,7 +84,7 @@ export default async function ShiftBoard({ params, searchParams }: { params: { i
           : <div className="board" style={{ marginTop: 12 }}>
               <div className="col"><h3>Confirmed <span className="count">{confirmed.length}/{s.heads}</span></h3>
                 {Array.from({ length: s.heads }, (_, i) => confirmed[i]
-                  ? <div key={i} className="slot filled"><span>{name(confirmed[i])}<br /><span className="note">{confirmed[i].temps && displayMobile(confirmed[i].temps!.mobile)}</span>{confirmed[i].temps?.registered_at && !confirmed[i].temps?.bank_on_file && <><br /><span className="pill warn">No bank details</span></>}{confirmed[i].awaiting_confirm && <><br /><span className="pill warn">Waiting for them to confirm</span></>}{fromClient && <><br />{starLine(confirmed[i].temp_id)}</>}{feedback(confirmed[i].id)?.attended === false && <><br /><span className="pill bad">Client: no-show</span></>}{feedback(confirmed[i].id)?.attended === true && <><br /><span className="pill ok">Client: attended{feedback(confirmed[i].id)?.stars ? ` · ★ ${feedback(confirmed[i].id)!.stars}` : ''}</span></>}{feedback(confirmed[i].id)?.return_to_site === false && <><br /><span className="pill bad">Client doesn’t want them back</span></>}{confirmed[i].checkin_reply === 'yes' ? <><br /><span className="pill ok">Confirmed coming</span></> : confirmed[i].checkin_reply === 'no' ? <><br /><span className="pill bad">Can’t make it</span></> : confirmed[i].checkin_sent_at ? <><br /><span className="pill warn">Check-in: no reply yet</span></> : null}</span><span className="btnrow"><BoardActions kind="remove" id={confirmed[i].id} /><BoardActions kind="noshow" id={confirmed[i].id} /></span></div>
+                  ? <div key={i} className="slot filled"><span>{name(confirmed[i])}<br /><span className="note">{confirmed[i].temps && displayMobile(confirmed[i].temps!.mobile)}</span>{confirmed[i].temps?.registered_at && !confirmed[i].temps?.bank_on_file && <><br /><span className="pill warn">No bank details</span></>}{confirmed[i].awaiting_confirm && <><br /><span className="pill warn">Waiting for them to confirm</span></>}{!confirmed[i].awaiting_confirm && checkinOpen(confirmed[i]) && <><br /><span className="pill warn">Hasn’t replied to “still coming?”</span></>}{confirmed[i].checkin_reply === 'yes' && <><br /><span className="pill ok">Said they’re coming</span></>}{confirmed[i].checkin_reply === 'phone' && <><br /><span className="pill ok">Confirmed by phone</span></>}{confirmed[i].checkin_reply === 'no' && <><br /><span className="pill bad">Said they can’t make it</span></>}{(confirmed[i].awaiting_confirm || (checkinOpen(confirmed[i]))) && <ConfirmByPhone offerId={confirmed[i].id} first={confirmed[i].temps?.first_name ?? ''} />}{fromClient && <><br />{starLine(confirmed[i].temp_id)}</>}{feedback(confirmed[i].id)?.attended === false && <><br /><span className="pill bad">Client: no-show</span></>}{feedback(confirmed[i].id)?.attended === true && <><br /><span className="pill ok">Client: attended{feedback(confirmed[i].id)?.stars ? ` · ★ ${feedback(confirmed[i].id)!.stars}` : ''}</span></>}{feedback(confirmed[i].id)?.return_to_site === false && <><br /><span className="pill bad">Client doesn’t want them back</span></>}{confirmed[i].checkin_reply === 'yes' ? <><br /><span className="pill ok">Confirmed coming</span></> : confirmed[i].checkin_reply === 'no' ? <><br /><span className="pill bad">Can’t make it</span></> : confirmed[i].checkin_sent_at ? <><br /><span className="pill warn">Check-in: no reply yet</span></> : null}</span><span className="btnrow"><BoardActions kind="remove" id={confirmed[i].id} /><BoardActions kind="noshow" id={confirmed[i].id} /></span></div>
                   : <div key={i} className="slot empty">Open slot</div>)}</div>
               {interestFlow
                 ? <div className="col"><h3>Interested <span className="count">{interested.length}</span></h3>

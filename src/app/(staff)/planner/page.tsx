@@ -55,7 +55,7 @@ export default async function PlannerPage({ searchParams }: { searchParams: { d?
 
   const person = (o: Offer) => {
     const name = o.temps ? `${o.temps.first_name} ${o.temps.last_name}`.trim() : 'Unknown';
-    const mark = o.status === 'noshow' ? ['bad', 'no-show'] : o.checkin_reply === 'yes' ? ['ok', '✓'] : o.checkin_reply === 'no' ? ['bad', 'can’t make it'] : o.checkin_sent_at ? ['warn', '?'] : o.awaiting_confirm ? ['warn', 'to confirm'] : null;
+    const mark = o.status === 'noshow' ? ['bad', 'no-show'] : o.checkin_reply === 'yes' || o.checkin_reply === 'phone' ? ['ok', '✓'] : o.checkin_reply === 'no' ? ['bad', 'can’t make it'] : o.checkin_sent_at ? ['warn', '?'] : o.awaiting_confirm ? ['warn', 'to confirm'] : null;
     return <div key={o.temp_id + o.status} className="pl-name"><TempLink id={o.temp_id}>{name}</TempLink>{mark && <span className={`pl-mark ${mark[0]}`}> {mark[1]}</span>}</div>;
   };
 
