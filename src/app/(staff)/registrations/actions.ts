@@ -8,6 +8,8 @@ import { createInduction } from '@/lib/inductionOps';
 import { applyMessageProblems, renderApplyMessage } from '@/lib/applyMessage';
 import { currentDocs, docProblems } from '@/lib/docs';
 import { encryptionReady } from '@/lib/crypto';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { removeTempFiles } from '@/lib/storage';
 
 type Result = { ok: boolean; error?: string; message?: string };
 
@@ -28,6 +30,28 @@ async function readyToRegister(supabase: Awaited<ReturnType<typeof requireStaff>
 }
 
 /** Creates an invited candidate and texts them their personal registration link. */
+/**
+ * Removes someone from Ready to check: registered but not filled in properly and can't be reached.
+ * Only for people still waiting to be checked (never approved, never worked). Deletes their record, ID and
+ * documents, and blanks their messages. They aren't texted. They can register again later if they come back.
+ */
+export async function removeRegistration(id: string): Promise<Result> {
+  const { profile } = await requireStaff();
+  const db = createAdminClient();
+  const { data: t } = await db.from('temps').select('id,first_name,last_name,status').eq('id', id).maybeSingle();
+  if (!t) return { ok: false, error: 'Already removed. Refresh the page.' };
+  if (t.status !== 'review') return { ok: false, error: `${t.first_name} isn’t waiting to be checked any more, so they can’t be removed from here.` };
+  const { count } = await db.from('offers').select('id', { count: 'exact', head: true }).eq('temp_id', id);
+  if (count) return { ok: false, error: `${t.first_name} has shift history, so they can’t be removed from here. Ask an admin.` };
+  await db.from('messages').update({ to_number: null, from_number: null, body: '[removed: registration removed]', fallback_body: null }).eq('temp_id', id);
+  const files = await removeTempFiles(db, id);
+  const { error } = await db.from('temps').delete().eq('id', id).eq('status', 'review');
+  if (error) return { ok: false, error: 'Couldn’t remove them. Try again.' };
+  await audit(db, profile.id, 'registration.removed', `Removed ${t.first_name} ${t.last_name}'s registration (not completed properly, couldn't be reached) and their personal data${files ? ` (${files} document${files === 1 ? '' : 's'})` : ''}`);
+  revalidatePath('/registrations');
+  return { ok: true, message: `${t.first_name} ${t.last_name} removed.` };
+}
+
 export async function sendRegistrationLink(input: { first: string; last: string; mobile: string; message?: string; job?: string; packId?: string }): Promise<Result> {
   const { supabase, profile } = await requireStaff();
   const m = checkMessage(input.message);

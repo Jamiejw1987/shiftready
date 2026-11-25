@@ -11,6 +11,7 @@ import { applyEndpoint, applyMessage } from '@/lib/applications';
 import { ApplyAddress, ApplyMessage, RetryButton } from './ApplyClient';
 import { InvitedSearch } from './InvitedSearch';
 import { TempLink } from '@/components/TempLink';
+import { RemoveRegistration } from './RemoveRegistration';
 
 const OUTCOME: Record<string, [string, string]> = {
   texted: ['ok', 'Link texted'],
@@ -56,7 +57,7 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
   const soon = new Date(Date.now() + 28 * 864e5).toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
   const [docs, { data: review }, { data: invited, count: invitedCount }, { data: due }, { data: users }] = await Promise.all([
     currentDocs(supabase),
-    supabase.from('temps').select('id,first_name,last_name,mobile,postcode,rtw_route,rtw_checked_at,needs_admin_review,registered_at,added_by').eq('status', 'review').order('registered_at'),
+    supabase.from('temps').select('id,first_name,last_name,mobile,postcode,rtw_route,rtw_checked_at,needs_admin_review,registered_at,added_by').eq('status', 'review').order('registered_at', { ascending: false }),
     invitedQuery,
     supabase.from('temps').select('id,first_name,last_name,rtw_expires,status').not('rtw_expires', 'is', null).lte('rtw_expires', soon).in('status', ['active', 'hold']).order('rtw_expires'),
     supabase.from('profiles').select('id,full_name'),
@@ -135,7 +136,7 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
 
       <section className="panel">
         <h2>Ready to check <span className="pill blue" style={{ verticalAlign: 'middle' }}>{review?.length ?? 0}</span></h2>
-        <p className="lede">Check their right to work, then approve them to start getting shifts.</p>
+        <p className="lede">Newest first. Check their right to work, then approve them to start getting shifts. If someone hasn’t filled it in properly and you can’t get hold of them, remove them.</p>
         <div className="tablewrap"><table className="cards">
           <thead><tr><th>Candidate</th><th>Mobile</th><th>Postcode</th><th>Right to work</th><th>Registered</th><th></th></tr></thead>
           <tbody>
@@ -146,7 +147,7 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
                 <td className="mono" data-l="Postcode">{t.postcode}</td>
                 <td data-l="Right to work">{t.rtw_checked_at ? <span className="pill ok">Checked</span> : <span className="pill warn">{t.rtw_route === 'share_code' ? 'Share code to check' : 'Passport to see'}</span>}</td>
                 <td data-l="Registered">{ago(t.registered_at)}</td>
-                <td><Link className="btn blue small" href={`/temps/${t.id}`}>Open</Link></td>
+                <td><div className="btnrow"><Link className="btn blue small" href={`/temps/${t.id}`}>Open</Link><RemoveRegistration id={t.id} name={`${t.first_name} ${t.last_name}`} /></div></td>
               </tr>
             ))}
             {!review?.length && <tr><td colSpan={6} className="note">Nobody waiting.</td></tr>}
