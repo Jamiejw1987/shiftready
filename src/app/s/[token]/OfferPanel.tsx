@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { respond, confirmBooking } from './actions';
 
 type Props = {
-  token: string; firstName: string; tempActive: boolean; bankUrl: string | null; offerStatus: string; standbyPos: number;
+  token: string; firstName: string; tempActive: boolean; onHold?: boolean; bankUrl: string | null; offerStatus: string; standbyPos: number;
   shiftState: 'open' | 'full' | 'cancelled' | 'past' | 'busy'; placesLeft: number; otherShift?: string | null;
   /** Client-requested shift: saying yes puts them on the list for the office to confirm, it doesn't book them. */
   interestOnly?: boolean;
@@ -61,6 +61,7 @@ export function OfferPanel(p: Props) {
       {p.bankUrl && <><p style={{ color: 'var(--ink)', fontWeight: 600 }}>Before your first shift, add your bank details so we can pay you.</p><a className="btn blue" href={p.bankUrl}>Add bank details</a></>}</State>;
   if (p.shiftState === 'past') return <State badge="–" kind="mute" title="This shift has passed" text="Keep an eye on your texts for new shifts." />;
   if (p.shiftState === 'busy') return <State badge="!" kind="mute" title="You already have a shift that day" text={`You’re already down for ${p.otherShift ?? 'another shift'}, so you can’t take ${s.client} as well. Call the office if you’d rather swap.`} />;
+  if (p.onHold) return <State badge="!" kind="mute" title="You’re on hold" text="You’ve been placed on hold, so you can’t take shifts at the moment. Please contact the office and we’ll take you off hold." />;
   if (!p.tempActive) return <State badge="!" kind="mute" title="Can’t accept right now" text="Your profile isn’t active for shift offers. Please call the office." />;
   if (p.offerStatus === 'declined')
     return <State badge="–" kind="mute" title="Shift declined" text="Thanks for letting us know. We'll keep sending shifts that suit you.">

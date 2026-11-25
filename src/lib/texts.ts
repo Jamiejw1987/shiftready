@@ -62,6 +62,14 @@ export const replyClash = (client: string, when: string) =>
 export const replyHours = (client: string, when: string) =>
   `Sorry, taking ${client} ${when} would put you over the hours you're allowed to work that week, so we can't book you on. Call the office if you think this is wrong. - Staff Selection`;
 export const REPLY_NO_OFFER = "We couldn't find an open shift offer for you just now. Keep an eye out for the next one. - Staff Selection";
+/** Sent when the office puts someone on hold and chooses to tell them. */
+export const holdText = (first: string) =>
+  `Hi ${first}, you've been placed on hold, so you won't be sent any more shifts for now. Please contact the office and we'll talk it through and take you off hold. - Staff Selection`;
+/** Sent when the office takes someone off hold and chooses to tell them. */
+export const unholdText = (first: string) =>
+  `Hi ${first}, you're off hold, so you'll start getting shift offers from us again. - Staff Selection`;
+/** Reply to anyone on hold who texts in. */
+export const REPLY_HELD = "You're on hold at the moment, so you can't take shifts. Please contact the office to sort it out. - Staff Selection";
 export const REPLY_ON_HOLD = 'Please call the office about this shift. - Staff Selection';
 export const REPLY_HELP = 'Reply YES to accept your latest shift offer, NO to decline it, or STOP to stop shift messages. - Staff Selection';
 

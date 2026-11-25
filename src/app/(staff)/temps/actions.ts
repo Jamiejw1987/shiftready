@@ -4,7 +4,7 @@ import { requireStaff, audit } from '@/lib/auth';
 import { toE164, displayMobile } from '@/lib/phone';
 import { geocodePostcodes, geocodePostcode, looksLikePostcode, normalisePostcode, geocodePlace } from '@/lib/geo';
 import { sendSms, sendMany, sendToTemp } from '@/lib/sms';
-import { welcomeText, welcomeWa, appUrl } from '@/lib/texts';
+import { welcomeText, welcomeWa, appUrl, holdText, unholdText } from '@/lib/texts';
 import { JOB_TYPES } from '@/lib/format';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { removeTempFiles } from '@/lib/storage';
@@ -105,17 +105,39 @@ export async function importTemps(rows: ImportRow[], message?: string): Promise<
   return { ok: true, added: data.length, skipped, message: `${data.length} temps added. ${res.sent} welcome texts sent${res.failed ? `, ${res.failed} failed` : ''}.` };
 }
 
-export async function setTempStatus(id: string, status: 'active' | 'hold'): Promise<Result> {
+/**
+ * Puts a temp on hold (no shift offers, can't accept) or takes them off hold.
+ * `tell`: also text them. On hold: asks them to contact the office. Off hold: says shifts will start again.
+ */
+export async function setTempStatus(id: string, status: 'active' | 'hold', tell = false): Promise<Result> {
   const { supabase, profile } = await requireStaff();
-  const { data: t } = await supabase.from('temps').select('first_name,last_name,status,rtw_expires').eq('id', id).single();
+  const { data: t } = await supabase.from('temps').select('id,first_name,last_name,mobile,status,rtw_expires').eq('id', id).single();
   if (!t) return { ok: false, error: 'Temp not found.' };
   if (status === 'active' && t.rtw_expires && t.rtw_expires < new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' }))
     return { ok: false, error: `${t.first_name}'s right to work has expired. Record a new check on their record first.` };
   if (status === 'active' && t.status !== 'hold') return { ok: false, error: 'Only temps on hold can be reactivated. New temps become active when they opt in.' };
-  await supabase.from('temps').update({ status }).eq('id', id);
-  await audit(supabase, profile.id, status === 'hold' ? 'temp.hold' : 'temp.reactivated', `${status === 'hold' ? 'Put' : 'Reactivated'} ${t.first_name} ${t.last_name}${status === 'hold' ? ' on hold' : ''}`);
-  revalidatePath('/temps');
-  return { ok: true };
+  if (status === 'hold' && t.status !== 'active') return { ok: false, error: t.status === 'hold' ? `${t.first_name} is already on hold.` : 'Only active temps can be put on hold.' };
+  const { error } = await supabase.from('temps').update({ status }).eq('id', id);
+  if (error) return { ok: false, error: 'Couldn’t update. Try again.' };
+
+  let told = '';
+  if (tell) {
+    const r = await sendToTemp({ db: supabase, temp: { id: t.id, mobile: t.mobile }, kind: 'system', sentBy: profile.id, body: status === 'hold' ? holdText(t.first_name) : unholdText(t.first_name) });
+    told = r.suppressed ? 'not texted: their messages are switched off' : !r.ok ? 'the text failed to send' : 'texted';
+  }
+  await audit(supabase, profile.id, status === 'hold' ? 'temp.hold' : 'temp.reactivated',
+    `${status === 'hold' ? 'Put' : 'Took'} ${t.first_name} ${t.last_name} ${status === 'hold' ? 'on' : 'off'} hold${tell ? ` (${told})` : ' (not told)'}`);
+
+  // Holding stops new offers. Shifts they're already booked on stay, so flag them.
+  let booked = 0;
+  if (status === 'hold') {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+    const { data: up } = await supabase.from('offers').select('id,shifts!inner(shift_date,status)').eq('temp_id', id).eq('status', 'accepted').gte('shifts.shift_date', today).neq('shifts.status', 'cancelled');
+    booked = up?.length ?? 0;
+  }
+  revalidatePath('/temps'); revalidatePath(`/temps/${id}`);
+  const what = status === 'hold' ? `${t.first_name} is on hold` : `${t.first_name} is off hold and will get shifts again`;
+  return { ok: true, message: `${what}${tell ? ` and ${told}` : ''}.${booked ? ` They're still booked on ${booked} upcoming shift${booked === 1 ? '' : 's'}: take them off on the shift page if they shouldn't go.` : ''}` };
 }
 
 export async function resendWelcome(id: string): Promise<Result> {

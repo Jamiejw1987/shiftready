@@ -9,6 +9,7 @@ import { DOC_KIND_LABEL, SYSTEM_DOC_LABEL, type DocKindFile } from '@/lib/storag
 import { RecordActions, RtwCheck, Uploader, Reveal, BankActions, EditDetails, CopyPayroll, EditRegistration, LicenceActions, HoursLimit } from './TempRecord';
 import { licenceLabel, CHECK_CODE_DAYS } from '@/lib/regOptions';
 import { CopyButton } from '@/components/Copy';
+import { HoldButton } from '../HoldButton';
 import { JOB_TYPES } from '@/lib/format';
 import { loadAssignments, isCurrent } from '@/lib/ongoing';
 import { MessagesSwitch, WorkerOngoing } from '../../ongoing/Ongoing';
@@ -103,7 +104,9 @@ export default async function TempRecordPage({ params }: { params: { id: string 
           {messagesOff && <span className="pill bad">Messages off</span>}
           {workingAt.map((a) => <span key={a.id} className="pill blue">Ongoing at {a.client_name}</span>)}
           {imported && <span className="pill mute">Imported{t.import_source ? ` from ${t.import_source}` : ''} {day(t.imported_at)}</span>}
+          <HoldButton id={t.id} first={t.first_name} status={t.status} />
         </div>
+        {t.status === 'hold' && <p className="alert" style={{ marginTop: 0 }}>On hold: {t.first_name} won’t be sent shifts and can’t accept any until you take them off hold.</p>}
         <p className="lede" style={{ marginBottom: 0 }}>{displayMobile(t.mobile)}{t.postcode ? ` · ${t.postcode}` : ''}{t.added_by ? ` · added by ${name(t.added_by)}` : ""} · {day(t.created_at)}</p>
         <div style={{ marginTop: 12 }}><EditDetails id={t.id} first={t.first_name} last={t.last_name} mobile={displayMobile(t.mobile)} postcode={t.postcode ?? ''} jobTypes={t.job_types ?? []} allTypes={JOB_TYPES} /></div>
         <RecordActions

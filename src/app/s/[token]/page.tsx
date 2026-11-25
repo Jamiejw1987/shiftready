@@ -68,6 +68,7 @@ export default async function OfferPage({ params }: { params: { token: string } 
           token={params.token}
           firstName={t.first_name}
           tempActive={t.status === 'active'}
+          onHold={t.status === 'hold'}
           bankUrl={t.registered_at && !t.bank_on_file ? `/b/${t.reg_token}` : null}
           offerStatus={o.status === 'declined' && o.decline_reason === 'Removed by office' ? 'removed' : o.status === 'declined' && o.decline_reason === PASSED_OVER ? 'passed' : o.status === 'accepted' && o.awaiting_confirm ? 'awaiting' : o.status}
           interestOnly={!!(s as unknown as { confirm_first?: boolean }).confirm_first}

@@ -7,7 +7,8 @@ import { plainText, segmentInfo } from '@/lib/smsText';
 import { DEFAULT_WELCOME_MESSAGE, welcomeMessageProblems, isDefaultWelcome, renderWelcomeMessage } from '@/lib/welcomeMessage';
 import { JOB_TYPES } from '@/lib/format';
 import { parseCSV, mapRows, type MappedRow } from './csv';
-import { addTemp, importTemps, setTempStatus, resendWelcome, deleteTemp, sendBulkText, lookupPostcode } from './actions';
+import { HoldButton } from './HoldButton';
+import { addTemp, importTemps, resendWelcome, deleteTemp, sendBulkText, lookupPostcode } from './actions';
 
 export type TempRow = {
   id: string; first_name: string; last_name: string; mobile: string; postcode: string | null;
@@ -177,9 +178,10 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
 
   // ---------- row actions ----------
   const [rowErr, setRowErr] = useState('');
+  const [rowOk, setRowOk] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   function rowAction(fn: () => Promise<{ ok: boolean; error?: string }>) {
-    setRowErr('');
+    setRowErr(''); setRowOk('');
     start(async () => { const r = await fn(); if (!r.ok) setRowErr(r.error!); setConfirmDelete(null); router.refresh(); });
   }
 
@@ -319,6 +321,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
           </div>
         )}
         {rowErr && <p className="err" style={{ marginBottom: 10 }}>{rowErr}</p>}
+        {rowOk && <p className="okmsg" style={{ marginBottom: 10 }}>{rowOk}</p>}
 
         <div className="tablewrap"><table className="cards">
           <thead><tr>
@@ -339,8 +342,7 @@ export function TempsClient({ temps, users, me }: { temps: TempRow[]; users: Use
                   <td className="by" data-l="Added by">{userName(t.added_by)}<small>{new Date(t.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</small></td>
                   <td>
                     <div className="btnrow">
-                      {t.status === 'active' && <button className="btn ghost small" disabled={pending} onClick={() => rowAction(() => setTempStatus(t.id, 'hold'))}>Put on hold</button>}
-                      {t.status === 'hold' && <button className="btn ghost small" disabled={pending} onClick={() => rowAction(() => setTempStatus(t.id, 'active'))}>Reactivate</button>}
+                      <HoldButton id={t.id} first={t.first_name} status={t.status} onDone={(m, ok) => { if (ok) { setRowOk(m); setRowErr(''); } else { setRowErr(m); setRowOk(''); } }} />
                       {t.status === 'pending' && !t.no_comms && <button className="btn ghost small" disabled={pending} onClick={() => rowAction(() => resendWelcome(t.id))}>Resend welcome</button>}
                       {me.admin && (confirmDelete === t.id
                         ? <><button className="btn small" style={{ background: 'var(--bad)' }} onClick={() => rowAction(() => deleteTemp(t.id))}>Confirm delete</button><button className="btn ghost small" onClick={() => setConfirmDelete(null)}>Keep</button></>

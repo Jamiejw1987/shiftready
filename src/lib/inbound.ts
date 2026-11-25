@@ -6,7 +6,7 @@ import { respondToOffer, type OfferAction } from './offerFlow';
 import { awaitingFor, answerBooking } from './confirm';
 import { shiftWhen } from './format';
 import {
-  appUrl, replyInterested, REPLY_CLOSED, OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD, REPLY_ATTENDED, replyClash, replyHours, confirmedReply, replyPassed } from './texts';
+  appUrl, replyInterested, REPLY_CLOSED, OPTED_IN_REPLY, OPTED_OUT_REPLY, replyAccepted, replyDeclined, replyFull, replyStandby, REPLY_HELP, REPLY_NO_OFFER, REPLY_ON_HOLD, REPLY_ATTENDED, replyClash, replyHours, confirmedReply, replyPassed, REPLY_HELD } from './texts';
 
 /**
  * Twilio calls this when a temp replies by text or WhatsApp (set as the "A message comes in" webhook
@@ -137,7 +137,7 @@ export async function handleInbound(params: Record<string, string>): Promise<voi
     if (/^(HELP|INFO|\?)$/.test(word)) await reply(REPLY_HELP);
     return; // Anything else is left for a consultant to read in the message log.
   }
-  if (t.status === 'hold') { await reply(REPLY_ON_HOLD); return; }
+  if (t.status === 'hold') { await reply(REPLY_HELD); return; }
 
   // Which offer? A WhatsApp button knows the exact message it was on; a typed reply means the latest open offer.
   let offerId: string | null = null;
