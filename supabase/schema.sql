@@ -1513,3 +1513,7 @@ end $$;
 drop trigger if exists offers_one_shift_a_day on public.offers;
 create trigger offers_one_shift_a_day before insert or update of status, shift_id on public.offers
   for each row execute function public.one_shift_a_day();
+
+-- ================= Phone confirms (also in 2026-11-25-phone-confirm.sql) =================
+alter table public.offers add column if not exists phone_confirmed_at timestamptz;
+alter table public.offers add column if not exists phone_confirmed_by uuid references public.profiles (id) on delete set null;

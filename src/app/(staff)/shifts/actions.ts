@@ -278,6 +278,8 @@ export async function confirmByPhone(offerId: string) {
   if (error) return { ok: false, error: 'Couldn’t confirm. Try again.' };
   const t = o.temps as unknown as { first_name: string; last_name: string } | null;
   const s = o.shifts as unknown as { client: string; shift_date: string; start_time: string; end_time: string };
+  // Kept so the shift page shows it in green. Skipped quietly if 2026-11-25-phone-confirm.sql hasn't been run yet.
+  await db.from('offers').update({ phone_confirmed_at: now, phone_confirmed_by: profile.id }).eq('id', offerId);
   await audit(supabase, profile.id, 'offer.confirmed_by_phone', `Confirmed ${t?.first_name} ${t?.last_name} by phone for ${s.client} (${shiftWhen(s)})`);
   // Client-requested shifts: the client only sees them, and hears it's full, once they've confirmed.
   if (o.awaiting_confirm) await afterBookingChange(db, o.shift_id);

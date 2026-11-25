@@ -473,3 +473,7 @@ a.templink:hover, a.templink:focus-visible { color: var(--blue); text-decoration
 .pl-shift { position: relative; }
 .pl-shift .pl-cover { position: absolute; inset: 0; border-radius: inherit; z-index: 0; }
 .pl-shift .pl-name a.templink { position: relative; z-index: 1; }
+
+/* Shift page: confirmed by phone. White button until pressed, then green. */
+.btn.ghost.phone-ask { margin-top: 6px; background: #fff; color: #1c1f24; border-color: #c9ced6; }
+.phone-ok { display: inline-flex; align-items: center; margin-top: 6px; padding: 6px 12px; border-radius: var(--r); background: var(--ok); color: #fff; font-weight: 700; font-size: 13px; border: 1px solid var(--ok); }
