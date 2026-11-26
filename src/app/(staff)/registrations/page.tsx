@@ -187,7 +187,7 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
                 <td className="num" data-l="Mobile">{displayMobile(t.mobile)}</td>
                 <td data-l="Sent" title={t.reg_requested_at ? fmtDateTime(t.reg_requested_at) : ''}>{ago(t.reg_requested_at)}</td>
                 <td data-l="By">{by(t.added_by)}</td>
-                <td><div className="btnrow"><ResendButton id={t.id} /><Link className="btn ghost small" href={`/temps/${t.id}`}>Open</Link></div></td>
+                <td><div className="btnrow"><ResendButton id={t.id} /><Link className="btn ghost small" href={`/temps/${t.id}`}>Open</Link><RemoveRegistration id={t.id} name={`${t.first_name} ${t.last_name}`} kind="invited" /></div></td>
               </tr>
             ))}
             {!invited?.length && <tr><td colSpan={5} className="note">{q ? `Nobody matching “${q}”.` : 'No links waiting.'}</td></tr>}
