@@ -13,6 +13,26 @@ import { removeTempFiles } from '@/lib/storage';
 
 type Result = { ok: boolean; error?: string; message?: string };
 
+/** The note on a registration link (who it's for). Saved separately so a send never fails if the column isn't there yet. */
+async function saveNote(ids: string[], note: string) {
+  if (!ids.length || !note) return;
+  const db = createAdminClient();
+  for (let i = 0; i < ids.length; i += 300) await db.from('temps').update({ reg_note: note }).in('id', ids.slice(i, i + 300));
+}
+
+/** Change the note on someone's registration (e.g. they're now for a different shift). */
+export async function setRegNote(id: string, noteIn: string): Promise<Result> {
+  const { supabase, profile } = await requireStaff();
+  const note = (noteIn ?? '').trim().slice(0, 200);
+  const { data: t } = await supabase.from('temps').select('first_name,last_name').eq('id', id).maybeSingle();
+  if (!t) return { ok: false, error: 'Not found. Refresh the page.' };
+  const { error } = await createAdminClient().from('temps').update({ reg_note: note || null }).eq('id', id);
+  if (error) return { ok: false, error: 'Couldn’t save. Has supabase/2026-11-26-weekly-availability-and-reg-notes.sql been run in Supabase?' };
+  await audit(supabase, profile.id, 'temp.reg_note', `Changed the note on ${t.first_name} ${t.last_name}'s registration to "${note}"`);
+  revalidatePath('/registrations'); revalidatePath(`/temps/${id}`);
+  return { ok: true };
+}
+
 /** A custom invite message must still carry the link, the sender and the opt-out. Null = use the standard text. */
 function checkMessage(message?: string | null): { template: string | null; error?: string } {
   const t = (message ?? '').trim();
@@ -75,8 +95,10 @@ export async function removeInvite(id: string): Promise<Result> {
   return { ok: true, message: `${t.first_name} ${t.last_name} removed.` };
 }
 
-export async function sendRegistrationLink(input: { first: string; last: string; mobile: string; message?: string; job?: string; packId?: string }): Promise<Result> {
+export async function sendRegistrationLink(input: { first: string; last: string; mobile: string; message?: string; job?: string; packId?: string; note: string }): Promise<Result> {
   const { supabase, profile } = await requireStaff();
+  const note = (input.note ?? '').trim().slice(0, 200);
+  if (!note) return { ok: false, error: 'Add a note so everyone knows who they’re for, e.g. “Coventry tonight, Jamie”.' };
   const m = checkMessage(input.message);
   if (m.error) return { ok: false, error: m.error };
   const blocked = await readyToRegister(supabase);
@@ -93,6 +115,7 @@ export async function sendRegistrationLink(input: { first: string; last: string;
     .select('id,mobile,reg_token')
     .single();
   if (error || !t) return { ok: false, error: 'Couldn’t save. Try again.' };
+  await saveNote([t.id], note);
   // A client induction sent with the registration link (one text with both links).
   let body = inviteBody(m.template, first, t.reg_token, input.job);
   let withInd = '';
@@ -104,7 +127,7 @@ export async function sendRegistrationLink(input: { first: string; last: string;
     } else withInd = ` (induction not added: ${c.error})`;
   }
   const r = await sendToTemp({ db: supabase, temp: t, kind: 'registration', sentBy: profile.id, body });
-  await audit(supabase, profile.id, 'temp.invited', `Sent registration link${withInd} to ${first} ${last} (${displayMobile(mobile)})${r.ok ? '' : ' - text failed'}`);
+  await audit(supabase, profile.id, 'temp.invited', `Sent registration link${withInd} to ${first} ${last} (${displayMobile(mobile)}), note: "${note}"${r.ok ? '' : ' - text failed'}`);
   revalidatePath('/registrations');
   return r.ok ? { ok: true, message: `Registration link sent to ${first}${withInd}.` } : { ok: true, message: `${first} added, but the text failed (${r.error}). Use Resend.` };
 }
@@ -134,8 +157,10 @@ export async function resendRegistration(id: string): Promise<Result> {
  * Sends registration links to many people at once: only for people who applied to your roles or asked about
  * work with you (UK PECR soft opt-in). Every text says how to opt out; anyone already on file is skipped.
  */
-export async function bulkInvite(rows: { first: string; last: string; mobile: string; job?: string }[], confirmedApplicants: boolean, message?: string, job?: string): Promise<Result & { sent?: number; skipped?: number }> {
+export async function bulkInvite(rows: { first: string; last: string; mobile: string; job?: string }[], confirmedApplicants: boolean, message: string | undefined, job: string | undefined, noteIn: string): Promise<Result & { sent?: number; skipped?: number }> {
   const { supabase, profile } = await requireStaff();
+  const note = (noteIn ?? '').trim().slice(0, 200);
+  if (!note) return { ok: false, error: 'Add a note for this batch, e.g. “Recent Indeed applications”.' };
   const m = checkMessage(message);
   if (m.error) return { ok: false, error: m.error };
   if (!confirmedApplicants) return { ok: false, error: 'Tick to confirm these people applied to your roles or asked about work with you.' };
@@ -160,10 +185,11 @@ export async function bulkInvite(rows: { first: string; last: string; mobile: st
     .insert(fresh.map((c) => ({ first_name: c.first, last_name: c.last || '-', mobile: c.mobile, status: 'invited', job_types: [], added_by: profile.id, reg_requested_at: now })))
     .select('id,first_name,mobile,reg_token');
   if (error || !made) return { ok: false, error: 'Couldn’t save. Nothing was sent. Try again.' };
+  await saveNote(made.map((t) => t.id), note);
   const jobFor = new Map(fresh.map((c) => [c.mobile, c.job || job || '']));
   const res = await sendMany(made, (t) => sendToTemp({ db: supabase, temp: t, kind: 'registration', sentBy: profile.id, body: inviteBody(m.template, t.first_name, t.reg_token, jobFor.get(t.mobile)) }));
   const skipped = rows.length - fresh.length;
-  await audit(supabase, profile.id, 'temp.bulk_invited', `Sent ${m.template ? 'a custom invite message' : 'registration links'} to ${res.sent} applicants${res.failed ? ` (${res.failed} failed)` : ''}${skipped ? `, ${skipped} skipped` : ''}. Confirmed they applied or asked about work.`);
+  await audit(supabase, profile.id, 'temp.bulk_invited', `Sent ${m.template ? 'a custom invite message' : 'registration links'} to ${res.sent} applicants${res.failed ? ` (${res.failed} failed)` : ''}${skipped ? `, ${skipped} skipped` : ''}. Confirmed they applied or asked about work. Note: "${note}"`);
   revalidatePath('/registrations');
   return { ok: true, sent: res.sent, skipped, message: `Registration links sent to ${res.sent}${res.failed ? `, ${res.failed} failed` : ''}${skipped ? `. ${skipped} skipped (already on ShiftReady, duplicate or not a valid mobile)` : ''}.` };
 }

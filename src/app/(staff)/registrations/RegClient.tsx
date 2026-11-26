@@ -50,14 +50,15 @@ export function InviteForm({ disabled, base, applicantTemplate, packs = [] }: { 
   const [text, setText] = useState(STANDARD_INVITE_MESSAGE);
   const [job, setJob] = useState('');
   const [packId, setPackId] = useState('');
+  const [note, setNote] = useState('');
   useEffect(() => setText(load(STANDARD_INVITE_MESSAGE)), []);
   const bad = applyMessageProblems(text).length > 0;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   function send() {
     start(async () => {
-      const r = await sendRegistrationLink({ ...f, message: text, job, packId });
+      const r = await sendRegistrationLink({ ...f, message: text, job, packId, note });
       setMsg({ ok: r.ok, text: r.ok ? r.message! : r.error! });
-      if (r.ok) { setF({ first: '', last: '', mobile: '' }); router.refresh(); }
+      if (r.ok) { setF({ first: '', last: '', mobile: '' }); setNote(''); router.refresh(); }
     });
   }
   return (
@@ -66,6 +67,7 @@ export function InviteForm({ disabled, base, applicantTemplate, packs = [] }: { 
         <div className="f"><label className="l" htmlFor="iFirst">First name</label><input id="iFirst" type="text" value={f.first} onChange={(e) => setF({ ...f, first: e.target.value })} /></div>
         <div className="f"><label className="l" htmlFor="iLast">Surname</label><input id="iLast" type="text" value={f.last} onChange={(e) => setF({ ...f, last: e.target.value })} /></div>
         <div className="f w2"><label className="l" htmlFor="iMob">Mobile</label><input id="iMob" type="tel" placeholder="07…" value={f.mobile} onChange={(e) => setF({ ...f, mobile: e.target.value })} /></div>
+        <div className="f w2"><label className="l" htmlFor="iNote">Note <span className="note">required: who they’re for. Only the team sees it.</span></label><input id="iNote" type="text" maxLength={200} placeholder="e.g. Coventry tonight, Jamie" value={note} onChange={(e) => setNote(e.target.value)} /></div>
       </div>
       <InviteMessage text={text} setText={setText} job={job} setJob={setJob} base={base} applicantTemplate={applicantTemplate} sampleFirst={f.first.trim() || undefined} />
       {packs.length > 0 && (
@@ -76,7 +78,7 @@ export function InviteForm({ disabled, base, applicantTemplate, packs = [] }: { 
       )}
       <div className="bar">
         {msg ? <p className={msg.ok ? 'okmsg' : 'err'}>{msg.text}</p> : <span className="note">They’ll get this text with their personal link{packId ? ' and the induction link' : ''}.</span>}
-        <button className="btn blue" disabled={disabled || pending || bad} onClick={send}>{pending ? 'Sending…' : 'Send registration link'}</button>
+        <button className="btn blue" disabled={disabled || pending || bad || !note.trim()} onClick={send} title={!note.trim() ? 'Add a note first' : undefined}>{pending ? 'Sending…' : 'Send registration link'}</button>
       </div>
     </>
   );
@@ -99,6 +101,7 @@ export function BulkInvite({ disabled, known, base, applicantTemplate }: { disab
   const [pending, start] = useTransition();
   const [body, setBody] = useState(STANDARD_INVITE_MESSAGE);
   const [job, setJob] = useState('');
+  const [note, setNote] = useState('');
   useEffect(() => setBody(load(STANDARD_INVITE_MESSAGE)), []);
   const bad = applyMessageProblems(body).length > 0;
   const [text, setText] = useState('');
@@ -126,9 +129,9 @@ export function BulkInvite({ disabled, known, base, applicantTemplate }: { disab
 
   function send() {
     start(async () => {
-      const r = await bulkInvite(good.map(({ first, last, mobile, job: j }) => ({ first, last, mobile, job: j })), confirmed, body, job);
+      const r = await bulkInvite(good.map(({ first, last, mobile, job: j }) => ({ first, last, mobile, job: j })), confirmed, body, job, note);
       setMsg({ ok: r.ok, text: r.ok ? r.message! : r.error! });
-      if (r.ok) { setRows(null); setText(''); setConfirmed(false); router.refresh(); }
+      if (r.ok) { setRows(null); setText(''); setConfirmed(false); setNote(''); router.refresh(); }
     });
   }
 
@@ -157,13 +160,15 @@ export function BulkInvite({ disabled, known, base, applicantTemplate }: { disab
               </tr>))}
           </tbody></table></div>
           <InviteMessage text={body} setText={setBody} job={job} setJob={setJob} base={base} applicantTemplate={applicantTemplate} sampleFirst={good[0]?.first} sampleJob={good[0]?.job} perRowJobs={good.some((g) => g.job)} />
+          <div className="f" style={{ marginTop: 12, maxWidth: 520 }}><label className="l" htmlFor="bNote">Note for everyone in this list <span className="note">required: who they’re for. Only the team sees it.</span></label>
+            <input id="bNote" type="text" maxLength={200} placeholder="e.g. Recent Indeed applications" value={note} onChange={(e) => setNote(e.target.value)} /></div>
           <label className="tick" style={{ marginTop: 12 }}>
             <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
             Everyone on this list applied to one of our roles or asked us about work. (We can’t text bought lists, scraped numbers or people who’ve opted out.)
           </label>
           <div className="bar">
             <span className="note">Each person gets this text with their own name and registration link.</span>
-            <button className="btn blue" disabled={disabled || !good.length || !confirmed || pending || bad} onClick={send}>{pending ? 'Sending…' : `Text ${good.length} ${good.length === 1 ? 'person' : 'people'}`}</button>
+            <button className="btn blue" disabled={disabled || !good.length || !confirmed || pending || bad || !note.trim()} onClick={send} title={!note.trim() ? 'Add a note first' : undefined}>{pending ? 'Sending…' : `Text ${good.length} ${good.length === 1 ? 'person' : 'people'}`}</button>
           </div>
         </>
       )}

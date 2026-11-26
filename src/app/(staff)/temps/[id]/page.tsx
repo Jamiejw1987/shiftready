@@ -15,6 +15,7 @@ import { loadAssignments, isCurrent } from '@/lib/ongoing';
 import { MessagesSwitch, WorkerOngoing } from '../../ongoing/Ongoing';
 import { SendInduction, InductionButtons } from '../../inductions/Controls';
 import { IND_COLS, STATUS_PILL, statusOf, fmtDay, type TempInduction } from '@/lib/inductions';
+import { RegNote } from '../../registrations/RegNote';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,8 @@ export default async function TempRecordPage({ params }: { params: { id: string 
   const { supabase, profile } = await requireStaff();
   const { data: t } = await supabase.from('temps').select('*').eq('id', params.id).maybeSingle();
   if (!t) notFound();
+  // Note on their registration link (who they're for). Undefined until the reg-notes SQL has been run.
+  const regNote = (t as { reg_note?: string | null }).reg_note;
   const [{ data: p }, { data: docs }, { data: sigs }, { data: offers }, { data: users }] = await Promise.all([
     supabase.from('temp_profiles')
       .select('dob,nationality,email,address1,address2,town,experience,transport,own_ppe,availability,share_code,nok_name,nok_relationship,nok_phone,wtr_opt_out,wtr_changed_at,wtr_effective,privacy_ack_at,messages_consent,signature_name,signed_at,signed_ip,bank_last4,bank_added_at,submitted_at,ni_enc,health_enc,convictions_enc')
@@ -106,6 +109,7 @@ export default async function TempRecordPage({ params }: { params: { id: string 
           {imported && <span className="pill mute">Imported{t.import_source ? ` from ${t.import_source}` : ''} {day(t.imported_at)}</span>}
           <HoldButton id={t.id} first={t.first_name} status={t.status} />
         </div>
+        {regNote !== undefined && (t.status === 'invited' || t.status === 'review' || regNote) && <p style={{ margin: '0 0 8px' }}><RegNote id={t.id} note={regNote} /></p>}
         {t.status === 'hold' && <p className="alert" style={{ marginTop: 0 }}>On hold: {t.first_name} won’t be sent shifts and can’t accept any until you take them off hold.</p>}
         <p className="lede" style={{ marginBottom: 0 }}>{displayMobile(t.mobile)}{t.postcode ? ` · ${t.postcode}` : ''}{t.added_by ? ` · added by ${name(t.added_by)}` : ""} · {day(t.created_at)}</p>
         <div style={{ marginTop: 12 }}><EditDetails id={t.id} first={t.first_name} last={t.last_name} mobile={displayMobile(t.mobile)} postcode={t.postcode ?? ''} jobTypes={t.job_types ?? []} allTypes={JOB_TYPES} /></div>

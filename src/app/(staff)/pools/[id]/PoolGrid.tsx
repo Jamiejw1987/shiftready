@@ -2,13 +2,22 @@
 import Link from 'next/link';
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { setPoolDays, removeFromPool, sendPoolText, poolBookedOn } from '../actions';
+import { setPoolDays, setWeekDay, removeFromPool, sendPoolText, poolBookedOn } from '../actions';
 import { POOL_DAYS } from '../days';
 
 export type PoolRow = {
   id: string; tempId: string; name: string; first: string; mobile: string; days: number[]; lastShift: string | null;
   manual: boolean; canText: boolean; why: string;
+  /** Week view: who set each day. worker = they ticked it, office = added by the office, removed = they ticked it but the office took it off. */
+  state?: Record<number, 'worker' | 'office' | 'removed'>;
+  /** Week view: replied, reminded (no reply yet), asked (no reply yet), or not asked. */
+  reply?: 'replied' | 'reminded' | 'asked' | 'none';
 };
+
+const REPLY: Record<string, [string, string]> = {
+  replied: ['ok', 'Replied'], reminded: ['warn', 'No reply (reminded)'], asked: ['warn', 'No reply yet'], none: ['mute', 'Not asked'],
+};
+const addDays = (iso: string, n: number) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 
 /** Today in the UK as YYYY-MM-DD. */
 const todayUK = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
@@ -23,7 +32,8 @@ const dowOf = (d: string) => new Date(d + 'T12:00:00Z').getUTCDay() || 7;
 const longDate = (d: string) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
 const shortDate = (d: string) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
-export function PoolGrid({ poolId, rows: initial, siteLabel }: { poolId: string; rows: PoolRow[]; siteLabel: string }) {
+/** `week` (a Monday) shows that week's availability (what they ticked, plus office changes); without it, their usual days. */
+export function PoolGrid({ poolId, rows: initial, siteLabel, week }: { poolId: string; rows: PoolRow[]; siteLabel: string; week?: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [rows, setRows] = useState(initial);
@@ -53,6 +63,21 @@ export function PoolGrid({ poolId, rows: initial, siteLabel }: { poolId: string;
   if (seen !== initial) { setSeen(initial); setRows(initial); }
 
   const flip = (r: PoolRow, n: number) => {
+    if (week) {
+      // Office change for this week: always wins over what they ticked. Shown in blue so everyone can tell.
+      const was = { days: r.days, state: r.state };
+      const on = !r.days.includes(n);
+      const st = { ...(r.state ?? {}) };
+      if (on) st[n] = st[n] === 'removed' ? 'worker' : 'office'; else if (st[n] === 'worker') st[n] = 'removed'; else delete st[n];
+      setRows((all) => all.map((x) => (x.id === r.id ? { ...x, days: on ? [...r.days, n].sort() : r.days.filter((d) => d !== n), state: st } : x)));
+      setWeekDay(poolId, r.tempId, week, n, on).then((res) => {
+        if (!res.ok) {
+          setRows((all) => all.map((x) => (x.id === r.id ? { ...x, ...was } : x)));
+          setMsg({ ok: false, text: res.error ?? 'Couldn’t save that. Try again.' });
+        }
+      });
+      return;
+    }
     const before = r.days;
     const next = before.includes(n) ? before.filter((d) => d !== n) : [...before, n].sort();
     setRows((all) => all.map((x) => (x.id === r.id ? { ...x, days: next } : x)));
@@ -65,8 +90,9 @@ export function PoolGrid({ poolId, rows: initial, siteLabel }: { poolId: string;
   };
   const pickDay = (n: number) => {
     setDay(n);
-    // Keep the date if it's already on this weekday, otherwise jump to the next one.
-    if (!date || dowOf(date) !== n) setDate(nextOn(n));
+    // Week view: that day of the week shown. Usual days: keep the date if it's on this weekday, otherwise the next one.
+    if (week) setDate(addDays(week, n - 1));
+    else if (!date || dowOf(date) !== n) setDate(nextOn(n));
     setSel(new Set(rows.filter((r) => r.days.includes(n) && r.canText && !booked[r.id]).map((r) => r.id)));
     setMsg(null);
   };
@@ -90,7 +116,7 @@ export function PoolGrid({ poolId, rows: initial, siteLabel }: { poolId: string;
               {POOL_DAYS.map((d, i) => (
                 <th key={d.n} className="pool-day">
                   <button type="button" className={`pool-dayhead${day === d.n ? ' on' : ''}`} onClick={() => pickDay(d.n)} title={`Tick everyone free on ${d.long}`}>
-                    {d.short}<span>{counts[i]}</span>
+                    {d.short}{week && <em>{shortDate(addDays(week, d.n - 1))}</em>}<span>{counts[i]}</span>
                   </button>
                 </th>
               ))}
@@ -107,15 +133,19 @@ export function PoolGrid({ poolId, rows: initial, siteLabel }: { poolId: string;
                       <Link href={`/temps/${r.tempId}`}><b>{r.name}</b></Link>
                       <span className="note">{r.mobile}{r.lastShift ? ` · last here ${shortDate(r.lastShift)}` : r.manual ? ' · added by hand' : ''}</span>
                       {r.why && <span className="pill mute">{r.why}</span>}
+                      {week && r.reply && !r.why && <span className={`pill ${REPLY[r.reply][0]}`}>{REPLY[r.reply][1]}</span>}
                       {booked[r.id] && <span className="pill bad">Booked that day: {booked[r.id]}</span>}
                     </span>
                   </label>
                 </td>
                 {POOL_DAYS.map((d) => {
                   const on = r.days.includes(d.n);
+                  const st = week ? r.state?.[d.n] : undefined;
+                  const how = st === 'office' ? ' office' : st === 'removed' ? ' removed' : '';
+                  const tip = st === 'office' ? 'Added by the office' : st === 'removed' ? 'They ticked this, but the office took it off' : st === 'worker' ? 'They ticked this' : undefined;
                   return (
                     <td key={d.n} className="pool-cell">
-                      <button type="button" className={`pool-tog${on ? ' on' : ''}`} aria-pressed={on} aria-label={`${r.name} ${on ? 'wants' : 'doesn’t want'} ${d.long}`} onClick={() => flip(r, d.n)}>
+                      <button type="button" className={`pool-tog${on ? ' on' : ''}${how}`} title={tip} aria-pressed={on} aria-label={`${r.name} ${on ? 'can do' : 'can’t do'} ${d.long}${tip ? `: ${tip}` : ''}`} onClick={() => flip(r, d.n)}>
                         {on ? '✓' : ''}
                       </button>
                     </td>
@@ -130,6 +160,13 @@ export function PoolGrid({ poolId, rows: initial, siteLabel }: { poolId: string;
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr className="pool-total">
+              <th className="pool-who">Can work{week ? '' : ' (usual)'} <span className="note">of {rows.length}</span></th>
+              {POOL_DAYS.map((d, i) => <td key={d.n} className="pool-cell"><b>{counts[i]}</b></td>)}
+              <td></td>
+            </tr>
+          </tfoot>
         </table>
       </div>
 

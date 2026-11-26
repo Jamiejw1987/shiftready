@@ -5,6 +5,8 @@ import { displayMobile } from '@/lib/phone';
 import { sendSms, sendMany } from '@/lib/sms';
 import { appUrl } from '@/lib/texts';
 import { bookingsNear } from '@/lib/clash';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { askForWeek, nextWeek, weekLabel } from '@/lib/poolWeek';
 
 type Result = { ok: boolean; error?: string; message?: string };
 const SETUP = 'Couldn’t save. Has supabase/2026-11-23b-pools.sql been run in Supabase?';
@@ -120,4 +122,40 @@ export async function deletePool(poolId: string): Promise<Result> {
   await audit(supabase, profile.id, 'pool.deleted', `Deleted the ${p.client} (${p.site}) pool`);
   revalidatePath('/pools');
   return { ok: true };
+}
+
+/**
+ * Office change to one day of someone's week (after a call, or for someone who hasn't replied). Always wins over
+ * what they ticked: turning a day on adds it (or undoes an earlier take-off); turning it off takes it off.
+ */
+export async function setWeekDay(poolId: string, tempId: string, week: string, day: number, on: boolean): Promise<Result> {
+  const { supabase, profile } = await requireStaff();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(week) || !Number.isInteger(day) || day < 1 || day > 7) return { ok: false, error: 'Not a valid day.' };
+  const { data: m } = await supabase.from('pool_members').select('id').eq('pool_id', poolId).eq('temp_id', tempId).maybeSingle();
+  if (!m) return { ok: false, error: 'They’re not in this pool any more. Refresh the page.' };
+  const { data: row } = await supabase.from('pool_week').select('worker_days,office_on,office_off').eq('pool_id', poolId).eq('temp_id', tempId).eq('week_start', week).maybeSingle();
+  const worker = new Set<number>((row?.worker_days as number[]) ?? []);
+  const plus = new Set<number>((row?.office_on as number[]) ?? []);
+  const minus = new Set<number>((row?.office_off as number[]) ?? []);
+  if (on) { minus.delete(day); if (!worker.has(day)) plus.add(day); }
+  else { plus.delete(day); if (worker.has(day)) minus.add(day); }
+  const now = new Date().toISOString();
+  const { error } = await supabase.from('pool_week').upsert({
+    pool_id: poolId, temp_id: tempId, week_start: week, worker_days: [...worker].sort(), office_on: [...plus].sort(), office_off: [...minus].sort(),
+    office_by: profile.id, office_at: now, updated_at: now,
+  }, { onConflict: 'pool_id,temp_id,week_start' });
+  if (error) return { ok: false, error: 'Couldn’t save. Has supabase/2026-11-26-weekly-availability-and-reg-notes.sql been run in Supabase?' };
+  return { ok: true };
+}
+
+/** Admins: send the weekly availability text now (it also goes automatically every Friday 8am). Nobody is asked twice. */
+export async function askAvailabilityNow(): Promise<Result> {
+  const { supabase, profile } = await requireStaff({ admin: true });
+  const week = nextWeek();
+  const r = await askForWeek(createAdminClient(), week, profile.id);
+  await audit(supabase, profile.id, 'pool.availability_texts', `Sent the weekly availability text (${weekLabel(week)}) to ${r.sent}${r.failed ? ` (${r.failed} failed)` : ''}`);
+  revalidatePath('/pools');
+  return r.sent || r.failed
+    ? { ok: true, message: `Asked ${r.sent} ${r.sent === 1 ? 'person' : 'people'} about ${weekLabel(week)}${r.failed ? `. ${r.failed} failed` : ''}.` }
+    : { ok: true, message: `Everyone in a pool who can be texted has already been asked about ${weekLabel(week)}.` };
 }

@@ -12,6 +12,7 @@ import { ApplyAddress, ApplyMessage, RetryButton } from './ApplyClient';
 import { InvitedSearch } from './InvitedSearch';
 import { TempLink } from '@/components/TempLink';
 import { RemoveRegistration } from './RemoveRegistration';
+import { RegNote } from './RegNote';
 
 const OUTCOME: Record<string, [string, string]> = {
   texted: ['ok', 'Link texted'],
@@ -71,6 +72,10 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
   const { data: packs } = await supabase.from('induction_packs').select('id,name').eq('active', true).order('name');
   const problems = [...(encryptionReady() ? [] : ['the encryption key (FIELD_ENCRYPTION_KEY) hasn’t been added in Vercel']), ...docProblems(docs)];
   const by = (id: string | null) => users?.find((u) => u.id === id)?.full_name ?? '-';
+  // Notes on registration links (who they're for). Fetched on their own so the page still works before the SQL is run.
+  const noteIds = [...(review ?? []).map((t) => t.id), ...(invited ?? []).map((t) => t.id)];
+  const { data: noteRows } = noteIds.length ? await supabase.from('temps').select('id,reg_note').in('id', noteIds) : { data: [] };
+  const notes = new Map(((noteRows ?? []) as { id: string; reg_note: string | null }[]).map((n) => [n.id, n.reg_note]));
   const total = invitedCount ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE));
   const pageHref = (n: number) => {
@@ -142,7 +147,7 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
           <tbody>
             {(review ?? []).map((t) => (
               <tr key={t.id}>
-                <td><TempLink id={t.id}><b>{t.first_name} {t.last_name}</b></TempLink>{t.needs_admin_review && <><br /><span className="pill warn">Call first: declared health or convictions</span></>}</td>
+                <td><TempLink id={t.id}><b>{t.first_name} {t.last_name}</b></TempLink>{t.needs_admin_review && <><br /><span className="pill warn">Call first: declared health or convictions</span></>}<br /><RegNote id={t.id} note={notes.get(t.id) ?? null} by={by(t.added_by)} /></td>
                 <td className="num" data-l="Mobile">{displayMobile(t.mobile)}</td>
                 <td className="mono" data-l="Postcode">{t.postcode}</td>
                 <td data-l="Right to work">{t.rtw_checked_at ? <span className="pill ok">Checked</span> : <span className="pill warn">{t.rtw_route === 'share_code' ? 'Share code to check' : 'Passport to see'}</span>}</td>
@@ -183,7 +188,7 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
           <tbody>
             {(invited ?? []).map((t) => (
               <tr key={t.id}>
-                <td><TempLink id={t.id}><b>{t.first_name} {t.last_name}</b></TempLink></td>
+                <td><TempLink id={t.id}><b>{t.first_name} {t.last_name}</b></TempLink><br /><RegNote id={t.id} note={notes.get(t.id) ?? null} /></td>
                 <td className="num" data-l="Mobile">{displayMobile(t.mobile)}</td>
                 <td data-l="Sent" title={t.reg_requested_at ? fmtDateTime(t.reg_requested_at) : ''}>{ago(t.reg_requested_at)}</td>
                 <td data-l="By">{by(t.added_by)}</td>
