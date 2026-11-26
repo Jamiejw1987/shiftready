@@ -52,6 +52,29 @@ export async function removeRegistration(id: string): Promise<Result> {
   return { ok: true, message: `${t.first_name} ${t.last_name} removed.` };
 }
 
+/**
+ * Removes someone from Links sent, not finished: they never completed registration and have never been
+ * offered a shift. Used when their name or number changed, or to add them manually (e.g. from Kisrec) instead.
+ * Deletes the record and any part-filled details, and blanks their messages. They aren't texted.
+ * Their mobile is free straight away, so they can be added again.
+ */
+export async function removeInvite(id: string): Promise<Result> {
+  const { profile } = await requireStaff();
+  const db = createAdminClient();
+  const { data: t } = await db.from('temps').select('id,first_name,last_name,registered_at').eq('id', id).maybeSingle();
+  if (!t) return { ok: false, error: 'Already removed. Refresh the page.' };
+  if (t.registered_at) return { ok: false, error: `${t.first_name} has finished registering, so they can’t be removed from here.` };
+  const { count } = await db.from('offers').select('id', { count: 'exact', head: true }).eq('temp_id', id);
+  if (count) return { ok: false, error: `${t.first_name} has shift history, so they can’t be removed from here. Ask an admin.` };
+  await db.from('messages').update({ to_number: null, from_number: null, body: '[removed: sign-up link removed]', fallback_body: null }).eq('temp_id', id);
+  await removeTempFiles(db, id);
+  const { error } = await db.from('temps').delete().eq('id', id).is('registered_at', null);
+  if (error) return { ok: false, error: 'Couldn’t remove them. Try again.' };
+  await audit(db, profile.id, 'registration.invite_removed', `Removed ${t.first_name} ${t.last_name} from links sent, not finished (unfinished sign-up)`);
+  revalidatePath('/registrations');
+  return { ok: true, message: `${t.first_name} ${t.last_name} removed.` };
+}
+
 export async function sendRegistrationLink(input: { first: string; last: string; mobile: string; message?: string; job?: string; packId?: string }): Promise<Result> {
   const { supabase, profile } = await requireStaff();
   const m = checkMessage(input.message);
