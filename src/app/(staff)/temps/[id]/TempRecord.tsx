@@ -35,6 +35,19 @@ export function RecordActions({ id, firstName, status, registered, canApprove, a
           {status === 'review' && <button className="btn blue" disabled={!canApprove || pending} onClick={() => run(() => approve(id))}>Approve</button>}
         </div>
       </div>
+      {status === 'pending' && !messagesOff && (
+        <div className="optback">
+          <p style={{ margin: 0 }}>
+            <b>{firstName} hasn’t opted in yet</b>, so they can’t be put on shifts or jobs. They need to reply YES to the welcome text,
+            {' '}or if they’ve agreed on the phone to get shift texts, opt them in here.
+          </p>
+          <div className="btnrow" style={{ marginTop: 10 }}>
+            <button className="btn blue" disabled={pending} onClick={() => {
+              if (confirm(`Only do this if ${firstName} has agreed to get shift texts from us. It's logged against your name. Carry on?`)) run(() => putBackOnTexts(id));
+            }}>They’ve agreed: opt them in</button>
+          </div>
+        </div>
+      )}
       {status === 'out' && !messagesOff && (
         <div className="optback">
           <p style={{ margin: 0 }}>
