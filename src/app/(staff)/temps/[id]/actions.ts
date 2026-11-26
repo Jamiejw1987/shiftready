@@ -162,16 +162,21 @@ export async function putBackOnTexts(tempId: string): Promise<Result> {
   const { supabase, profile } = await requireStaff();
   const { data: t } = await supabase.from('temps').select('id,first_name,last_name,mobile,status').eq('id', tempId).single();
   if (!t) return { ok: false, error: 'Not found.' };
-  if (t.status !== 'out') return { ok: false, error: `${t.first_name} isn't opted out.` };
+  if (t.status !== 'out' && t.status !== 'pending') return { ok: false, error: `${t.first_name} isn't waiting to opt in or opted out.` };
+  const wasPending = t.status === 'pending';
   const now = new Date().toISOString();
   await supabase.from('temps').update({ status: 'active', opted_in_at: now, opted_out_at: null }).eq('id', t.id);
-  await audit(supabase, profile.id, 'temp.opted_in', `${t.first_name} ${t.last_name} asked ${profile.full_name} to be put back on shift texts`);
+  await audit(supabase, profile.id, 'temp.opted_in', wasPending
+    ? `${t.first_name} ${t.last_name} agreed on the phone with ${profile.full_name} to get shift texts (opted in by staff)`
+    : `${t.first_name} ${t.last_name} asked ${profile.full_name} to be put back on shift texts`);
   // Confirmation text. If Twilio is still blocking them (they texted STOP), this fails and puts them back to opted out.
   const r = await sendToTemp({ db: supabase, temp: t, kind: 'system', sentBy: profile.id, body: OPTED_IN_REPLY });
   if ('blocked' in r && r.blocked) {
     return { ok: false, error: `Twilio is still blocking texts to ${t.first_name} because they texted STOP. Only they can lift that: ask them to text START to ${process.env.TWILIO_FROM_NUMBER || 'our number'}, or email them the link.` };
   }
   revalidatePath(`/temps/${t.id}`);
+  revalidatePath('/temps');
+  if (wasPending) return { ok: true, message: r.ok ? `${t.first_name} is opted in and can now be put on shifts and jobs. They've been sent a confirmation.` : `${t.first_name} is opted in and can now be put on shifts and jobs, but the confirmation text failed: ${r.error}` };
   return { ok: true, message: r.ok ? `${t.first_name} is back on shift texts and has been sent a confirmation.` : `${t.first_name} is back on shift texts, but the confirmation text failed: ${r.error}` };
 }
 
