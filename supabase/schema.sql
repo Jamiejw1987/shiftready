@@ -1675,3 +1675,16 @@ create trigger pool_members_reg_days before insert on public.pool_members
 -- Anyone already in a pool with no usual days ticked: use what they said when they registered.
 update public.pool_members m set days = public.reg_days(m.temp_id), updated_at = now()
  where coalesce(array_length(m.days, 1), 0) = 0 and coalesce(array_length(public.reg_days(m.temp_id), 1), 0) > 0;
+
+-- ================= Registration days: new sign-ups only (also in 2026-11-27c-reg-days-new-only.sql) =================
+-- Registration days count only for sign-ups submitted on the new form (from 27 Nov 2026, 11:10).
+create or replace function public.reg_days(p_temp uuid)
+returns smallint[] language sql stable security definer set search_path = public as $$
+  select coalesce(array(
+    select distinct array_position(array['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], x)::smallint d
+      from public.temp_profiles p, unnest(p.availability) x
+     where p.temp_id = p_temp and p.submitted_at >= timestamptz '2026-11-27 11:10:00+00'
+       and x = any (array['Mon','Tue','Wed','Thu','Fri','Sat','Sun'])
+     order by d), '{}')
+$$;
+
