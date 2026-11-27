@@ -8,7 +8,7 @@ import { geocodePostcode, looksLikePostcode, normalisePostcode } from '@/lib/geo
 import { JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
 import { sendSms } from '@/lib/sms';
 import { uploadSlots, recordUploads } from '@/lib/storage';
-import { AVAILABILITY, TRANSPORT, LICENCE_CATEGORIES, cleanLicenceNo, licenceNoOk, cleanCheckCode, checkCodeOk } from '@/lib/regOptions';
+import { AVAILABILITY, TRANSPORT, LICENCE_CATEGORIES, cleanLicenceNo, licenceNoOk, cleanCheckCode, checkCodeOk, WORK_DAYS } from '@/lib/regOptions';
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
@@ -74,7 +74,7 @@ export async function submitRegistration(token: string, r: RegData, uploads: { k
   const jobTypes = r.jobTypes.filter((x) => (JOB_TYPES as readonly string[]).includes(x));
   if (!jobTypes.length) p.push('at least one type of work');
   if (clean(r.experience, 1000).length < 3) p.push('your experience (or write \u201cnone\u201d)');
-  if (!r.availability.some((x) => AVAILABILITY.includes(x))) p.push('when you can work');
+  if (!r.availability.some((x) => WORK_DAYS.includes(x))) p.push('which days you can work');
   if (!TRANSPORT.includes(r.transport)) p.push('how you\u2019ll get to work');
   if (!r.ownPpe.length) p.push('the safety kit you have (or \u201cNone yet\u201d)');
   if (jobTypes.includes('FLT counterbalance') && !uploads.some((u) => u.kind === 'flt_licence')) p.push('a photo of your FLT licence');

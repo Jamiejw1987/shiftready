@@ -2,7 +2,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { JOB_TYPES, PPE_OPTIONS } from '@/lib/format';
-import { AVAILABILITY, TRANSPORT, NATIONALITIES, LICENCE_CATEGORIES } from '@/lib/regOptions';
+import { TRANSPORT, NATIONALITIES, LICENCE_CATEGORIES, WORK_DAYS, WORK_TIMES } from '@/lib/regOptions';
 import { prepareFile, uploadToSlot, OK_TYPES } from '@/lib/upload';
 import { startUploads, submitRegistration, type RegData } from './actions';
 
@@ -161,8 +161,12 @@ export function RegForm(p: Props) {
         )}
         <div className="f"><label className="l" htmlFor="exp">Your experience</label>
           <textarea id="exp" placeholder="e.g. 2 years picking and packing at a food warehouse" value={d.experience} onChange={(e) => set('experience', e.target.value)} /></div>
-        <div className="f"><span className="l">When can you work?</span>
-          <div className="chips">{AVAILABILITY.map((t) => <label key={t} className="chip"><input type="checkbox" checked={d.availability.includes(t)} onChange={() => toggle('availability', t)} /> {t}</label>)}</div></div>
+        <div className="f"><span className="l">Which days can you work?</span>
+          <span className="note">Tick every day you can usually work. We’ll check with you each week too.</span>
+          <div className="chips">{WORK_DAYS.map((t) => <label key={t} className="chip"><input type="checkbox" checked={d.availability.includes(t)} onChange={() => toggle('availability', t)} /> {t}</label>)}</div>
+          <button type="button" className="btn ghost small" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={() => setD((x) => ({ ...x, availability: [...new Set([...x.availability, ...WORK_DAYS])] }))}>I can work any day</button></div>
+        <div className="f"><span className="l">Which shifts can you do?</span>
+          <div className="chips">{WORK_TIMES.map((t) => <label key={t} className="chip"><input type="checkbox" checked={d.availability.includes(t)} onChange={() => toggle('availability', t)} /> {t}</label>)}</div></div>
         <div className="f"><label className="l" htmlFor="tr">How will you get to work?</label>
           <select id="tr" value={d.transport} onChange={(e) => set('transport', e.target.value)}><option value="">Choose…</option>{TRANSPORT.map((t) => <option key={t}>{t}</option>)}</select></div>
         <div className="f"><span className="l">Safety kit you already have</span>

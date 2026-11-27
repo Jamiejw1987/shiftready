@@ -1,4 +1,7 @@
-export const AVAILABILITY = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Earlies', 'Lates', 'Nights'];
+export const WORK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+export const WORK_TIMES = ['Earlies', 'Lates', 'Nights'];
+/** Days of the week they can work, plus which shift times. Stored together on their profile. */
+export const AVAILABILITY = [...WORK_DAYS, ...WORK_TIMES];
 export const TRANSPORT = ['Own car', 'Public transport', 'Lift from someone', 'Bike', 'Walk'];
 
 /** Suggestions only: candidates can type any nationality. */

@@ -75,6 +75,10 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
   // Notes on registration links (who they're for). Fetched on their own so the page still works before the SQL is run.
   const noteIds = [...(review ?? []).map((t) => t.id), ...(invited ?? []).map((t) => t.id)];
   const { data: noteRows } = noteIds.length ? await supabase.from('temps').select('id,reg_note').in('id', noteIds) : { data: [] };
+  // Days they said they can work when they registered.
+  const reviewIds = (review ?? []).map((t) => t.id);
+  const { data: avail } = reviewIds.length ? await supabase.from('temp_profiles').select('temp_id,availability').in('temp_id', reviewIds) : { data: [] };
+  const daysOf = new Map(((avail ?? []) as { temp_id: string; availability: string[] | null }[]).map((a) => [a.temp_id, a.availability ?? []]));
   const notes = new Map(((noteRows ?? []) as { id: string; reg_note: string | null }[]).map((n) => [n.id, n.reg_note]));
   const total = invitedCount ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE));
@@ -147,7 +151,7 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
           <tbody>
             {(review ?? []).map((t) => (
               <tr key={t.id}>
-                <td><TempLink id={t.id}><b>{t.first_name} {t.last_name}</b></TempLink>{t.needs_admin_review && <><br /><span className="pill warn">Call first: declared health or convictions</span></>}<br /><RegNote id={t.id} note={notes.get(t.id) ?? null} by={by(t.added_by)} /></td>
+                <td><TempLink id={t.id}><b>{t.first_name} {t.last_name}</b></TempLink>{t.needs_admin_review && <><br /><span className="pill warn">Call first: declared health or convictions</span></>}<DaysLine days={daysOf.get(t.id) ?? []} /><br /><RegNote id={t.id} note={notes.get(t.id) ?? null} by={by(t.added_by)} /></td>
                 <td className="num" data-l="Mobile">{displayMobile(t.mobile)}</td>
                 <td className="mono" data-l="Postcode">{t.postcode}</td>
                 <td data-l="Right to work">{t.rtw_checked_at ? <span className="pill ok">Checked</span> : <span className="pill warn">{t.rtw_route === 'share_code' ? 'Share code to check' : 'Passport to see'}</span>}</td>
@@ -206,5 +210,18 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
         )}
       </section>
     </>
+  );
+}
+
+/** The days (and shift times) someone said they can work when they registered. */
+function DaysLine({ days }: { days: string[] }) {
+  const set = new Set(days);
+  if (!days.length) return null;
+  const times = ['Earlies', 'Lates', 'Nights'].filter((t) => set.has(t));
+  return (
+    <span className="regdays" title="Days they said they can work when they registered">
+      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => <i key={d} className={set.has(d) ? 'on' : ''}>{d[0]}</i>)}
+      {times.length > 0 && <span className="note">{times.join(', ')}</span>}
+    </span>
   );
 }
