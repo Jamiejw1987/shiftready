@@ -75,9 +75,11 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
   // Notes on registration links (who they're for). Fetched on their own so the page still works before the SQL is run.
   const noteIds = [...(review ?? []).map((t) => t.id), ...(invited ?? []).map((t) => t.id)];
   const { data: noteRows } = noteIds.length ? await supabase.from('temps').select('id,reg_note').in('id', noteIds) : { data: [] };
-  // Days they said they can work when they registered.
+  // Days they said they can work, only for sign-ups on the new "Which days can you work?" form (from 27 Nov 2026, 11:10).
   const reviewIds = (review ?? []).map((t) => t.id);
-  const { data: avail } = reviewIds.length ? await supabase.from('temp_profiles').select('temp_id,availability').in('temp_id', reviewIds) : { data: [] };
+  const { data: avail } = reviewIds.length
+    ? await supabase.from('temp_profiles').select('temp_id,availability').in('temp_id', reviewIds).gte('submitted_at', '2026-11-27T11:10:00Z')
+    : { data: [] };
   const daysOf = new Map(((avail ?? []) as { temp_id: string; availability: string[] | null }[]).map((a) => [a.temp_id, a.availability ?? []]));
   const notes = new Map(((noteRows ?? []) as { id: string; reg_note: string | null }[]).map((n) => [n.id, n.reg_note]));
   const total = invitedCount ?? 0;
