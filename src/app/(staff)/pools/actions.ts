@@ -159,3 +159,19 @@ export async function askAvailabilityNow(): Promise<Result> {
     ? { ok: true, message: `Asked ${r.sent} ${r.sent === 1 ? 'person' : 'people'} about ${weekLabel(week)}${r.failed ? `. ${r.failed} failed` : ''}.` }
     : { ok: true, message: `Everyone in a pool who can be texted has already been asked about ${weekLabel(week)}.` };
 }
+
+/** Merge this pool into another (same site entered two ways). Everyone moves across with their days and weekly answers. */
+export async function mergePool(fromId: string, intoId: string): Promise<Result & { into?: string }> {
+  const { supabase, profile } = await requireStaff();
+  const [{ data: a }, { data: b }] = await Promise.all([
+    supabase.from('pools').select('client,site,site_postcode').eq('id', fromId).maybeSingle(),
+    supabase.from('pools').select('client,site,site_postcode').eq('id', intoId).maybeSingle(),
+  ]);
+  if (!a || !b) return { ok: false, error: 'Pool not found. Refresh the page.' };
+  const { data, error } = await supabase.rpc('merge_pools', { p_from: fromId, p_into: intoId });
+  if (error) return { ok: false, error: /function|does not exist/i.test(error.message) ? 'Run supabase/2026-11-27-merge-pools.sql in Supabase first.' : error.message };
+  const r = data as { moved: number; joined: number };
+  await audit(supabase, profile.id, 'pool.merged', `Merged the ${a.client} ${a.site} (${a.site_postcode}) pool into ${b.client} ${b.site} (${b.site_postcode}): ${r.moved} moved, ${r.joined} already in both`);
+  revalidatePath('/pools'); revalidatePath(`/pools/${intoId}`);
+  return { ok: true, into: intoId, message: `Merged. ${r.moved} moved across${r.joined ? `, ${r.joined} were already in both (their days are combined)` : ''}.` };
+}

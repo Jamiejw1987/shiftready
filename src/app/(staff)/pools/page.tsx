@@ -11,7 +11,10 @@ type Pool = { id: string; client: string; site: string; site_postcode: string; c
 export default async function PoolsPage({ searchParams }: { searchParams: { q?: string } }) {
   const { supabase, profile } = await requireStaff();
   const q = (searchParams.q ?? '').trim().toLowerCase();
-  const { data, error } = await supabase.from('pools').select('id,client,site,site_postcode,client_sites(name),pool_members(days)').order('client').order('site');
+  // Hide pools merged into another (kept only so old spellings on shifts find the right pool).
+  const withMerged = await supabase.from('pools').select('id,client,site,site_postcode,merged_into,client_sites(name),pool_members(days)').order('client').order('site');
+  const { data: raw, error } = withMerged.error ? await supabase.from('pools').select('id,client,site,site_postcode,client_sites(name),pool_members(days)').order('client').order('site') : withMerged;
+  const data = ((raw ?? []) as { merged_into?: string | null }[]).filter((p) => !p.merged_into);
   // Each card shows how many can work each day: next week from Friday (when the texts go out), otherwise this week.
   const now = londonNow();
   const week = now.dow >= 5 ? nextWeek(now.date) : mondayOf(now.date);

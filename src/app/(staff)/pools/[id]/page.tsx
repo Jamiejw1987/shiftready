@@ -1,10 +1,11 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { requireStaff } from '@/lib/auth';
 import { displayMobile } from '@/lib/phone';
 import { PoolGrid, type PoolRow } from './PoolGrid';
 import { AddToPool } from './AddToPool';
 import { DeletePool } from './DeletePool';
+import { MergePool } from './MergePool';
 import { londonNow, mondayOf, addDays, nextWeek, weekLabel, effectiveDays } from '@/lib/poolWeek';
 
 export const dynamic = 'force-dynamic';
@@ -14,10 +15,16 @@ type Member = {
   temps: { first_name: string; last_name: string; mobile: string; status: string } | null;
 };
 
-export default async function PoolPage({ params, searchParams }: { params: { id: string }; searchParams: { w?: string } }) {
+export default async function PoolPage({ params, searchParams }: { params: { id: string }; searchParams: { w?: string; merged?: string } }) {
   const { supabase, profile } = await requireStaff();
   const { data: pool } = await supabase.from('pools').select('id,client,site,site_postcode,client_sites(name)').eq('id', params.id).maybeSingle();
   if (!pool) notFound();
+  // A pool that was merged away: go to the one it was merged into. (Skipped quietly before the merge SQL is run.)
+  const { data: ptr } = await supabase.from('pools').select('merged_into').eq('id', pool.id).maybeSingle();
+  const mergedInto = (ptr as { merged_into?: string | null } | null)?.merged_into;
+  if (mergedInto) redirect(`/pools/${mergedInto}`);
+  // Other pools this one could be merged into.
+  const { data: others } = await supabase.from('pools').select('id,client,site,site_postcode,merged_into,client_sites(name),pool_members(count)').neq('id', pool.id).order('client').order('site');
   const { data: raw } = await supabase.from('pool_members').select('id,temp_id,days,source,last_shift,temps(first_name,last_name,mobile,status)').eq('pool_id', pool.id);
   const members = ((raw ?? []) as unknown as Member[]).filter((m) => m.temps);
   // Messages switched off (ongoing at a client, imported): shown so nobody expects them to get the text.
@@ -64,6 +71,7 @@ export default async function PoolPage({ params, searchParams }: { params: { id:
     <>
       <section className="panel">
         <p className="note" style={{ margin: '0 0 6px' }}><Link href="/pools">← All pools</Link></p>
+        {searchParams.merged && <p className="okmsg" style={{ marginTop: 0 }}>Pools merged. Everyone is now in this pool.</p>}
         <h1 style={{ marginBottom: 4 }}>{pool.client} · {siteName ?? pool.site}</h1>
         <p className="lede">{siteName ? `${pool.site} · ` : ''}{pool.site_postcode}.{' '}
           {week
@@ -85,6 +93,11 @@ export default async function PoolPage({ params, searchParams }: { params: { id:
       </section>
       <section className="panel">
         <AddToPool poolId={pool.id} />
+        <MergePool poolId={pool.id} name={`${pool.client} ${siteName ?? pool.site} (${pool.site_postcode})`}
+          options={((others ?? []) as unknown as { id: string; client: string; site: string; site_postcode: string; merged_into?: string | null; client_sites: { name: string } | null; pool_members: { count: number }[] }[])
+            .filter((o) => !o.merged_into)
+            .map((o) => ({ id: o.id, label: `${o.client} · ${o.client_sites?.name ?? o.site} · ${o.site_postcode}`, count: o.pool_members?.[0]?.count ?? 0, sameClient: o.client.trim().toLowerCase().slice(0, 3) === pool.client.trim().toLowerCase().slice(0, 3) }))
+            .sort((a, b) => Number(b.sameClient) - Number(a.sameClient))} />
         {profile.role === 'admin' && <DeletePool poolId={pool.id} name={`${pool.client} (${siteName ?? pool.site})`} />}
       </section>
     </>
